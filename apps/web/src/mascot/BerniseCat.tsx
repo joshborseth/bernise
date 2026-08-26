@@ -354,12 +354,6 @@ function useCatMaterials(): Record<Surface, Material> {
       tabby: fur("tabby"),
       tabbyDark: fur("tabbyDark"),
       innerEar: fur("innerEar", 0.7),
-      blush: new MeshStandardMaterial({
-        color: palette.blush,
-        roughness: 0.85,
-        emissive: palette.blush,
-        emissiveIntensity: 0.12,
-      }),
       nose: glass("nose", 0.35, 0.5),
       liner: fur("liner", 0.6),
       mouth: fur("mouth", 0.6),

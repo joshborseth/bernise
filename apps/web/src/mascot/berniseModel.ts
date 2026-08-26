@@ -9,7 +9,6 @@ export type Surface =
   | "tabby"
   | "tabbyDark"
   | "innerEar"
-  | "blush"
   | "nose"
   | "liner"
   | "mouth"
@@ -28,7 +27,6 @@ export const palette: Record<Surface, string> = {
   tabby: "#b3a294",
   tabbyDark: "#8a7768",
   innerEar: "#eeb2ab",
-  blush: "#f2ab9f",
   nose: "#d98f88",
   liner: "#3a2b25",
   mouth: "#a76a63",
@@ -512,22 +510,6 @@ export const bernise: Node = {
           scale: [0.5, 2.4, 0.34],
           position: [0.19, 0.64, 0.28],
           rotation: [0, 0, -0.2],
-        },
-        {
-          kind: "sphere",
-          surface: "blush",
-          radius: 0.1,
-          scale: [1.35, 0.75, 0.24],
-          position: [-0.42, 0.11, 0.31],
-          rotation: [0, -0.5, 0],
-        },
-        {
-          kind: "sphere",
-          surface: "blush",
-          radius: 0.1,
-          scale: [1.35, 0.75, 0.24],
-          position: [0.42, 0.11, 0.31],
-          rotation: [0, 0.5, 0],
         },
         muzzle,
         whiskers,
