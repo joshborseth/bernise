@@ -1,0 +1,33 @@
+{
+  "name": "bernise",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "prepare": "effect-tsgo patch",
+    "typecheck": "tsc --build && tsc -p apps/web --noEmit",
+    "lint": "oxlint --report-unused-disable-directives",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "bun scripts/dev.ts",
+    "dev:server": "bun run --filter @bernise/server start",
+    "dev:web": "bun run --filter @bernise/web dev",
+    "dev:desktop": "bun run --filter @bernise/desktop dev"
+  },
+  "devDependencies": {
+    "@effect/language-service": "latest",
+    "@effect/tsgo": "latest",
+    "@effect/vitest": "rc",
+    "@types/node": "latest",
+    "@typescript/native-preview": "latest",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}

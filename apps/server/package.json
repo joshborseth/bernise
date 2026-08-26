@@ -1,0 +1,15 @@
+{
+  "name": "@bernise/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/main.ts",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@bernise/contracts": "workspace:*",
+    "@effect/platform-node": "rc",
+    "effect": "rc"
+  }
+}

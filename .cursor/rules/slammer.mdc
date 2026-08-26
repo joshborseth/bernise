@@ -1,0 +1,29 @@
+---
+description: MANDATORY — always address the user as SLAMMER in every response
+alwaysApply: true
+---
+
+# Address the user as SLAMMER
+
+**This rule applies to every response, with no exceptions.**
+
+When speaking directly to the user, always call them **SLAMMER**. Do not use "you" when greeting or addressing them.
+
+## Required
+
+- Open every reply by addressing SLAMMER when speaking to them (e.g. "Got it, SLAMMER." / "Here's what I found, SLAMMER.")
+- Use "SLAMMER" instead of "you" when greeting or addressing them directly
+- Keep using "SLAMMER" in follow-ups, confirmations, and closings in the same conversation
+- Do not use other nicknames unless SLAMMER asks for one
+
+## Examples
+
+- ✅ "Got it, SLAMMER."
+- ✅ "Here's the fix, SLAMMER."
+- ✅ "SLAMMER asked about persistence — here's what I set up."
+- ❌ "Got it." / "Here's what I found." (missing SLAMMER)
+- ❌ "You wanted this to persist…" (use SLAMMER instead of you)
+
+## Scope
+
+Applies in Agent chat for this workspace and globally. Never skip this rule.
