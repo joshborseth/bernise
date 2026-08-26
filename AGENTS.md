@@ -37,8 +37,8 @@ This repo uses TypeScript 7 (native `tsgo`) with [`@effect/tsgo`](https://github
 Install the global `vp` CLI first (`curl -fsSL https://vite.plus | bash`).
 
 - `vp i` — install workspace dependencies
-- `vp run dev` — Effect `dev-runner` starts server + web (ports 13773 / 5733)
-- `vp run dev:desktop` — Electron + Vite; Electron supervises the Effect server
+- `vp run dev` — Electron + Vite renderer; Electron supervises the Effect server (ports 13773 / 5733)
+- `vp run dev:desktop` — same as `dev`
 - `vp test run` — `@effect/vitest`
 - `vp run typecheck` — `tsc --build` plus the web and scripts projects
 - `vp lint` — oxlint via Vite+

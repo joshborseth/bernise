@@ -41,9 +41,15 @@ function mockProcess(exit: number | PlatformError.PlatformError) {
   });
 }
 
+const DESKTOP_MODE_ARGS = [
+  "run",
+  "--filter=@bernise/desktop",
+  "--filter=@bernise/web",
+  "dev",
+] as const;
+
 const devServerInput = {
   mode: "dev:server",
-  browser: undefined,
   host: undefined,
   port: BASE_SERVER_PORT,
   devUrl: undefined,
@@ -55,24 +61,13 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   describe("getDevRunnerModeArgs", () => {
     it.effect("lets Vite+ honor the desktop dev task graph", () =>
       Effect.sync(() => {
-        assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop"), [
-          "run",
-          "--filter=@bernise/desktop",
-          "--filter=@bernise/web",
-          "dev",
-        ]);
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop"), [...DESKTOP_MODE_ARGS]);
       }),
     );
 
-    it.effect("places Vite+ run flags before the task name", () =>
+    it.effect("treats root dev as the desktop stack", () =>
       Effect.sync(() => {
-        assert.deepStrictEqual(getDevRunnerModeArgs("dev"), [
-          "run",
-          "--filter=@bernise/web",
-          "--filter=@bernise/server",
-          "--parallel",
-          "dev",
-        ]);
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev"), [...DESKTOP_MODE_ARGS]);
       }),
     );
   });
@@ -114,51 +109,36 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("createDevRunnerEnv", () => {
-    it.effect("disables browser auto-open by default", () =>
+    it.effect("wires loopback URLs for root dev mode", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
         });
 
-        assert.equal(env.BERNISE_NO_BROWSER, "1");
         assert.equal(env.BERNISE_PORT, String(BASE_SERVER_PORT));
         assert.equal(env.PORT, String(BASE_WEB_PORT));
-        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, "1");
+        assert.equal(env.HOST, "127.0.0.1");
+        assert.equal(env.BERNISE_WEB_URL, `http://127.0.0.1:${BASE_WEB_PORT}`);
+        assert.equal(env.VITE_HTTP_URL, `http://127.0.0.1:${BASE_SERVER_PORT}`);
+        assert.equal(env.VITE_WS_URL, `ws://127.0.0.1:${BASE_SERVER_PORT}`);
+        assert.equal(env.BERNISE_NO_BROWSER, undefined);
+        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, undefined);
       }),
     );
 
-    it.effect("allows browser auto-open to be explicitly enabled", () =>
-      Effect.gen(function* () {
-        const env = yield* createDevRunnerEnv({
-          mode: "dev",
-          baseEnv: {},
-          serverOffset: 0,
-          webOffset: 0,
-          browser: true,
-          host: undefined,
-          port: undefined,
-          devUrl: undefined,
-        });
-
-        assert.equal(env.BERNISE_NO_BROWSER, "0");
-      }),
-    );
-
-    it.effect("supports explicit typed overrides", () =>
+    it.effect("supports explicit typed overrides for server-only mode", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev:server",
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          browser: false,
           host: "0.0.0.0",
           port: 4222,
           devUrl: new URL("http://localhost:7331"),
@@ -167,65 +147,44 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         assert.equal(env.BERNISE_PORT, "4222");
         assert.equal(env.VITE_HTTP_URL, "http://localhost:4222");
         assert.equal(env.VITE_WS_URL, "ws://localhost:4222");
-        assert.equal(env.BERNISE_NO_BROWSER, "1");
         assert.equal(env.BERNISE_HOST, "0.0.0.0");
         assert.equal(env.VITE_DEV_SERVER_URL, "http://localhost:7331/");
+        assert.equal(env.HOST, undefined);
       }),
     );
 
-    it.effect("leaves the client backend URLs unset in browser modes", () =>
-      Effect.gen(function* () {
-        const env = yield* createDevRunnerEnv({
-          mode: "dev",
-          baseEnv: { VITE_HTTP_URL: "http://localhost:9", VITE_WS_URL: "ws://localhost:9" },
-          serverOffset: 0,
-          webOffset: 0,
-          browser: undefined,
-          host: undefined,
-          port: undefined,
-          devUrl: undefined,
-        });
-
-        assert.equal(env.VITE_HTTP_URL, undefined);
-        assert.equal(env.VITE_WS_URL, undefined);
-        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, "1");
-      }),
-    );
-
-    it.effect("clears the single-origin marker in dev:desktop mode", () =>
+    it.effect("matches desktop env wiring for dev:desktop", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev:desktop",
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
-          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
         });
 
-        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, undefined);
         assert.equal(env.HOST, "127.0.0.1");
         assert.equal(env.VITE_HTTP_URL, `http://127.0.0.1:${BASE_SERVER_PORT}`);
         assert.equal(env.VITE_WS_URL, `ws://127.0.0.1:${BASE_SERVER_PORT}`);
+        assert.equal(env.BERNISE_HOST, undefined);
       }),
     );
 
-    it.effect("drops an inherited HOST in browser modes", () =>
+    it.effect("forces loopback HOST in desktop modes even when inherited", () =>
       Effect.gen(function* () {
         const env = yield* createDevRunnerEnv({
           mode: "dev",
           baseEnv: { HOST: "0.0.0.0" },
           serverOffset: 0,
           webOffset: 0,
-          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
         });
 
-        assert.equal(env.HOST, undefined);
+        assert.equal(env.HOST, "127.0.0.1");
       }),
     );
   });
@@ -370,7 +329,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
   });
 
   describe("resolveModePortOffsets", () => {
-    it.effect("uses a shared fallback offset for dev mode", () =>
+    it.effect("uses a shared fallback offset for desktop modes", () =>
       Effect.gen(function* () {
         const taken = new Set([BASE_SERVER_PORT, BASE_WEB_PORT]);
         const offsets = yield* resolveModePortOffsets({
@@ -382,21 +341,6 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         });
 
         assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
-      }),
-    );
-
-    it.effect("keeps server offset stable for dev:web and only shifts web offset", () =>
-      Effect.gen(function* () {
-        const taken = new Set([BASE_WEB_PORT]);
-        const offsets = yield* resolveModePortOffsets({
-          mode: "dev:web",
-          startOffset: 0,
-          hasExplicitServerPort: false,
-          hasExplicitDevUrl: false,
-          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
-        });
-
-        assert.deepStrictEqual(offsets, { serverOffset: 0, webOffset: 1 });
       }),
     );
 
@@ -484,24 +428,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       });
     });
 
-    it.effect("rejects a specific non-loopback --host for browser dev modes", () => {
-      return Effect.gen(function* () {
-        const error = yield* runDevRunnerWithInput({
-          ...devServerInput,
-          mode: "dev",
-          host: "192.168.1.10",
-          dryRun: true,
-        }).pipe(Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer)), Effect.flip);
-
-        if (error._tag !== "DevRunnerHostNotProxiableError") {
-          assert.fail(`Unexpected error: ${error._tag}`);
-        }
-        assert.equal(error.host, "192.168.1.10");
-        assert.equal(error.mode, "dev");
-      });
-    });
-
-    it.effect("still spawns the stack for a wildcard --host in dev mode", () => {
+    it.effect("spawns the desktop stack even with --host", () => {
       let spawnCount = 0;
       const spawnerLayer = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,

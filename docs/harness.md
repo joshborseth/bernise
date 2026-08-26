@@ -6,7 +6,7 @@ This is the same split as [t3code](https://github.com/pingdotgg/t3code): a serve
 
 ## Layout
 
-- `apps/web` and `apps/desktop` talk to `apps/server` over HTTP (`GET /health`) and Effect RPC (`/rpc`).
+- `apps/desktop` is the only UI. It loads `apps/web` as the Electron renderer and talks to `apps/server` over HTTP (`GET /health`) and Effect RPC (`/rpc`).
 - `apps/server` will own provider processes later. It does not yet spawn anything.
 - `Provider` in `apps/server/src/Provider.ts` is a `Context.Service` contract with **no Layer**. First live driver: **Cursor CLI** (`agent` after `agent login`).
 

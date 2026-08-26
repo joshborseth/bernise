@@ -39,11 +39,17 @@ const FETCH_BAD_PORTS = new Set([
 ]);
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "::1"] as const;
 
+const DESKTOP_MODE_ARGS = [
+  "run",
+  "--filter=@bernise/desktop",
+  "--filter=@bernise/web",
+  "dev",
+] as const;
+
 const MODE_ARGS = {
-  dev: ["run", "--filter=@bernise/web", "--filter=@bernise/server", "--parallel", "dev"],
+  dev: DESKTOP_MODE_ARGS,
   "dev:server": ["run", "--filter=@bernise/server", "dev"],
-  "dev:web": ["run", "--filter=@bernise/web", "dev"],
-  "dev:desktop": ["run", "--filter=@bernise/desktop", "--filter=@bernise/web", "dev"],
+  "dev:desktop": DESKTOP_MODE_ARGS,
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
@@ -61,25 +67,6 @@ export function getDevRunnerModeArgs(mode: DevMode): ReadonlyArray<string> {
 
 export function isBrowserAllowedPort(port: number): boolean {
   return !FETCH_BAD_PORTS.has(port);
-}
-
-/**
- * Bind hosts on which a backend still answers `http://localhost:<port>`, which
- * is where single-origin browser dev proxies to. Loopback and the wildcards
- * qualify; a specific interface (e.g. a LAN IP) does not.
- */
-export function isProxiableBindHost(host: string): boolean {
-  const normalized = host.trim();
-  return (
-    normalized === "" ||
-    normalized === "localhost" ||
-    normalized === "127.0.0.1" ||
-    normalized === "::1" ||
-    normalized === "[::1]" ||
-    normalized === "0.0.0.0" ||
-    normalized === "::" ||
-    normalized === "[::]"
-  );
 }
 
 export class DevRunnerConfigurationError extends Schema.TaggedError<DevRunnerConfigurationError>()(
@@ -127,7 +114,7 @@ export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessEr
   "DevRunnerProcessError",
   {
     operation: Schema.Literals(["spawn", "wait-for-exit"]),
-    mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
+    mode: Schema.Literals(["dev", "dev:server", "dev:desktop"]),
     executable: Schema.Literal("vp"),
     argumentCount: Schema.Int,
     shell: Schema.Boolean,
@@ -142,7 +129,7 @@ export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessEr
 export class DevRunnerProcessExitError extends Schema.TaggedError<DevRunnerProcessExitError>()(
   "DevRunnerProcessExitError",
   {
-    mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
+    mode: Schema.Literals(["dev", "dev:server", "dev:desktop"]),
     executable: Schema.Literal("vp"),
     argumentCount: Schema.Int,
     shell: Schema.Boolean,
@@ -154,21 +141,8 @@ export class DevRunnerProcessExitError extends Schema.TaggedError<DevRunnerProce
   }
 }
 
-export class DevRunnerHostNotProxiableError extends Schema.TaggedError<DevRunnerHostNotProxiableError>()(
-  "DevRunnerHostNotProxiableError",
-  {
-    mode: Schema.Literals(["dev", "dev:web"]),
-    host: Schema.String,
-  },
-) {
-  override get message(): string {
-    return `--host ${this.host} cannot be combined with ${this.mode}: single-origin browser dev proxies the backend at localhost, and a backend bound only to ${this.host} leaves localhost unanswered, so every proxied request fails. Use a wildcard (0.0.0.0 or ::) to serve that interface and loopback together.`;
-  }
-}
-
 export const DevRunnerError = Schema.Union([
   DevRunnerConfigurationError,
-  DevRunnerHostNotProxiableError,
   DevRunnerInvalidPortOffsetError,
   DevRunnerPortExhaustedError,
   DevRunnerProcessError,
@@ -326,7 +300,6 @@ interface CreateDevRunnerEnvInput {
   readonly baseEnv: NodeJS.ProcessEnv;
   readonly serverOffset: number;
   readonly webOffset: number;
-  readonly browser: boolean | undefined;
   readonly host: string | undefined;
   readonly port: number | undefined;
   readonly devUrl: URL | undefined;
@@ -337,7 +310,6 @@ export function createDevRunnerEnv({
   baseEnv,
   serverOffset,
   webOffset,
-  browser,
   host,
   port,
   devUrl,
@@ -345,50 +317,29 @@ export function createDevRunnerEnv({
   return Effect.sync(() => {
     const serverPort = port ?? BASE_SERVER_PORT + serverOffset;
     const webPort = BASE_WEB_PORT + webOffset;
-    const isDesktopMode = mode === "dev:desktop";
+    const isDesktopMode = mode === "dev" || mode === "dev:desktop";
 
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
       BERNISE_ROOT: REPO_ROOT,
       PORT: String(webPort),
-      BERNISE_WEB_URL:
-        devUrl?.toString() ??
-        `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
-      VITE_DEV_SERVER_URL:
-        devUrl?.toString() ??
-        `http://${isDesktopMode ? DESKTOP_DEV_LOOPBACK_HOST : "localhost"}:${webPort}`,
+      BERNISE_WEB_URL: devUrl?.toString() ?? `http://${DESKTOP_DEV_LOOPBACK_HOST}:${webPort}`,
+      VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://${DESKTOP_DEV_LOOPBACK_HOST}:${webPort}`,
+      BERNISE_PORT: String(serverPort),
     };
-
-    if (!isDesktopMode) {
-      output.BERNISE_PORT = String(serverPort);
-      delete output.HOST;
-      if (mode === "dev" || mode === "dev:web") {
-        delete output.VITE_HTTP_URL;
-        delete output.VITE_WS_URL;
-        output.BERNISE_SINGLE_ORIGIN_DEV = "1";
-      } else {
-        output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
-        output.VITE_WS_URL = `ws://localhost:${serverPort}`;
-        delete output.BERNISE_SINGLE_ORIGIN_DEV;
-      }
-    } else {
-      output.BERNISE_PORT = String(serverPort);
-      output.VITE_HTTP_URL = `http://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
-      output.VITE_WS_URL = `ws://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
-      delete output.BERNISE_SINGLE_ORIGIN_DEV;
-      delete output.BERNISE_HOST;
-    }
-
-    if (!isDesktopMode && host !== undefined) {
-      output.BERNISE_HOST = host;
-    }
-
-    if (!isDesktopMode) {
-      output.BERNISE_NO_BROWSER = browser === true ? "0" : "1";
-    }
 
     if (isDesktopMode) {
       output.HOST = DESKTOP_DEV_LOOPBACK_HOST;
+      output.VITE_HTTP_URL = `http://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
+      output.VITE_WS_URL = `ws://${DESKTOP_DEV_LOOPBACK_HOST}:${serverPort}`;
+      delete output.BERNISE_HOST;
+    } else {
+      delete output.HOST;
+      output.VITE_HTTP_URL = `http://localhost:${serverPort}`;
+      output.VITE_WS_URL = `ws://localhost:${serverPort}`;
+      if (host !== undefined) {
+        output.BERNISE_HOST = host;
+      }
     }
 
     return output;
@@ -528,20 +479,6 @@ export function resolveModePortOffsets<R = NetService>({
     const checkPort = (checkPortAvailability ??
       defaultCheckPortAvailability) as PortAvailabilityCheck<R>;
 
-    if (mode === "dev:web") {
-      if (hasExplicitDevUrl) {
-        return { serverOffset: startOffset, webOffset: startOffset };
-      }
-
-      const webOffset = yield* findFirstAvailableOffset({
-        startOffset,
-        requireServerPort: false,
-        requireWebPort: true,
-        checkPortAvailability: checkPort,
-      });
-      return { serverOffset: startOffset, webOffset };
-    }
-
     if (mode === "dev:server") {
       if (hasExplicitServerPort) {
         return { serverOffset: startOffset, webOffset: startOffset };
@@ -569,7 +506,6 @@ export function resolveModePortOffsets<R = NetService>({
 
 export interface DevRunnerCliInput {
   readonly mode: DevMode;
-  readonly browser: boolean | undefined;
   readonly host: string | undefined;
   readonly port: number | undefined;
   readonly devUrl: URL | undefined;
@@ -588,14 +524,6 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
           }),
       ),
     );
-
-    if (
-      (input.mode === "dev" || input.mode === "dev:web") &&
-      input.host !== undefined &&
-      !isProxiableBindHost(input.host)
-    ) {
-      return yield* new DevRunnerHostNotProxiableError({ mode: input.mode, host: input.host });
-    }
 
     const worktreePath = yield* resolveGitWorktreePath(process.cwd());
 
@@ -618,7 +546,6 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       baseEnv: process.env,
       serverOffset,
       webOffset,
-      browser: input.browser,
       host: input.host,
       port: input.port,
       devUrl: input.devUrl,
@@ -692,10 +619,6 @@ const optionalUrlFlag = Flag.string("dev-url").pipe(
 const devRunnerCli = Command.make("dev-runner", {
   mode: Argument.choice("mode", DEV_RUNNER_MODES).pipe(
     Argument.withDescription("Development mode to run."),
-  ),
-  browser: Flag.boolean("browser").pipe(
-    Flag.withDescription("Open a browser automatically (disabled by default for web dev)."),
-    Flag.withDefault(false),
   ),
   host: Flag.string("host").pipe(
     Flag.withDescription("Server host/interface override (forwards to BERNISE_HOST)."),

@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 const port = Number(process.env.PORT ?? 5733);
 const backendPort = Number(process.env.BERNISE_PORT ?? 13773);
 const explicitHost = process.env.HOST?.trim();
-const host = explicitHost || "localhost";
+const host = explicitHost || "127.0.0.1";
 const backendTarget = `http://localhost:${String(backendPort)}`;
 
 export default defineConfig({
@@ -13,6 +13,7 @@ export default defineConfig({
     host,
     port,
     strictPort: true,
+    open: false,
     proxy: {
       "/health": {
         target: backendTarget,
