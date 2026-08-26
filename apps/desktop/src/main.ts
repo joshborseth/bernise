@@ -5,9 +5,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 import * as Path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(8787));
+const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
 const webUrlConfig = Config.string("BERNISE_WEB_URL").pipe(
-  Config.withDefault("http://127.0.0.1:5173"),
+  Config.withDefault("http://127.0.0.1:5733"),
 );
 const repoRootConfig = Config.string("BERNISE_ROOT").pipe(
   Config.withDefault(fileURLToPath(new URL("../../../", import.meta.url))),

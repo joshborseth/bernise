@@ -1,20 +1,35 @@
-import { defineConfig } from "vite";
+import { defineConfig, lazyPlugins } from "vite-plus";
 import react from "@vitejs/plugin-react";
 
+const port = Number(process.env.PORT ?? 5733);
+const backendPort = Number(process.env.BERNISE_PORT ?? 13773);
+const explicitHost = process.env.HOST?.trim();
+const host = explicitHost || "localhost";
+const backendTarget = `http://localhost:${String(backendPort)}`;
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: lazyPlugins(() => [react()]),
   server: {
-    host: "127.0.0.1",
-    port: 5173,
+    host,
+    port,
     strictPort: true,
     proxy: {
       "/health": {
-        target: "http://127.0.0.1:8787",
+        target: backendTarget,
       },
       "/rpc": {
-        target: "http://127.0.0.1:8787",
+        target: backendTarget,
         ws: true,
       },
     },
+    ...(explicitHost
+      ? {
+          hmr: {
+            protocol: "ws",
+            host: explicitHost,
+            clientPort: port,
+          },
+        }
+      : {}),
   },
 });

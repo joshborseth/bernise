@@ -8,4 +8,6 @@ dist
 out
 release
 .vite
+.vite-plus
+.vite-hooks
 *.log

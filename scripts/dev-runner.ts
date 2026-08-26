@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import * as Context from "effect/Context";
@@ -40,24 +40,10 @@ const FETCH_BAD_PORTS = new Set([
 const DEV_PORT_PROBE_HOSTS = ["127.0.0.1", "::1"] as const;
 
 const MODE_ARGS = {
-  dev: [
-    "run",
-    "--elide-lines=0",
-    "--filter=@bernise/web",
-    "--filter=@bernise/server",
-    "--parallel",
-    "dev",
-  ],
-  "dev:server": ["run", "--elide-lines=0", "--filter=@bernise/server", "dev"],
-  "dev:web": ["run", "--elide-lines=0", "--filter=@bernise/web", "dev"],
-  "dev:desktop": [
-    "run",
-    "--elide-lines=0",
-    "--filter=@bernise/desktop",
-    "--filter=@bernise/web",
-    "--parallel",
-    "dev",
-  ],
+  dev: ["run", "--filter=@bernise/web", "--filter=@bernise/server", "--parallel", "dev"],
+  "dev:server": ["run", "--filter=@bernise/server", "dev"],
+  "dev:web": ["run", "--filter=@bernise/web", "dev"],
+  "dev:desktop": ["run", "--filter=@bernise/desktop", "--filter=@bernise/web", "dev"],
 } as const satisfies Record<string, ReadonlyArray<string>>;
 
 type DevMode = keyof typeof MODE_ARGS;
@@ -112,8 +98,8 @@ export class DevRunnerInvalidPortOffsetError extends Schema.TaggedError<DevRunne
   "DevRunnerInvalidPortOffsetError",
   {
     configKey: Schema.Literal("BERNISE_PORT_OFFSET"),
-    portOffset: Schema.Number,
-    minimum: Schema.Number,
+    portOffset: Schema.Int,
+    minimum: Schema.Int,
   },
 ) {
   override get message(): string {
@@ -124,12 +110,12 @@ export class DevRunnerInvalidPortOffsetError extends Schema.TaggedError<DevRunne
 export class DevRunnerPortExhaustedError extends Schema.TaggedError<DevRunnerPortExhaustedError>()(
   "DevRunnerPortExhaustedError",
   {
-    startOffset: Schema.Number,
+    startOffset: Schema.Int,
     requireServerPort: Schema.Boolean,
     requireWebPort: Schema.Boolean,
-    baseServerPort: Schema.Number,
-    baseWebPort: Schema.Number,
-    maximumPort: Schema.Number,
+    baseServerPort: Schema.Int,
+    baseWebPort: Schema.Int,
+    maximumPort: Schema.Int,
   },
 ) {
   override get message(): string {
@@ -142,8 +128,8 @@ export class DevRunnerProcessError extends Schema.TaggedError<DevRunnerProcessEr
   {
     operation: Schema.Literals(["spawn", "wait-for-exit"]),
     mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
-    executable: Schema.Literal("bun"),
-    argumentCount: Schema.Number,
+    executable: Schema.Literal("vp"),
+    argumentCount: Schema.Int,
     shell: Schema.Boolean,
     cause: Schema.Unknown,
   },
@@ -157,10 +143,10 @@ export class DevRunnerProcessExitError extends Schema.TaggedError<DevRunnerProce
   "DevRunnerProcessExitError",
   {
     mode: Schema.Literals(["dev", "dev:server", "dev:web", "dev:desktop"]),
-    executable: Schema.Literal("bun"),
-    argumentCount: Schema.Number,
+    executable: Schema.Literal("vp"),
+    argumentCount: Schema.Int,
     shell: Schema.Boolean,
-    exitCode: Schema.Number,
+    exitCode: Schema.Int,
   },
 ) {
   override get message(): string {
@@ -199,7 +185,7 @@ export class NetService extends Context.Service<
   static readonly layer = Layer.sync(NetService, () =>
     NetService.of({
       canListenOnHost: (port, host) =>
-        Effect.async<boolean>((resume) => {
+        Effect.callback<boolean>((resume) => {
           const server = Net.createServer();
           const finish = (available: boolean) => {
             resume(Effect.succeed(available));
@@ -322,7 +308,9 @@ export const resolveGitWorktreePath = (
         if (info.value.type !== "File") {
           return undefined;
         }
-        const contents = yield* fileSystem.readFileString(gitPath).pipe(Effect.orElseSucceed(() => ""));
+        const contents = yield* fileSystem
+          .readFileString(gitPath)
+          .pipe(Effect.orElseSucceed(() => ""));
         return pointsAtLinkedWorktree(contents, path) ? directory : undefined;
       }
       const parent = path.dirname(directory);
@@ -652,11 +640,11 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
     const args = [...MODE_ARGS[input.mode], ...input.runArgs];
     const processContext = {
       mode: input.mode,
-      executable: "bun" as const,
+      executable: "vp" as const,
       argumentCount: args.length,
       shell: false,
     } as const;
-    const child = yield* ChildProcess.make("bun", args, {
+    const child = yield* ChildProcess.make("vp", args, {
       stdin: "inherit",
       stdout: "inherit",
       stderr: "inherit",
@@ -707,6 +695,7 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   browser: Flag.boolean("browser").pipe(
     Flag.withDescription("Open a browser automatically (disabled by default for web dev)."),
+    Flag.withDefault(false),
   ),
   host: Flag.string("host").pipe(
     Flag.withDescription("Server host/interface override (forwards to BERNISE_HOST)."),
@@ -719,11 +708,11 @@ const devRunnerCli = Command.make("dev-runner", {
   ),
   devUrl: optionalUrlFlag,
   dryRun: Flag.boolean("dry-run").pipe(
-    Flag.withDescription("Resolve mode/ports/env and print, but do not spawn bun."),
+    Flag.withDescription("Resolve mode/ports/env and print, but do not spawn Vite+."),
     Flag.withDefault(false),
   ),
   runArgs: Argument.string("run-arg").pipe(
-    Argument.withDescription("Additional bun run args (pass after `--`)."),
+    Argument.withDescription("Additional Vite+ run args (pass after `--`)."),
     Argument.variadic(),
   ),
 }).pipe(
@@ -737,8 +726,7 @@ const cliRuntimeLayer = Layer.mergeAll(
   NetService.layer,
 );
 
-const isMain =
-  process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
+const isMain = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
 
 if (isMain) {
   Command.run(devRunnerCli, { version: "0.0.0" }).pipe(

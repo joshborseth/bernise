@@ -53,24 +53,21 @@ const devServerInput = {
 
 it.layer(NodeServices.layer)("dev-runner", (it) => {
   describe("getDevRunnerModeArgs", () => {
-    it.effect("lets bun honor the desktop dev task graph", () =>
+    it.effect("lets Vite+ honor the desktop dev task graph", () =>
       Effect.sync(() => {
         assert.deepStrictEqual(getDevRunnerModeArgs("dev:desktop"), [
           "run",
-          "--elide-lines=0",
           "--filter=@bernise/desktop",
           "--filter=@bernise/web",
-          "--parallel",
           "dev",
         ]);
       }),
     );
 
-    it.effect("places bun run flags before the task name", () =>
+    it.effect("places Vite+ run flags before the task name", () =>
       Effect.sync(() => {
         assert.deepStrictEqual(getDevRunnerModeArgs("dev"), [
           "run",
-          "--elide-lines=0",
           "--filter=@bernise/web",
           "--filter=@bernise/server",
           "--parallel",
@@ -249,7 +246,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
     it.effect("advances until all required ports are available", () =>
       Effect.gen(function* () {
-        const taken = new Set([BASE_SERVER_PORT, BASE_WEB_PORT, BASE_SERVER_PORT + 1, BASE_WEB_PORT + 1]);
+        const taken = new Set([
+          BASE_SERVER_PORT,
+          BASE_WEB_PORT,
+          BASE_SERVER_PORT + 1,
+          BASE_WEB_PORT + 1,
+        ]);
         const offset = yield* findFirstAvailableOffset({
           startOffset: 0,
           requireServerPort: true,
@@ -456,7 +458,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         _tag: "NotFound",
         module: "ChildProcess",
         method: "spawn",
-        description: "bun was not found",
+        description: "vp was not found",
       });
       const spawnerLayer = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,
@@ -474,7 +476,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         }
         assert.equal(error.operation, "spawn");
         assert.equal(error.mode, "dev:server");
-        assert.equal(error.executable, "bun");
+        assert.equal(error.executable, "vp");
         assert.equal(error.argumentCount, getDevRunnerModeArgs("dev:server").length + 2);
         assert.equal(error.shell, false);
         assert.equal(error.cause, cause);

@@ -8,26 +8,44 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch",
-    "typecheck": "tsc --build && tsc -p apps/web --noEmit",
-    "lint": "oxlint --report-unused-disable-directives",
-    "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "dev": "bun scripts/dev.ts",
-    "dev:server": "bun run --filter @bernise/server start",
-    "dev:web": "bun run --filter @bernise/web dev",
-    "dev:desktop": "bun run --filter @bernise/desktop dev"
+    "typecheck": "tsc --build && tsc -p apps/web --noEmit && tsc -p scripts --noEmit",
+    "lint": "vp lint --report-unused-disable-directives",
+    "fmt": "vp fmt",
+    "fmt:check": "vp fmt --check",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "dev": "node scripts/dev-runner.ts dev",
+    "dev:server": "node scripts/dev-runner.ts dev:server",
+    "dev:web": "node scripts/dev-runner.ts dev:web",
+    "dev:desktop": "node scripts/dev-runner.ts dev:desktop"
   },
   "devDependencies": {
     "@effect/language-service": "latest",
+    "@effect/platform-node": "rc",
     "@effect/tsgo": "latest",
     "@effect/vitest": "rc",
     "@types/node": "latest",
     "@typescript/native-preview": "latest",
-    "oxfmt": "^0.65.0",
-    "oxlint": "^1.80.0",
+    "effect": "rc",
     "typescript": "latest",
-    "vitest": "latest"
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  },
+  "overrides": {
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.0",
+      "onFail": "download"
+    }
+  },
+  "catalog": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@0.3.0",
+    "vitest": "4.1.11",
+    "vite-plus": "0.3.0"
   }
 }

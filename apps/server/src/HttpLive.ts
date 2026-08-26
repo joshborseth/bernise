@@ -7,7 +7,8 @@ import * as Http from "node:http";
 import { HealthLive } from "./HealthLive.ts";
 import { PingLive } from "./PingLive.ts";
 
-export const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(8787));
+export const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
+export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault("127.0.0.1"));
 
 const RpcLive = RpcServer.layerHttp({
   group: BerniseRpcs,
@@ -19,12 +20,13 @@ export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cor
 export const HttpLive = Layer.unwrap(
   Effect.gen(function* () {
     const port = yield* portConfig;
+    const host = yield* hostConfig;
     return HttpRouter.serve(HttpRoutesLive).pipe(
       Layer.provide(RpcSerialization.layerNdjson),
       Layer.provide(
         NodeHttpServer.layer(() => Http.createServer(), {
           port,
-          host: "127.0.0.1",
+          host,
         }),
       ),
     );
