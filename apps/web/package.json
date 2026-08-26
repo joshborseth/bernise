@@ -11,13 +11,18 @@
   "dependencies": {
     "@bernise/contracts": "workspace:*",
     "@effect/platform-browser": "rc",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
     "effect": "rc",
     "react": "latest",
-    "react-dom": "latest"
+    "react-dom": "latest",
+    "three": "^0.185.1",
+    "three-stdlib": "^2.36.1"
   },
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "latest",
     "vite": "catalog:",
     "vite-plus": "catalog:"

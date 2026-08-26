@@ -4,7 +4,9 @@ import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import * as Context from "effect/Context";
 import { RpcClient, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
 import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { BerniseMascot } from "./BerniseMascot.tsx";
+import { deriveBerniseMood } from "./mascot/mood.ts";
 
 class BerniseClient extends Context.Service<
   BerniseClient,
@@ -30,6 +32,16 @@ type ProbeState =
   | { readonly status: "ok"; readonly health: HealthStatus; readonly pong: Pong }
   | { readonly status: "error"; readonly message: string };
 
+type ChatMessage =
+  | { readonly id: string; readonly from: "bernise"; readonly text: string }
+  | { readonly id: string; readonly from: "user"; readonly text: string };
+
+const opening: ChatMessage = {
+  id: "opening",
+  from: "bernise",
+  text: "What are we building, and why this way?",
+};
+
 const loadStatus = Effect.gen(function* () {
   const raw = yield* Effect.tryPromise({
     try: async () => {
@@ -47,8 +59,21 @@ const loadStatus = Effect.gen(function* () {
   return { health, pong } as const;
 });
 
+function probeLabel(state: ProbeState): string {
+  if (state.status === "checking") {
+    return "waiting for health + ping";
+  }
+  if (state.status === "ok") {
+    return `${state.health.service} · ping`;
+  }
+  return state.message;
+}
+
 export function App() {
   const [state, setState] = useState<ProbeState>({ status: "checking" });
+  const [messages, setMessages] = useState<ReadonlyArray<ChatMessage>>([opening]);
+  const [draft, setDraft] = useState("");
+  const [composerFocused, setComposerFocused] = useState(false);
 
   useEffect(() => {
     const runtime = ManagedRuntime.make(ClientLive);
@@ -68,35 +93,72 @@ export function App() {
     };
   }, []);
 
+  const berniseLine = messages.find((message) => message.from === "bernise") ?? opening;
+  const userLines = messages.filter((message) => message.from === "user");
+  const lastMessage = messages[messages.length - 1] ?? opening;
+  const mood = deriveBerniseMood({
+    composerFocused,
+    lastFrom: lastMessage.from,
+  });
+  const canSpeak = draft.trim().length > 0;
+
+  const onSpeak = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = draft.trim();
+    if (text.length === 0) {
+      return;
+    }
+    setMessages((current) => [...current, { id: crypto.randomUUID(), from: "user", text }]);
+    setDraft("");
+  };
+
   return (
     <main className="shell">
-      <p className="eyebrow">Control surface</p>
-      <h1>Bernise</h1>
-      <p className="lede">
-        Effect-native shell. The server is the execution boundary. Agents come later.
-      </p>
-      <section className="panel" aria-live="polite">
-        <header>
+      <header className="mast">
+        <h1>Bernise</h1>
+        <p className="eyebrow">control surface</p>
+        <div className="probe" aria-live="polite">
           <span className={`lamp lamp-${state.status}`} />
-          <h2>Runtime probe</h2>
-        </header>
-        {state.status === "checking" ? <p className="mono">waiting for health + ping</p> : null}
-        {state.status === "ok" ? (
-          <dl className="mono">
-            <div>
-              <dt>health</dt>
-              <dd>
-                {state.health.service} / {String(state.health.ok)}
-              </dd>
-            </div>
-            <div>
-              <dt>rpc ping</dt>
-              <dd>{String(state.pong.pong)}</dd>
-            </div>
-          </dl>
-        ) : null}
-        {state.status === "error" ? <p className="mono error">{state.message}</p> : null}
+          <span className="probe-label">{probeLabel(state)}</span>
+        </div>
+      </header>
+
+      <section className="stage">
+        <BerniseMascot mood={mood} speakKey={berniseLine.id} />
+        <blockquote className="speech">
+          <p>{berniseLine.text}</p>
+          <cite>Bernise</cite>
+        </blockquote>
       </section>
+
+      <section className="thread" aria-live="polite">
+        {userLines.map((message) => (
+          <article key={message.id} className="user-bubble">
+            <p>{message.text}</p>
+          </article>
+        ))}
+      </section>
+
+      <form className="composer" onSubmit={onSpeak}>
+        <input
+          value={draft}
+          onChange={(event) => {
+            setDraft(event.target.value);
+          }}
+          onFocus={() => {
+            setComposerFocused(true);
+          }}
+          onBlur={() => {
+            setComposerFocused(false);
+          }}
+          placeholder="Speak to Bernise…"
+          aria-label="Speak to Bernise"
+          autoComplete="off"
+        />
+        <button type="submit" disabled={!canSpeak}>
+          Speak
+        </button>
+      </form>
     </main>
   );
 }

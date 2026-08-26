@@ -77,7 +77,7 @@ const createWindow = Effect.fn("createWindow")(function* (webUrl: string) {
       const window = new BrowserWindow({
         width: 1100,
         height: 760,
-        backgroundColor: "#12140f",
+        backgroundColor: "#f6efe4",
         title: "Bernise",
         webPreferences: {
           sandbox: true,
