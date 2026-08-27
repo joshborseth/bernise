@@ -94,7 +94,7 @@ export function BerniseMascot({
               preserveDrawingBuffer: true,
               powerPreference: "high-performance",
             }}
-            camera={{ position: [0, 0.22, 5.2], fov: 30 }}
+            camera={{ position: [0, 0.22, 6.6], fov: 30 }}
             resize={{ debounce: 0, scroll: false }}
             style={{
               width: stageSize.width,

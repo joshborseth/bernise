@@ -42,7 +42,7 @@ type Session = {
   readonly audioOffset: number;
   readonly baseHz: number;
   nextKind: BurstKind;
-  readonly laziness: number;
+  readonly period: number;
   cursor: number;
   bursts: Array<Burst>;
 };
@@ -53,17 +53,12 @@ function nextBurst(session: Session): Burst {
   const kind = session.nextKind;
   session.nextKind = kind === "in" ? "out" : "in";
 
-  const duration = mix(0.55, 1.45) + session.laziness * 0.22;
-  const attack = mix(0.04, 0.09);
-  const release = Math.min(mix(0.04, 0.09), duration - attack - 0.08);
-  let peak = mix(0.85, 1.15) * (kind === "in" ? 0.82 : 1.06);
-  if (Math.random() < 0.07) {
-    peak *= mix(0.35, 0.55);
-  }
-  peak = Math.min(1, peak);
+  const duration = session.period * (kind === "in" ? mix(0.94, 1) : mix(1, 1.06));
+  const attack = mix(0.045, 0.055);
+  const release = mix(0.045, 0.055);
+  const peak = kind === "in" ? mix(0.78, 0.88) : mix(0.92, 1);
 
-  const hz =
-    session.baseHz + (kind === "in" ? mix(0.4, 1.5) : mix(-1.5, -0.4)) + mix(-0.3, 0.3);
+  const hz = session.baseHz + (kind === "in" ? mix(0.4, 1.5) : mix(-1.5, -0.4)) + mix(-0.3, 0.3);
 
   const burst: Burst = {
     start: session.cursor,
@@ -74,10 +69,7 @@ function nextBurst(session: Session): Burst {
     hz,
   };
 
-  const gap =
-    Math.random() < 0.08
-      ? mix(0.35, 0.55)
-      : mix(0.08, 0.22) + session.laziness * 0.08;
+  const gap = kind === "in" ? mix(0.04, 0.07) : mix(0.08, 0.12);
   session.cursor += duration + gap;
   session.bursts.push(burst);
   return burst;
@@ -133,12 +125,13 @@ export function startPurr(): () => void {
   const ctx = audioContext();
   void ctx.resume();
 
+  const laziness = mix(0, 1);
   const session: Session = {
     startedAt: performance.now(),
     audioOffset: ctx.currentTime,
     baseHz: mix(23.5, 27.5),
     nextKind: Math.random() < 0.5 ? "in" : "out",
-    laziness: mix(0, 1),
+    period: mix(0.72, 0.88) + laziness * 0.18,
     cursor: 0,
     bursts: [],
   };
@@ -146,7 +139,7 @@ export function startPurr(): () => void {
 
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, ctx.currentTime);
-  master.gain.linearRampToValueAtTime(mix(0.16, 0.24), ctx.currentTime + fadeSeconds);
+  master.gain.linearRampToValueAtTime(0.34, ctx.currentTime + fadeSeconds);
   master.connect(ctx.destination);
 
   const burstGain = ctx.createGain();
