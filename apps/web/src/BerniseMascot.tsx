@@ -2,6 +2,7 @@ import { Canvas } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BerniseCat, type PointerGoal } from "./mascot/BerniseCat.tsx";
 import type { BerniseMood } from "./mascot/mood.ts";
+import { startPurr } from "./mascot/purr.ts";
 
 export function BerniseMascot({
   mood,
@@ -13,6 +14,7 @@ export function BerniseMascot({
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [purring, setPurring] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
 
   useLayoutEffect(() => {
@@ -52,8 +54,34 @@ export function BerniseMascot({
     };
   }, []);
 
+  useEffect(() => {
+    const stop = () => {
+      setPurring(false);
+    };
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!purring) {
+      return;
+    }
+    return startPurr();
+  }, [purring]);
+
+  const className = purring ? `mascot mascot-${mood} mascot-purring` : `mascot mascot-${mood}`;
+
   return (
-    <div className={`mascot mascot-${mood}`} role="img" aria-label="Bernise">
+    <div
+      className={className}
+      role="img"
+      aria-label={purring ? "Bernise is purring" : "Bernise. Hold to pet."}
+      aria-pressed={purring}
+    >
       <div className="mascot-halo" aria-hidden="true" />
       <div ref={stageRef} className="mascot-stage">
         {stageSize.width > 0 && stageSize.height > 0 ? (
@@ -71,7 +99,7 @@ export function BerniseMascot({
             style={{
               width: stageSize.width,
               height: stageSize.height,
-              pointerEvents: "none",
+              pointerEvents: "auto",
               background: "transparent",
             }}
             onCreated={({ gl }) => {
@@ -82,7 +110,9 @@ export function BerniseMascot({
               mood={mood}
               speakKey={speakKey}
               pointer={pointer}
+              purring={purring}
               reducedMotion={reducedMotion}
+              onPurringChange={setPurring}
             />
           </Canvas>
         ) : null}

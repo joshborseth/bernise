@@ -48,6 +48,8 @@ export type PartId =
   | "rightEar"
   | "leftEye"
   | "rightEye"
+  | "leftWhite"
+  | "rightWhite"
   | "leftIris"
   | "rightIris"
   | "leftPupil"
@@ -199,6 +201,7 @@ const tailMass: Mass = {
 
 function eye(side: -1 | 1): Node {
   const eyeId: PartId = side < 0 ? "leftEye" : "rightEye";
+  const whiteId: PartId = side < 0 ? "leftWhite" : "rightWhite";
   const irisId: PartId = side < 0 ? "leftIris" : "rightIris";
   const pupilId: PartId = side < 0 ? "leftPupil" : "rightPupil";
   return {
@@ -207,13 +210,19 @@ function eye(side: -1 | 1): Node {
     position: [side * 0.225, 0.42, 0.38],
     rotation: [0.02, side * 0.3, side * 0.05],
     children: [
-      { kind: "sphere", surface: "liner", radius: 0.176, scale: [1, 1.06, 0.3] },
+      { kind: "sphere", surface: "liner", radius: 0.156, scale: [1, 0.88, 0.32] },
       {
-        kind: "sphere",
-        surface: "eyeWhite",
-        radius: 0.164,
-        scale: [1, 1.04, 0.32],
-        position: [0, 0.002, 0.014],
+        kind: "group",
+        id: whiteId,
+        children: [
+          {
+            kind: "sphere",
+            surface: "eyeWhite",
+            radius: 0.144,
+            scale: [1, 0.84, 0.34],
+            position: [0, -0.006, 0.014],
+          },
+        ],
       },
       {
         kind: "group",
@@ -223,23 +232,23 @@ function eye(side: -1 | 1): Node {
           {
             kind: "sphere",
             surface: "irisRim",
-            radius: 0.142,
-            scale: [1, 1, 0.3],
-            position: [0, 0, 0.018],
+            radius: 0.126,
+            scale: [1, 0.9, 0.3],
+            position: [0, -0.008, 0.018],
           },
           {
             kind: "sphere",
             surface: "iris",
-            radius: 0.124,
-            scale: [1, 1, 0.3],
-            position: [0, 0, 0.032],
+            radius: 0.11,
+            scale: [1, 0.9, 0.3],
+            position: [0, -0.008, 0.032],
           },
           {
             kind: "sphere",
             surface: "irisGlow",
-            radius: 0.084,
-            scale: [1.2, 0.85, 0.22],
-            position: [0, -0.048, 0.044],
+            radius: 0.076,
+            scale: [1.15, 0.8, 0.22],
+            position: [0, -0.042, 0.044],
           },
           {
             kind: "group",
@@ -248,25 +257,25 @@ function eye(side: -1 | 1): Node {
               {
                 kind: "sphere",
                 surface: "pupil",
-                radius: 0.066,
-                scale: [1, 1.12, 0.3],
-                position: [0, 0, 0.05],
+                radius: 0.078,
+                scale: [1, 1.04, 0.3],
+                position: [0, -0.008, 0.05],
               },
             ],
           },
           {
             kind: "sphere",
             surface: "shine",
-            radius: 0.044,
+            radius: 0.036,
             scale: [1, 0.95, 0.4],
-            position: [side * -0.054, 0.06, 0.062],
+            position: [side * -0.044, 0.03, 0.062],
           },
           {
             kind: "sphere",
             surface: "shine",
-            radius: 0.021,
+            radius: 0.018,
             scale: [1, 0.9, 0.4],
-            position: [side * 0.057, -0.056, 0.058],
+            position: [side * 0.046, -0.048, 0.058],
           },
         ],
       },

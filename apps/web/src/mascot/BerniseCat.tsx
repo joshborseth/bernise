@@ -1,24 +1,32 @@
 import { ContactShadows } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { Euler, MathUtils, MeshPhysicalMaterial, MeshStandardMaterial, Vector3 } from "three";
 import type { Group, Material } from "three";
 import { massGeometry, whiskerGeometry } from "./berniseGeometry.ts";
 import { bernise, palette, type Node, type PartId, type Surface } from "./berniseModel.ts";
 import type { BerniseMood } from "./mood.ts";
+import { purrBurst } from "./purr.ts";
 
 export type PointerGoal = { x: number; y: number };
+
+const squintOpenness = 0.06;
+const squintWidth = 1.18;
 
 export function BerniseCat({
   mood,
   speakKey,
   pointer,
+  purring,
   reducedMotion,
+  onPurringChange,
 }: {
   readonly mood: Exclude<BerniseMood, "speaking">;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
+  readonly purring: boolean;
   readonly reducedMotion: boolean;
+  readonly onPurringChange: (purring: boolean) => void;
 }) {
   return (
     <>
@@ -33,7 +41,9 @@ export function BerniseCat({
         mood={mood}
         speakKey={speakKey}
         pointer={pointer}
+        purring={purring}
         reducedMotion={reducedMotion}
+        onPurringChange={onPurringChange}
       />
       <ContactShadows
         position={[0, -1.2, 0]}
@@ -66,19 +76,39 @@ function BerniseFigure({
   mood,
   speakKey,
   pointer,
+  purring,
   reducedMotion,
+  onPurringChange,
 }: {
   readonly mood: Exclude<BerniseMood, "speaking">;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
+  readonly purring: boolean;
   readonly reducedMotion: boolean;
+  readonly onPurringChange: (purring: boolean) => void;
 }) {
+  const gl = useThree((state) => state.gl);
   const materials = useCatMaterials();
   const refs = usePartRefs();
   const rest = useRef<{ tail: Euler; leftPaw: Vector3 } | null>(null);
   const blink = useRef({ nextAt: 2.4, closeUntil: 0 });
   const twitch = useRef({ nextAt: 2.6, amount: 0 });
   const speech = useRef({ key: "", until: 0 });
+  const rumble = useRef({ amp: 0, y: 0 });
+
+  const onPetDown = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    gl.domElement.setPointerCapture(event.pointerId);
+    onPurringChange(true);
+  };
+
+  const onPetUp = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    if (gl.domElement.hasPointerCapture(event.pointerId)) {
+      gl.domElement.releasePointerCapture(event.pointerId);
+    }
+    onPurringChange(false);
+  };
 
   useFrame(({ clock }, delta) => {
     const root = refs.root.current;
@@ -112,55 +142,105 @@ function BerniseFigure({
     const listening = mood === "listening";
     const thinking = mood === "thinking";
     const speaking = mood === "idle" && t < speech.current.until;
+    const restOpenness = 0.9;
+
+    const poseEyes = (openness: number, width: number, innerScale: number, instant: boolean) => {
+      for (const id of ["leftEye", "rightEye"] as const) {
+        const eye = refs[id].current;
+        if (eye !== null) {
+          if (instant) {
+            eye.scale.y = openness;
+            eye.scale.x = width;
+          } else {
+            eye.scale.y = MathUtils.damp(eye.scale.y, openness, purring ? 14 : 22, dt);
+            eye.scale.x = MathUtils.damp(eye.scale.x, width, 14, dt);
+          }
+        }
+      }
+      for (const id of ["leftWhite", "rightWhite", "leftIris", "rightIris"] as const) {
+        const inner = refs[id].current;
+        if (inner !== null) {
+          if (instant) {
+            inner.scale.setScalar(innerScale);
+          } else {
+            inner.scale.x = MathUtils.damp(inner.scale.x, innerScale, 12, dt);
+            inner.scale.y = MathUtils.damp(inner.scale.y, innerScale, 12, dt);
+            inner.scale.z = MathUtils.damp(inner.scale.z, innerScale, 12, dt);
+          }
+        }
+      }
+    };
 
     if (reducedMotion) {
       root.position.set(0, 0, 0);
       root.rotation.set(0.02, 0, 0);
       body.scale.set(1, 1, 1);
-      head.rotation.set(-0.02, 0, 0);
+      head.rotation.set(purring ? 0.04 : -0.02, 0, purring ? 0.05 : 0);
       mouth.scale.set(1, 1, 1);
+      poseEyes(
+        purring ? squintOpenness : restOpenness,
+        purring ? squintWidth : 1,
+        purring ? 0 : 1,
+        true,
+      );
       return;
     }
 
-    const breathSpeed = thinking ? 1.35 : listening ? 2.15 : speaking ? 2.6 : 1.7;
+    const breathSpeed =
+      thinking && !purring ? 1.35 : purring ? 1.5 : listening ? 2.15 : speaking ? 2.6 : 1.7;
     const breath = (Math.sin(t * breathSpeed) + 1) / 2;
-
-    root.position.y = MathUtils.damp(
-      root.position.y,
-      Math.sin(t * 1.05) * 0.02 + (speaking ? Math.abs(Math.sin(t * 9)) * 0.026 : 0),
+    const burst = purrBurst();
+    rumble.current.amp = MathUtils.damp(
+      rumble.current.amp,
+      purring ? 0.007 * burst.amp : 0,
+      12,
+      dt,
+    );
+    const shake = Math.sin(t * Math.PI * 2 * burst.hz) * rumble.current.amp;
+    rumble.current.y = MathUtils.damp(
+      rumble.current.y,
+      Math.sin(t * 1.05) * 0.02 + (speaking && !purring ? Math.abs(Math.sin(t * 9)) * 0.026 : 0),
       6,
       dt,
     );
-    root.position.z = MathUtils.damp(root.position.z, listening ? 0.12 : 0, 5, dt);
-    root.rotation.x = MathUtils.damp(root.rotation.x, listening ? 0.07 : 0.015, 5, dt);
+    root.position.y = rumble.current.y + shake;
+    root.position.x = shake * 0.35;
+    root.position.z = MathUtils.damp(root.position.z, purring ? 0.04 : listening ? 0.12 : 0, 5, dt);
+    root.rotation.x = MathUtils.damp(
+      root.rotation.x,
+      purring ? 0.03 : listening ? 0.07 : 0.015,
+      5,
+      dt,
+    );
 
-    body.scale.y = 1 + breath * (thinking ? 0.018 : 0.028);
+    body.scale.y = 1 + breath * (thinking && !purring ? 0.018 : 0.028);
     body.scale.x = 1 - breath * 0.012;
     body.scale.z = 1 - breath * 0.008;
 
     const lookX = MathUtils.clamp(pointer.current.x, -1, 1);
     const lookY = MathUtils.clamp(pointer.current.y, -1, 1);
+    const lookScale = purring ? 0.45 : 1;
     head.rotation.y = MathUtils.damp(
       head.rotation.y,
-      lookX * 0.34 + (thinking ? 0.16 : listening ? -0.03 : 0),
+      lookX * 0.34 * lookScale + (purring ? 0 : thinking ? 0.16 : listening ? -0.03 : 0),
       5.2,
       dt,
     );
     head.rotation.x = MathUtils.damp(
       head.rotation.x,
-      -lookY * 0.2 + (listening ? 0.04 : thinking ? -0.05 : -0.01),
+      -lookY * 0.2 * lookScale + (purring ? 0.05 : listening ? 0.04 : thinking ? -0.05 : -0.01),
       5.2,
       dt,
     );
     head.rotation.z = MathUtils.damp(
       head.rotation.z,
-      thinking ? -0.08 : listening ? 0.035 : 0,
+      purring ? 0.06 : thinking ? -0.08 : listening ? 0.035 : 0,
       5.2,
       dt,
     );
 
-    const irisX = lookX * 0.022;
-    const irisY = lookY * 0.015;
+    const irisX = lookX * 0.018 * lookScale;
+    const irisY = lookY * 0.012 * lookScale;
     for (const id of ["leftIris", "rightIris"] as const) {
       const iris = refs[id].current;
       if (iris !== null) {
@@ -169,7 +249,7 @@ function BerniseFigure({
       }
     }
 
-    const dilate = listening ? 1.1 : thinking ? 0.95 : 1;
+    const dilate = purring ? 0.88 : listening ? 1.1 : thinking ? 0.95 : 1;
     for (const id of ["leftPupil", "rightPupil"] as const) {
       const pupil = refs[id].current;
       if (pupil !== null) {
@@ -178,55 +258,60 @@ function BerniseFigure({
       }
     }
 
-    if (t > blink.current.nextAt) {
+    if (!purring && t > blink.current.nextAt) {
       blink.current.closeUntil = t + 0.14;
       blink.current.nextAt = t + 3.6 + Math.random() * 4.4;
     }
-    let openness = 1;
-    if (t < blink.current.closeUntil) {
+    let openness = restOpenness;
+    if (purring) {
+      openness = squintOpenness;
+    } else if (t < blink.current.closeUntil) {
       const progress = 1 - (blink.current.closeUntil - t) / 0.14;
       const closed = progress < 0.45 ? progress / 0.45 : 1 - (progress - 0.45) / 0.55;
-      openness = 1 - closed * 0.94;
+      openness = restOpenness - closed * (restOpenness - 0.08);
     }
-    for (const id of ["leftEye", "rightEye"] as const) {
-      const eye = refs[id].current;
-      if (eye !== null) {
-        eye.scale.y = openness;
-      }
-    }
+    poseEyes(openness, purring ? squintWidth : 1, purring ? 0 : 1, false);
 
     if (t > twitch.current.nextAt) {
       twitch.current.amount = 1;
       twitch.current.nextAt = t + 2.6 + Math.random() * 4.6;
     }
     twitch.current.amount = MathUtils.damp(twitch.current.amount, 0, 7, dt);
-    const perk = listening ? -0.14 : thinking ? 0.05 : 0;
-    const flick = Math.sin(t * 32) * twitch.current.amount * 0.12;
+    const perk = purring ? 0.1 : listening ? -0.14 : thinking ? 0.05 : 0;
+    const flick = purring ? 0 : Math.sin(t * 32) * twitch.current.amount * 0.12;
     refs.leftEar.current?.rotation.set(perk, 0, flick);
     refs.rightEar.current?.rotation.set(perk, 0, -flick * 0.6);
 
     mouth.scale.y = MathUtils.damp(
       mouth.scale.y,
-      speaking ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4 : 1,
+      purring ? 0.72 : speaking ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4 : 1,
       12,
       dt,
     );
-    mouth.scale.x = MathUtils.damp(mouth.scale.x, speaking ? 1.25 : 1, 12, dt);
+    mouth.scale.x = MathUtils.damp(mouth.scale.x, purring ? 1.15 : speaking ? 1.25 : 1, 12, dt);
 
-    tail.rotation.x = restPose.tail.x + Math.sin(t * 1.7) * 0.08 + (listening ? -0.1 : 0);
-    tail.rotation.y = restPose.tail.y + Math.sin(t * 1.15) * 0.12;
-    tail.rotation.z = restPose.tail.z + Math.sin(t * 2.1) * 0.14;
+    const tailSwing = purring ? 0.45 : 1;
+    tail.rotation.x =
+      restPose.tail.x +
+      Math.sin(t * (purring ? 0.9 : 1.7)) * 0.08 * tailSwing +
+      (listening && !purring ? -0.1 : 0);
+    tail.rotation.y = restPose.tail.y + Math.sin(t * (purring ? 0.7 : 1.15)) * 0.12 * tailSwing;
+    tail.rotation.z = restPose.tail.z + Math.sin(t * (purring ? 1.05 : 2.1)) * 0.14 * tailSwing;
 
     leftPaw.position.y = MathUtils.damp(
       leftPaw.position.y,
-      restPose.leftPaw.y + (thinking ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08 : 0),
+      restPose.leftPaw.y + (!purring && thinking ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08 : 0),
       6,
       dt,
     );
-    leftPaw.rotation.x = MathUtils.damp(leftPaw.rotation.x, thinking ? -0.3 : 0, 6, dt);
+    leftPaw.rotation.x = MathUtils.damp(leftPaw.rotation.x, !purring && thinking ? -0.3 : 0, 6, dt);
   });
 
-  return <Part node={bernise} materials={materials} refs={refs} />;
+  return (
+    <group onPointerDown={onPetDown} onPointerUp={onPetUp} onPointerCancel={onPetUp}>
+      <Part node={bernise} materials={materials} refs={refs} />
+    </group>
+  );
 }
 
 function Part({
@@ -301,6 +386,8 @@ function usePartRefs(): PartRefs {
   const rightEar = useRef<Group>(null);
   const leftEye = useRef<Group>(null);
   const rightEye = useRef<Group>(null);
+  const leftWhite = useRef<Group>(null);
+  const rightWhite = useRef<Group>(null);
   const leftIris = useRef<Group>(null);
   const rightIris = useRef<Group>(null);
   const leftPupil = useRef<Group>(null);
@@ -317,6 +404,8 @@ function usePartRefs(): PartRefs {
       rightEar,
       leftEye,
       rightEye,
+      leftWhite,
+      rightWhite,
       leftIris,
       rightIris,
       leftPupil,
