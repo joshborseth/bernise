@@ -36,6 +36,16 @@ describe("sampleHairNoise", () => {
       expect(sample.tint).toBeLessThanOrEqual(1);
     }
   });
+
+  it("keeps most texels short so outer shells stay strandy", () => {
+    let short = 0;
+    for (let i = 0; i < 200; i++) {
+      if (sampleHairNoise(i / 200, ((i * 11) % 200) / 200).length < 0.3) {
+        short += 1;
+      }
+    }
+    expect(short).toBeGreaterThan(100);
+  });
 });
 
 describe("hash2", () => {

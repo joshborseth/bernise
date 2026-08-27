@@ -28,38 +28,38 @@ export type FurCoatProfile = {
  */
 export const furCoats = {
   down: {
-    shells: 22,
-    maxHeight: 0.036,
-    density: 3.4,
-    smoothness: 0.9,
-    maxAo: 0.58,
-    combX: -0.2,
+    shells: 26,
+    maxHeight: 0.05,
+    density: 11,
+    smoothness: 0.78,
+    maxAo: 0.56,
+    combX: -0.22,
     combY: 0,
   },
   plush: {
-    shells: 20,
-    maxHeight: 0.03,
-    density: 3.8,
-    smoothness: 0.78,
-    maxAo: 0.52,
-    combX: -0.28,
+    shells: 24,
+    maxHeight: 0.042,
+    density: 12,
+    smoothness: 0.7,
+    maxAo: 0.5,
+    combX: -0.3,
     combY: 0,
   },
   guard: {
-    shells: 18,
-    maxHeight: 0.024,
-    density: 4.4,
-    smoothness: 0.68,
-    maxAo: 0.48,
-    combX: -0.38,
+    shells: 20,
+    maxHeight: 0.034,
+    density: 13,
+    smoothness: 0.62,
+    maxAo: 0.46,
+    combX: -0.4,
     combY: 0,
   },
   velvet: {
-    shells: 12,
-    maxHeight: 0.01,
-    density: 5.6,
-    smoothness: 1.15,
-    maxAo: 0.64,
+    shells: 14,
+    maxHeight: 0.014,
+    density: 16,
+    smoothness: 1.05,
+    maxAo: 0.62,
     combX: -0.1,
     combY: 0,
   },
@@ -187,6 +187,13 @@ void main() {
   float ao = uMaxAo + (1.0 - uMaxAo) * 0.9 * (t * t);
   vec3 color = uColor * noise.g * ao * light;
   float alpha = pow(max(0.0, 1.0 - t), uSmoothness);
+
+#ifdef FUR_SILHOUETTE
+  float facing = abs(normalize(vViewNormal).z);
+  if (facing > 0.4) discard;
+  alpha *= smoothstep(0.4, 0.12, facing);
+#endif
+
   gl_FragColor = vec4(color, alpha);
   #include <fog_fragment>
 }
@@ -239,6 +246,7 @@ export function createFurMaterials(
   });
   const fins = new ShaderMaterial({
     uniforms,
+    defines: { FUR_SILHOUETTE: "1" },
     vertexShader: finVertex,
     fragmentShader: furFragment,
     transparent: true,

@@ -53,7 +53,10 @@ export function buildFinGeometry(source: Geometry): BufferGeometry {
   function consider(a: number, b: number): void {
     const ka = vertexKey(positions.getX(a), positions.getY(a), positions.getZ(a));
     const kb = vertexKey(positions.getX(b), positions.getY(b), positions.getZ(b));
-    if (ka === kb) {
+    const dx = positions.getX(a) - positions.getX(b);
+    const dy = positions.getY(a) - positions.getY(b);
+    const dz = positions.getZ(a) - positions.getZ(b);
+    if (dx * dx + dy * dy + dz * dz < 1e-8) {
       return;
     }
     const key = edgeKey(ka, kb);

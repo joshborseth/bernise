@@ -639,7 +639,7 @@ function usePartRefs(): PartRefs {
 }
 
 function useHairNoise(): Texture {
-  const noise = useMemo(() => createHairNoiseTexture(), []);
+  const noise = useMemo(() => createHairNoiseTexture(), [createHairNoiseTexture]);
   useEffect(() => {
     return () => {
       noise.dispose();

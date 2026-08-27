@@ -1,7 +1,6 @@
 import {
   DataTexture,
-  LinearFilter,
-  LinearMipmapLinearFilter,
+  NearestFilter,
   NoColorSpace,
   RepeatWrapping,
   RGBAFormat,
@@ -9,7 +8,7 @@ import {
 } from "three";
 import type { Texture } from "three";
 
-/** Texels in the shared hair-length atlas. Power of two so mipmaps stay clean. */
+/** Texels in the shared hair-length atlas. */
 export const hairNoiseSize = 256;
 
 /**
@@ -30,14 +29,16 @@ export type HairSample = {
 };
 
 /**
- * One hair per texel. Length (R) is biased long so the coat reads as pile
- * instead of polka dots; tint (G) stays a narrow band so color stays on-model.
+ * One hair per texel. Most texels stay short so outer shells punch into
+ * strands instead of drawing a solid offset surface. Tint stays a narrow
+ * band so palette color is preserved.
  */
 export function sampleHairNoise(u: number, v: number, size: number = hairNoiseSize): HairSample {
   const ix = Math.floor(u * size);
   const iy = Math.floor(v * size);
-  const length = 0.22 + 0.78 * hash2(ix, iy, size, 1) ** 0.62;
-  const tint = 0.72 + 0.28 * hash2(ix, iy, size, 2);
+  const speckle = hash2(ix, iy, size, 1);
+  const length = speckle < 0.32 ? 0.38 + 0.62 * hash2(ix, iy, size, 3) : 0.04 + 0.14 * speckle;
+  const tint = 0.78 + 0.22 * hash2(ix, iy, size, 2);
   return { length, tint };
 }
 
@@ -61,9 +62,9 @@ export function createHairNoiseTexture(size: number = hairNoiseSize): Texture {
   const texture = new DataTexture(bakeHairNoise(size), size, size, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
   texture.wrapT = RepeatWrapping;
-  texture.magFilter = LinearFilter;
-  texture.minFilter = LinearMipmapLinearFilter;
-  texture.generateMipmaps = true;
+  texture.magFilter = NearestFilter;
+  texture.minFilter = NearestFilter;
+  texture.generateMipmaps = false;
   texture.colorSpace = NoColorSpace;
   texture.needsUpdate = true;
   return texture;
