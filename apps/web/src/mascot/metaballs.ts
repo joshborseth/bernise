@@ -2,8 +2,8 @@ import { BufferAttribute, BufferGeometry, MeshBasicMaterial } from "three";
 import { MarchingCubes } from "three-stdlib";
 
 /**
- * Cylindrical pelt UVs. The 0/1 seam sits on the back (-Z) so the face
- * stays clean for fur maps.
+ * Cylindrical pelt UVs so the shells-and-fins noise atlas can wrap the
+ * metaballs. The 0/1 seam sits on the back (-Z) so the face stays clean.
  */
 export function cylindricalUv(
   x: number,

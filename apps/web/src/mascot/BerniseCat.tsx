@@ -1,18 +1,13 @@
 import { ContactShadows } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
-import {
-  Euler,
-  MathUtils,
-  MeshPhysicalMaterial,
-  MeshStandardMaterial,
-  Vector2,
-  Vector3,
-} from "three";
+import { Euler, MathUtils, MeshPhysicalMaterial, MeshStandardMaterial, Vector3 } from "three";
 import type { Group, Material, Texture } from "three";
 import { massGeometry, whiskerGeometry } from "./berniseGeometry.ts";
 import { bernise, palette, type Node, type PartId, type Surface } from "./berniseModel.ts";
-import { createFurTextures, type FurKind, type FurTextures } from "./furMaps.ts";
+import { FurCoat, FurredSphere } from "./FurCoat.tsx";
+import { coatFor, isFurSurface } from "./furMaterials.ts";
+import { createHairNoiseTexture } from "./hairNoise.ts";
 import type { BerniseMood } from "./mood.ts";
 import { playChomp, purrBurst } from "./purr.ts";
 
@@ -98,7 +93,7 @@ export function BerniseCat({
       <fog attach="fog" args={["#f6efe4", 5.2, 8.6]} />
       <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
       <ambientLight intensity={0.5} color="#fff6ea" />
-      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.22} color="#fff7ee" />
+      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.15} color="#fff7ee" />
       <directionalLight position={[-2.6, 1.2, 3.0]} intensity={0.45} color="#dcecf7" />
       <directionalLight position={[0, 0.6, 5.4]} intensity={0.6} color="#ffffff" />
       <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.85} color="#ffe6cf" />
@@ -160,6 +155,7 @@ function BerniseFigure({
 }) {
   const gl = useThree((state) => state.gl);
   const materials = useCatMaterials();
+  const noise = useHairNoise();
   const refs = usePartRefs();
   const rest = useRef<{ tail: Euler; leftPaw: Vector3; fangs: Vector3 } | null>(null);
   const blink = useRef({ nextAt: 2.4, closeUntil: 0 });
@@ -504,7 +500,7 @@ function BerniseFigure({
 
   return (
     <group onPointerDown={onPetDown} onPointerUp={onPetUp} onPointerCancel={onPetUp}>
-      <Part node={bernise} materials={materials} refs={refs} />
+      <Part node={bernise} materials={materials} refs={refs} noise={noise} />
     </group>
   );
 }
@@ -513,10 +509,12 @@ function Part({
   node,
   materials,
   refs,
+  noise,
 }: {
   readonly node: Node;
   readonly materials: Record<Surface, Material>;
   readonly refs: PartRefs;
+  readonly noise: Texture;
 }) {
   if (node.kind === "group") {
     return (
@@ -527,14 +525,25 @@ function Part({
         scale={node.scale ?? 1}
       >
         {node.children.map((child, index) => (
-          <Part key={index} node={child} materials={materials} refs={refs} />
+          <Part key={index} node={child} materials={materials} refs={refs} noise={noise} />
         ))}
       </group>
     );
   }
 
   if (node.kind === "mass") {
-    return <mesh geometry={massGeometry(node.mass)} material={materials[node.surface]} />;
+    const geometry = massGeometry(node.mass);
+    if (isFurSurface(node.surface)) {
+      return (
+        <FurCoat
+          geometry={geometry}
+          color={palette[node.surface]}
+          coat={coatFor(node.surface)}
+          noise={noise}
+        />
+      );
+    }
+    return <mesh geometry={geometry} material={materials[node.surface]} />;
   }
 
   if (node.kind === "whisker") {
@@ -561,6 +570,20 @@ function Part({
     );
   }
 
+  if (isFurSurface(node.surface)) {
+    return (
+      <FurredSphere
+        radius={node.radius}
+        color={palette[node.surface]}
+        coat={coatFor(node.surface)}
+        noise={noise}
+        position={node.position}
+        rotation={node.rotation}
+        scale={node.scale}
+      />
+    );
+  }
+
   return (
     <mesh
       material={materials[node.surface]}
@@ -568,7 +591,7 @@ function Part({
       rotation={node.rotation ?? origin}
       scale={node.scale ?? 1}
     >
-      <sphereGeometry args={[node.radius, 64, 48]} />
+      <sphereGeometry args={[node.radius, 32, 24]} />
     </mesh>
   );
 }
@@ -615,52 +638,19 @@ function usePartRefs(): PartRefs {
   );
 }
 
+function useHairNoise(): Texture {
+  const noise = useMemo(() => createHairNoiseTexture(), []);
+  useEffect(() => {
+    return () => {
+      noise.dispose();
+    };
+  }, [noise]);
+  return noise;
+}
+
 function useCatMaterials(): Record<Surface, Material> {
-  const gl = useThree((state) => state.gl);
-  const { materials, textures } = useMemo(() => {
-    const anisotropy = gl.capabilities.getMaxAnisotropy();
-    const coats: Record<FurKind, FurTextures> = {
-      down: createFurTextures("down", anisotropy),
-      plush: createFurTextures("plush", anisotropy),
-      guard: createFurTextures("guard", anisotropy),
-      velvet: createFurTextures("velvet", anisotropy),
-    };
-    const textures: Texture[] = [];
-    for (const coat of Object.values(coats)) {
-      textures.push(coat.normalMap, coat.displacementMap, coat.roughnessMap);
-    }
-
-    const fur = (
-      surface: Surface,
-      coat: FurTextures,
-      options: {
-        readonly displacementScale: number;
-        readonly normalScale: number;
-        readonly sheen: number;
-        readonly sheenRoughness: number;
-        readonly emissiveIntensity?: number;
-      },
-    ) => {
-      const material = new MeshPhysicalMaterial({
-        color: palette[surface],
-        roughness: 1,
-        metalness: 0,
-        roughnessMap: coat.roughnessMap,
-        normalMap: coat.normalMap,
-        displacementMap: coat.displacementMap,
-        displacementScale: options.displacementScale,
-        displacementBias: 0,
-        sheen: options.sheen,
-        sheenColor: "#fff6ea",
-        sheenRoughness: options.sheenRoughness,
-        emissive: palette[surface],
-        emissiveIntensity: options.emissiveIntensity ?? 0.02,
-      });
-      material.normalScale = new Vector2(options.normalScale, options.normalScale);
-      return material;
-    };
-
-    const skin = (surface: Surface, roughness = 0.92, emissiveIntensity = 0.06) =>
+  const materials = useMemo(() => {
+    const fur = (surface: Surface, roughness = 0.92, emissiveIntensity = 0.06) =>
       new MeshStandardMaterial({
         color: palette[surface],
         roughness,
@@ -676,101 +666,63 @@ function useCatMaterials(): Record<Surface, Material> {
         clearcoat,
         clearcoatRoughness: 0.2,
       });
-
     return {
-      textures,
-      materials: {
-        snow: fur("snow", coats.down, {
-          displacementScale: 0.0012,
-          normalScale: 0.72,
-          sheen: 0.62,
-          sheenRoughness: 0.82,
-        }),
-        snowShade: fur("snowShade", coats.down, {
-          displacementScale: 0.001,
-          normalScale: 0.64,
-          sheen: 0.55,
-          sheenRoughness: 0.8,
-        }),
-        silver: fur("silver", coats.plush, {
-          displacementScale: 0.0011,
-          normalScale: 0.78,
-          sheen: 0.52,
-          sheenRoughness: 0.74,
-        }),
-        tabby: fur("tabby", coats.guard, {
-          displacementScale: 0.0009,
-          normalScale: 0.85,
-          sheen: 0.4,
-          sheenRoughness: 0.62,
-        }),
-        tabbyDark: fur("tabbyDark", coats.guard, {
-          displacementScale: 0.0008,
-          normalScale: 0.8,
-          sheen: 0.36,
-          sheenRoughness: 0.58,
-        }),
-        innerEar: fur("innerEar", coats.velvet, {
-          displacementScale: 0.0004,
-          normalScale: 0.48,
-          sheen: 0.7,
-          sheenRoughness: 0.9,
-          emissiveIntensity: 0.012,
-        }),
-        nose: glass("nose", 0.35, 0.5),
-        liner: skin("liner", 0.6),
-        mouth: skin("mouth", 0.6),
-        eyeWhite: skin("eyeWhite", 0.35),
-        irisRim: glass("irisRim", 0.22, 0.6),
-        iris: new MeshPhysicalMaterial({
-          color: palette.iris,
-          roughness: 0.18,
-          metalness: 0,
-          clearcoat: 0.7,
-          clearcoatRoughness: 0.18,
-          emissive: "#2f8ecb",
-          emissiveIntensity: 0.16,
-        }),
-        irisGlow: new MeshStandardMaterial({
-          color: palette.irisGlow,
-          roughness: 0.3,
-          emissive: palette.irisGlow,
-          emissiveIntensity: 0.3,
-        }),
-        pupil: glass("pupil", 0.15, 0.8),
-        shine: new MeshStandardMaterial({
-          color: palette.shine,
-          roughness: 0.05,
-          emissive: palette.shine,
-          emissiveIntensity: 0.8,
-        }),
-        fang: new MeshStandardMaterial({
-          color: palette.fang,
-          roughness: 0.32,
-          metalness: 0,
-          emissive: "#fff6ea",
-          emissiveIntensity: 0.08,
-        }),
-        whisker: new MeshStandardMaterial({
-          color: palette.whisker,
-          roughness: 0.45,
-          emissive: "#fffaf2",
-          emissiveIntensity: 0.12,
-        }),
-      } satisfies Record<Surface, Material>,
-    };
-  }, [gl]);
+      snow: fur("snow"),
+      snowShade: fur("snowShade"),
+      silver: fur("silver"),
+      tabby: fur("tabby"),
+      tabbyDark: fur("tabbyDark"),
+      innerEar: fur("innerEar", 0.7),
+      nose: glass("nose", 0.35, 0.5),
+      liner: fur("liner", 0.6),
+      mouth: fur("mouth", 0.6),
+      eyeWhite: fur("eyeWhite", 0.35),
+      irisRim: glass("irisRim", 0.22, 0.6),
+      iris: new MeshPhysicalMaterial({
+        color: palette.iris,
+        roughness: 0.18,
+        metalness: 0,
+        clearcoat: 0.7,
+        clearcoatRoughness: 0.18,
+        emissive: "#2f8ecb",
+        emissiveIntensity: 0.16,
+      }),
+      irisGlow: new MeshStandardMaterial({
+        color: palette.irisGlow,
+        roughness: 0.3,
+        emissive: palette.irisGlow,
+        emissiveIntensity: 0.3,
+      }),
+      pupil: glass("pupil", 0.15, 0.8),
+      shine: new MeshStandardMaterial({
+        color: palette.shine,
+        roughness: 0.05,
+        emissive: palette.shine,
+        emissiveIntensity: 0.8,
+      }),
+      fang: new MeshStandardMaterial({
+        color: palette.fang,
+        roughness: 0.32,
+        metalness: 0,
+        emissive: "#fff6ea",
+        emissiveIntensity: 0.08,
+      }),
+      whisker: new MeshStandardMaterial({
+        color: palette.whisker,
+        roughness: 0.45,
+        emissive: "#fffaf2",
+        emissiveIntensity: 0.12,
+      }),
+    } satisfies Record<Surface, Material>;
+  }, []);
 
   useEffect(() => {
     return () => {
       for (const material of Object.values(materials)) {
         material.dispose();
       }
-      for (const texture of textures) {
-        texture.dispose();
-      }
     };
-  }, [materials, textures]);
+  }, [materials]);
 
   return materials;
 }
