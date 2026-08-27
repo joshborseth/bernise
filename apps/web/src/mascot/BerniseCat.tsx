@@ -95,12 +95,12 @@ export function BerniseCat({
   return (
     <>
       <FitCamera />
-      <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.7]} />
-      <ambientLight intensity={0.38} color="#fff6ea" />
-      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.45} color="#fff7ee" />
-      <directionalLight position={[-2.6, 1.2, 3.0]} intensity={0.55} color="#dcecf7" />
-      <directionalLight position={[0, 0.6, 5.4]} intensity={0.7} color="#ffffff" />
-      <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.95} color="#ffe6cf" />
+      <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
+      <ambientLight intensity={0.5} color="#fff6ea" />
+      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.22} color="#fff7ee" />
+      <directionalLight position={[-2.6, 1.2, 3.0]} intensity={0.45} color="#dcecf7" />
+      <directionalLight position={[0, 0.6, 5.4]} intensity={0.6} color="#ffffff" />
+      <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.85} color="#ffe6cf" />
       <BerniseFigure
         mood={mood}
         speakKey={speakKey}
@@ -626,7 +626,7 @@ function useCatMaterials(): Record<Surface, Material> {
     };
     const textures: Texture[] = [];
     for (const coat of Object.values(coats)) {
-      textures.push(coat.normalMap, coat.displacementMap, coat.roughnessMap);
+      textures.push(coat.map, coat.normalMap, coat.displacementMap, coat.roughnessMap);
     }
 
     const fur = (
@@ -642,18 +642,19 @@ function useCatMaterials(): Record<Surface, Material> {
     ) => {
       const material = new MeshPhysicalMaterial({
         color: palette[surface],
+        map: coat.map,
         roughness: 1,
         metalness: 0,
         roughnessMap: coat.roughnessMap,
         normalMap: coat.normalMap,
         displacementMap: coat.displacementMap,
         displacementScale: options.displacementScale,
-        displacementBias: options.displacementScale * -0.22,
+        displacementBias: 0,
         sheen: options.sheen,
         sheenColor: palette[surface],
         sheenRoughness: options.sheenRoughness,
         emissive: palette[surface],
-        emissiveIntensity: options.emissiveIntensity ?? 0.045,
+        emissiveIntensity: options.emissiveIntensity ?? 0.018,
       });
       material.normalScale = new Vector2(options.normalScale, options.normalScale);
       return material;
@@ -680,41 +681,41 @@ function useCatMaterials(): Record<Surface, Material> {
       textures,
       materials: {
         snow: fur("snow", coats.down, {
-          displacementScale: 0.01,
-          normalScale: 1.85,
+          displacementScale: 0.0022,
+          normalScale: 1.25,
           sheen: 0.48,
           sheenRoughness: 0.78,
         }),
         snowShade: fur("snowShade", coats.down, {
-          displacementScale: 0.007,
-          normalScale: 1.65,
+          displacementScale: 0.0018,
+          normalScale: 1.15,
           sheen: 0.4,
           sheenRoughness: 0.74,
         }),
         silver: fur("silver", coats.plush, {
-          displacementScale: 0.008,
-          normalScale: 2.05,
+          displacementScale: 0.002,
+          normalScale: 1.35,
           sheen: 0.42,
           sheenRoughness: 0.66,
         }),
         tabby: fur("tabby", coats.guard, {
-          displacementScale: 0.005,
-          normalScale: 2.2,
+          displacementScale: 0.0016,
+          normalScale: 1.45,
           sheen: 0.3,
           sheenRoughness: 0.52,
         }),
         tabbyDark: fur("tabbyDark", coats.guard, {
-          displacementScale: 0.004,
-          normalScale: 2.05,
+          displacementScale: 0.0014,
+          normalScale: 1.35,
           sheen: 0.26,
           sheenRoughness: 0.48,
         }),
         innerEar: fur("innerEar", coats.velvet, {
-          displacementScale: 0.0016,
-          normalScale: 1.15,
+          displacementScale: 0.0006,
+          normalScale: 0.9,
           sheen: 0.58,
           sheenRoughness: 0.86,
-          emissiveIntensity: 0.03,
+          emissiveIntensity: 0.012,
         }),
         nose: glass("nose", 0.35, 0.5),
         liner: skin("liner", 0.6),

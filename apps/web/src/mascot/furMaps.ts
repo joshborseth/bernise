@@ -5,6 +5,7 @@ import {
   NoColorSpace,
   RepeatWrapping,
   RGBAFormat,
+  SRGBColorSpace,
   UnsignedByteType,
 } from "three";
 import type { Texture } from "three";
@@ -31,6 +32,7 @@ export type FurProfile = {
 };
 
 export type FurTextures = {
+  readonly map: Texture;
   readonly normalMap: Texture;
   readonly displacementMap: Texture;
   readonly roughnessMap: Texture;
@@ -40,58 +42,58 @@ export const furProfiles: Record<FurKind, FurProfile> = {
   down: {
     kind: "down",
     size: 512,
-    strands: 64,
+    strands: 32,
     flowWaves: 2,
-    sharpness: 1.85,
-    clump: 1,
-    fuzz: 1.05,
-    normalStrength: 14,
-    roughnessLow: 0.76,
-    roughnessHigh: 0.97,
-    repeatU: 4.0,
-    repeatV: 1.5,
+    sharpness: 1.7,
+    clump: 0.85,
+    fuzz: 1.2,
+    normalStrength: 8,
+    roughnessLow: 0.78,
+    roughnessHigh: 0.96,
+    repeatU: 2.2,
+    repeatV: 1.0,
   },
   plush: {
     kind: "plush",
     size: 512,
-    strands: 52,
+    strands: 28,
     flowWaves: 2,
-    sharpness: 2.05,
-    clump: 1.1,
-    fuzz: 0.9,
-    normalStrength: 16,
-    roughnessLow: 0.64,
+    sharpness: 1.85,
+    clump: 0.95,
+    fuzz: 1,
+    normalStrength: 9,
+    roughnessLow: 0.68,
     roughnessHigh: 0.93,
-    repeatU: 3.5,
-    repeatV: 1.35,
+    repeatU: 2.0,
+    repeatV: 1.0,
   },
   guard: {
     kind: "guard",
     size: 512,
-    strands: 40,
-    flowWaves: 3,
-    sharpness: 2.25,
-    clump: 1.25,
-    fuzz: 0.7,
-    normalStrength: 18,
-    roughnessLow: 0.5,
-    roughnessHigh: 0.86,
-    repeatU: 3.0,
-    repeatV: 1.25,
+    strands: 24,
+    flowWaves: 2,
+    sharpness: 2.0,
+    clump: 1.05,
+    fuzz: 0.8,
+    normalStrength: 10,
+    roughnessLow: 0.55,
+    roughnessHigh: 0.88,
+    repeatU: 1.8,
+    repeatV: 1.0,
   },
   velvet: {
     kind: "velvet",
     size: 512,
-    strands: 80,
+    strands: 40,
     flowWaves: 2,
-    sharpness: 1.55,
-    clump: 0.45,
-    fuzz: 1.3,
-    normalStrength: 9,
-    roughnessLow: 0.7,
+    sharpness: 1.45,
+    clump: 0.4,
+    fuzz: 1.35,
+    normalStrength: 6.5,
+    roughnessLow: 0.72,
     roughnessHigh: 0.9,
-    repeatU: 5.0,
-    repeatV: 2.0,
+    repeatU: 2.4,
+    repeatV: 1.15,
   },
 };
 
@@ -104,8 +106,9 @@ const twoPi = Math.PI * 2;
  */
 export function sampleFurHeight(u: number, v: number, profile: FurProfile): number {
   const lie =
-    profile.clump * 0.05 * Math.sin(v * twoPi * profile.flowWaves) +
-    profile.clump * 0.02 * Math.sin(v * twoPi * (profile.flowWaves + 1) + u * twoPi);
+    profile.clump * 0.045 * Math.sin(v * twoPi * profile.flowWaves) +
+    profile.clump * 0.018 * Math.sin(v * twoPi * (profile.flowWaves + 1) + u * twoPi) +
+    0.016 * Math.sin(u * twoPi * 5 + v * twoPi * 3);
 
   const strandU = u + lie;
   const fiber = Math.abs(Math.sin(strandU * twoPi * profile.strands));
@@ -142,6 +145,7 @@ export function sampleFurRoughness(u: number, v: number, profile: FurProfile): n
 
 export type FurMapBuffers = {
   readonly size: number;
+  readonly albedo: Uint8Array;
   readonly displacement: Uint8Array;
   readonly normal: Uint8Array;
   readonly roughness: Uint8Array;
@@ -150,6 +154,7 @@ export type FurMapBuffers = {
 export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
   const size = profile.size;
   const heights = new Float32Array(size * size);
+  const albedo = new Uint8Array(size * size * 4);
   const displacement = new Uint8Array(size * size * 4);
   const roughness = new Uint8Array(size * size * 4);
 
@@ -163,6 +168,12 @@ export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
       heights[y * size + x] = height;
 
       const di = (y * size + x) * 4;
+      const tone = Math.round((0.8 + 0.2 * height) * 255);
+      albedo[di] = tone;
+      albedo[di + 1] = tone;
+      albedo[di + 2] = tone;
+      albedo[di + 3] = 255;
+
       const d = Math.round(pile * 255);
       displacement[di] = d;
       displacement[di + 1] = d;
@@ -179,6 +190,7 @@ export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
 
   return {
     size,
+    albedo,
     displacement,
     normal: heightToNormal(heights, size, profile.normalStrength),
     roughness,
@@ -189,6 +201,7 @@ export function createFurTextures(kind: FurKind, anisotropy: number): FurTexture
   const profile = furProfiles[kind];
   const maps = bakeFurMaps(profile);
   return {
+    map: dataMap(maps.albedo, maps.size, anisotropy, profile.repeatU, profile.repeatV, true),
     normalMap: dataMap(maps.normal, maps.size, anisotropy, profile.repeatU, profile.repeatV),
     roughnessMap: dataMap(maps.roughness, maps.size, anisotropy, profile.repeatU, profile.repeatV),
     // Pile must not inherit the strand repeat or the coarse mesh rings.
@@ -202,6 +215,7 @@ function dataMap(
   anisotropy: number,
   repeatU: number,
   repeatV: number,
+  color = false,
 ): DataTexture {
   const texture = new DataTexture(pixels, size, size, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
@@ -210,7 +224,7 @@ function dataMap(
   texture.minFilter = LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
   texture.anisotropy = Math.max(1, anisotropy);
-  texture.colorSpace = NoColorSpace;
+  texture.colorSpace = color ? SRGBColorSpace : NoColorSpace;
   texture.flipY = false;
   texture.repeat.set(repeatU, repeatV);
   texture.needsUpdate = true;

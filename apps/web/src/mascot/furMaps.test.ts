@@ -42,6 +42,7 @@ describe("bakeFurMaps", () => {
     expect(maps.displacement.length).toBe(pixels);
     expect(maps.normal.length).toBe(pixels);
     expect(maps.roughness.length).toBe(pixels);
+    expect(maps.albedo.length).toBe(pixels);
 
     let blueSum = 0;
     let sameAsStrand = 0;
