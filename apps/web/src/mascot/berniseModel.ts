@@ -112,18 +112,21 @@ export type Node =
  */
 
 const crown: ReadonlyArray<Metaball> = [
-  { position: [0, 0.46, -0.04], radius: 0.4 },
-  { position: [0, 0.6, -0.1], radius: 0.33 },
-  { position: [0, 0.42, -0.22], radius: 0.33 },
-  { position: [-0.22, 0.68, -0.08], radius: 0.15 },
-  { position: [0.22, 0.68, -0.08], radius: 0.15 },
+  { position: [0, 0.42, -0.02], radius: 0.28 },
+  { position: [-0.22, 0.45, -0.04], radius: 0.36 },
+  { position: [0.22, 0.45, -0.04], radius: 0.36 },
+  { position: [0, 0.5, -0.1], radius: 0.27 },
+  { position: [-0.14, 0.42, -0.22], radius: 0.3 },
+  { position: [0.14, 0.42, -0.22], radius: 0.3 },
+  { position: [-0.4, 0.58, -0.08], radius: 0.2 },
+  { position: [0.4, 0.58, -0.08], radius: 0.2 },
   // Widow's peak, so the mask dips between the eyes instead of ending flat.
   { position: [0, 0.33, 0.2], radius: 0.11 },
 ];
 
 const faceFur: ReadonlyArray<Metaball> = [
-  { position: [-0.31, 0.22, 0.17], radius: 0.27 },
-  { position: [0.31, 0.22, 0.17], radius: 0.27 },
+  { position: [-0.34, 0.22, 0.17], radius: 0.27 },
+  { position: [0.34, 0.22, 0.17], radius: 0.27 },
   { position: [-0.54, 0.36, -0.06], radius: 0.14 },
   { position: [0.54, 0.36, -0.06], radius: 0.14 },
   { position: [-0.56, 0.16, -0.04], radius: 0.16 },
@@ -135,7 +138,7 @@ const faceFur: ReadonlyArray<Metaball> = [
   { position: [0.1, 0.19, 0.36], radius: 0.18 },
 ];
 
-const headBake: BakeOptions = { center: [0, 0.36, 0], half: 0.82, resolution: 64 };
+const headBake: BakeOptions = { center: [0, 0.36, 0], half: 0.88, resolution: 64 };
 
 const headMass: Mass = { balls: [...crown, ...faceFur], bake: headBake };
 
@@ -150,36 +153,36 @@ const capMass: Mass = {
 
 const ruffMass: Mass = {
   balls: [
-    { position: [0, -0.1, 0.16], radius: 0.26 },
-    { position: [-0.28, -0.16, 0.08], radius: 0.26 },
-    { position: [0.28, -0.16, 0.08], radius: 0.26 },
-    { position: [-0.52, -0.26, 0], radius: 0.2 },
-    { position: [0.52, -0.26, 0], radius: 0.2 },
-    { position: [0, -0.34, 0.2], radius: 0.28 },
-    { position: [-0.26, -0.36, 0.12], radius: 0.24 },
-    { position: [0.26, -0.36, 0.12], radius: 0.24 },
-    { position: [-0.12, -0.54, 0.16], radius: 0.17 },
-    { position: [0.12, -0.54, 0.16], radius: 0.17 },
-    { position: [-0.42, -0.5, 0.06], radius: 0.17 },
-    { position: [0.42, -0.5, 0.06], radius: 0.17 },
+    { position: [0, -0.1, 0.16], radius: 0.24 },
+    { position: [-0.24, -0.16, 0.08], radius: 0.23 },
+    { position: [0.24, -0.16, 0.08], radius: 0.23 },
+    { position: [-0.44, -0.26, 0], radius: 0.17 },
+    { position: [0.44, -0.26, 0], radius: 0.17 },
+    { position: [0, -0.34, 0.2], radius: 0.26 },
+    { position: [-0.22, -0.36, 0.12], radius: 0.21 },
+    { position: [0.22, -0.36, 0.12], radius: 0.21 },
+    { position: [-0.12, -0.54, 0.16], radius: 0.16 },
+    { position: [0.12, -0.54, 0.16], radius: 0.16 },
+    { position: [-0.36, -0.5, 0.06], radius: 0.15 },
+    { position: [0.36, -0.5, 0.06], radius: 0.15 },
   ],
   bake: { center: [0, -0.28, 0.06], half: 0.8, resolution: 60 },
 };
 
 const bodyMass: Mass = {
   balls: [
-    { position: [0, -0.5, -0.02], radius: 0.42 },
-    { position: [0, -0.72, 0.02], radius: 0.36 },
+    { position: [0, -0.5, -0.02], radius: 0.36 },
+    { position: [0, -0.72, 0.02], radius: 0.31 },
     { position: [0, -0.88, 0.04], radius: 0.26 },
-    { position: [0, -0.45, -0.24], radius: 0.32 },
-    { position: [-0.38, -0.68, -0.04], radius: 0.28 },
-    { position: [0.38, -0.68, -0.04], radius: 0.28 },
-    { position: [-0.4, -0.38, 0], radius: 0.26 },
-    { position: [0.4, -0.38, 0], radius: 0.26 },
-    { position: [-0.5, -0.55, -0.06], radius: 0.17 },
-    { position: [0.5, -0.55, -0.06], radius: 0.17 },
-    { position: [-0.44, -0.85, 0], radius: 0.16 },
-    { position: [0.44, -0.85, 0], radius: 0.16 },
+    { position: [0, -0.45, -0.24], radius: 0.28 },
+    { position: [-0.3, -0.68, -0.04], radius: 0.24 },
+    { position: [0.3, -0.68, -0.04], radius: 0.24 },
+    { position: [-0.32, -0.38, 0], radius: 0.22 },
+    { position: [0.32, -0.38, 0], radius: 0.22 },
+    { position: [-0.4, -0.55, -0.06], radius: 0.15 },
+    { position: [0.4, -0.55, -0.06], radius: 0.15 },
+    { position: [-0.34, -0.85, 0], radius: 0.14 },
+    { position: [0.34, -0.85, 0], radius: 0.14 },
   ],
   bake: { center: [0, -0.62, -0.02], half: 0.82, resolution: 60 },
 };
@@ -207,7 +210,7 @@ function eye(side: -1 | 1): Node {
   return {
     kind: "group",
     id: eyeId,
-    position: [side * 0.225, 0.42, 0.38],
+    position: [side * 0.27, 0.4, 0.38],
     rotation: [0.02, side * 0.3, side * 0.05],
     children: [
       { kind: "sphere", surface: "liner", radius: 0.156, scale: [1, 0.88, 0.32] },
@@ -331,7 +334,7 @@ function ear(side: -1 | 1): Node {
   return {
     kind: "group",
     id: side < 0 ? "leftEar" : "rightEar",
-    position: [side * 0.29, 0.6, 0.0],
+    position: [side * 0.4, 0.56, 0.0],
     children: [
       {
         kind: "group",
@@ -346,7 +349,7 @@ function paw(id?: PartId): Node {
   return {
     kind: "group",
     id,
-    position: [id === "leftPaw" ? -0.27 : 0.27, -0.98, 0.34],
+    position: [id === "leftPaw" ? -0.22 : 0.22, -0.98, 0.34],
     children: [
       { kind: "sphere", surface: "snow", radius: 0.17, scale: [1.2, 0.72, 1.25], outline: true },
       {
@@ -432,7 +435,7 @@ const whiskerSet: ReadonlyArray<Node> = [
     length: 0.54,
     droop: -0.03,
     lift: 0.16,
-    position: [0.18, 0.24, 0.44],
+    position: [0.2, 0.24, 0.44],
     rotation: [0.05, -0.44, 0.34],
   },
   {
@@ -440,7 +443,7 @@ const whiskerSet: ReadonlyArray<Node> = [
     length: 0.58,
     droop: -0.05,
     lift: 0.08,
-    position: [0.18, 0.2, 0.44],
+    position: [0.2, 0.2, 0.44],
     rotation: [0, -0.4, 0.1],
   },
   {
@@ -448,7 +451,7 @@ const whiskerSet: ReadonlyArray<Node> = [
     length: 0.52,
     droop: -0.06,
     lift: 0.03,
-    position: [0.175, 0.16, 0.435],
+    position: [0.195, 0.16, 0.435],
     rotation: [-0.04, -0.36, -0.16],
   },
   {
@@ -456,7 +459,7 @@ const whiskerSet: ReadonlyArray<Node> = [
     length: 0.42,
     droop: -0.07,
     lift: 0.0,
-    position: [0.17, 0.12, 0.42],
+    position: [0.19, 0.12, 0.42],
     rotation: [-0.08, -0.32, -0.38],
   },
 ];
@@ -480,7 +483,7 @@ export const bernise: Node = {
         {
           kind: "group",
           id: "tail",
-          position: [0.56, -0.78, -0.22],
+          position: [0.46, -0.78, -0.22],
           rotation: [0.18, 0.3, -0.3],
           children: [{ kind: "mass", surface: "silver", mass: tailMass, outline: true }],
         },
@@ -502,14 +505,14 @@ export const bernise: Node = {
           surface: "tabbyDark",
           radius: 0.062,
           scale: [0.5, 2.6, 0.34],
-          position: [0, 0.68, 0.31],
+          position: [0, 0.58, 0.31],
         },
         {
           kind: "sphere",
           surface: "tabbyDark",
           radius: 0.055,
           scale: [0.5, 2.4, 0.34],
-          position: [-0.19, 0.64, 0.28],
+          position: [-0.28, 0.56, 0.28],
           rotation: [0, 0, 0.2],
         },
         {
@@ -517,7 +520,7 @@ export const bernise: Node = {
           surface: "tabbyDark",
           radius: 0.055,
           scale: [0.5, 2.4, 0.34],
-          position: [0.19, 0.64, 0.28],
+          position: [0.28, 0.56, 0.28],
           rotation: [0, 0, -0.2],
         },
         muzzle,
