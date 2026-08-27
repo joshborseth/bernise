@@ -115,10 +115,6 @@ varying vec2 vUv;
 varying float vHairT;
 varying vec3 vViewNormal;
 
-#ifdef USE_INSTANCING
-attribute mat4 instanceMatrix;
-#endif
-
 void main() {
   vUv = uv;
   float layer = 1.0;

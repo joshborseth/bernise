@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { InstancedMesh, Matrix4, SphereGeometry } from "three";
+import { InstancedMesh, Matrix4 } from "three";
 import type { BufferGeometry, Texture } from "three";
+import { furSphereGeometry } from "./berniseGeometry.ts";
 import { finGeometry } from "./fins.ts";
 import { createFurMaterials, type FurCoatProfile } from "./furMaterials.ts";
 
@@ -21,7 +22,10 @@ export function FurCoat({
 }) {
   const shellsRef = useRef<InstancedMesh>(null);
   const fins = useMemo(() => finGeometry(geometry), [geometry]);
-  const materials = useMemo(() => createFurMaterials(color, noise, coat), [color, noise, coat]);
+  const materials = useMemo(
+    () => createFurMaterials(color, noise, coat),
+    [color, noise, coat, createFurMaterials],
+  );
 
   useLayoutEffect(() => {
     const mesh = shellsRef.current;
@@ -56,18 +60,6 @@ export function FurCoat({
       <mesh geometry={fins} material={materials.fins} frustumCulled={false} raycast={skipRaycast} />
     </group>
   );
-}
-
-const sphereCache = new Map<number, SphereGeometry>();
-
-export function furSphereGeometry(radius: number): SphereGeometry {
-  const cached = sphereCache.get(radius);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const geometry = new SphereGeometry(radius, 32, 24);
-  sphereCache.set(radius, geometry);
-  return geometry;
 }
 
 export function FurredSphere({

@@ -1,10 +1,11 @@
-import { CatmullRomCurve3, TubeGeometry, Vector3 } from "three";
+import { CatmullRomCurve3, TubeGeometry, Vector3, SphereGeometry } from "three";
 import type { BufferGeometry } from "three";
 import type { Mass } from "./berniseModel.ts";
 import { bakeMetaballs } from "./metaballs.ts";
 
 const massCache = new WeakMap<Mass, BufferGeometry>();
 const whiskerCache = new Map<string, TubeGeometry>();
+const sphereCache = new Map<number, SphereGeometry>();
 
 /** Fur masses are static, so each field is only ever evaluated once. */
 export function massGeometry(mass: Mass): BufferGeometry {
@@ -14,6 +15,16 @@ export function massGeometry(mass: Mass): BufferGeometry {
   }
   const geometry = bakeMetaballs(mass.balls, mass.bake);
   massCache.set(mass, geometry);
+  return geometry;
+}
+
+export function furSphereGeometry(radius: number): SphereGeometry {
+  const cached = sphereCache.get(radius);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const geometry = new SphereGeometry(radius, 32, 24);
+  sphereCache.set(radius, geometry);
   return geometry;
 }
 
