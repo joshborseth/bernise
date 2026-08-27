@@ -58,6 +58,7 @@ export type PartId =
   | "rightPupil"
   | "mouth"
   | "fangs"
+  | "whiskers"
   | "tail"
   | "leftPaw"
   | "rightPaw";
@@ -500,6 +501,7 @@ const whiskerSet: ReadonlyArray<Node> = [
 
 const whiskers: Node = {
   kind: "group",
+  id: "whiskers",
   children: [
     { kind: "group", children: whiskerSet },
     { kind: "group", scale: [-1, 1, 1], children: whiskerSet },

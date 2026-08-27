@@ -18,9 +18,10 @@ export function BerniseMascot({
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [purring, setPurring] = useState(false);
   const [biting, setBiting] = useState(false);
+  const [hissing, setHissing] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
-  const awake = mood !== "idle" || purring || biting;
+  const awake = mood !== "idle" || purring || biting || hissing;
   if (awake && sleeping) {
     setSleeping(false);
   }
@@ -66,6 +67,7 @@ export function BerniseMascot({
     const stop = () => {
       setPurring(false);
       setBiting(false);
+      setHissing(false);
     };
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -96,11 +98,13 @@ export function BerniseMascot({
 
   const className = biting
     ? `mascot mascot-${mood} mascot-biting`
-    : purring
-      ? `mascot mascot-${mood} mascot-purring`
-      : sleeping
-        ? `mascot mascot-${mood} mascot-sleeping`
-        : `mascot mascot-${mood}`;
+    : hissing
+      ? `mascot mascot-${mood} mascot-hissing`
+      : purring
+        ? `mascot mascot-${mood} mascot-purring`
+        : sleeping
+          ? `mascot mascot-${mood} mascot-sleeping`
+          : `mascot mascot-${mood}`;
 
   return (
     <div
@@ -109,11 +113,13 @@ export function BerniseMascot({
       aria-label={
         biting
           ? "Bernise has had enough"
-          : purring
-            ? "Bernise is purring"
-            : sleeping
-              ? "Bernise is sleeping"
-              : "Bernise. Hold to pet."
+          : hissing
+            ? "Bernise is hissing"
+            : purring
+              ? "Bernise is purring"
+              : sleeping
+                ? "Bernise is sleeping"
+                : "Bernise. Hold to pet."
       }
       aria-pressed={purring}
     >
@@ -155,10 +161,12 @@ export function BerniseMascot({
               pointer={pointer}
               purring={purring}
               biting={biting}
+              hissing={hissing}
               sleeping={sleeping}
               reducedMotion={reducedMotion}
               onPurringChange={setPurring}
               onBitingChange={setBiting}
+              onHissingChange={setHissing}
             />
           </Canvas>
         ) : null}

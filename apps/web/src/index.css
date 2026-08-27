@@ -217,6 +217,25 @@ body::after {
   cursor: grabbing;
 }
 
+.mascot-hissing .mascot-halo {
+  animation-duration: 0.42s;
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--ink) 42%, var(--sky-deep)) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--ink) 36%, transparent),
+      transparent 72%
+    );
+}
+
+.mascot-hissing .mascot-stage {
+  cursor: grabbing;
+}
+
 .thread {
   display: grid;
   align-content: start;

@@ -2,11 +2,11 @@ import { ContactShadows } from "@react-three/drei";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from "react";
 import { Euler, MathUtils, MeshPhysicalMaterial, MeshStandardMaterial, Vector3 } from "three";
-import type { Group, Material } from "three";
+import type { Group, Material, Object3D } from "three";
 import { massGeometry, whiskerGeometry } from "./berniseGeometry.ts";
 import { bernise, palette, type Node, type PartId, type Surface } from "./berniseModel.ts";
 import type { BerniseMood } from "./mood.ts";
-import { playChomp, purrBurst } from "./purr.ts";
+import { playChomp, playHiss, purrBurst } from "./purr.ts";
 
 export type PointerGoal = { x: number; y: number };
 
@@ -16,12 +16,20 @@ const purrOpenness = 0.2;
 const purrIrisScale = 0.35;
 const biteOpenness = 1.18;
 const biteWidth = 1.08;
+const hissOpenness = 1.12;
+const hissWidth = 1.06;
+const hissPupilX = 0.28;
+const hissPupilY = 1.15;
 const strikeAfter = 4;
 const strikeOpen = 0.12;
 const strikeChomp = 0.18;
 const strikeDone = 0.3;
+const hissAttack = 0.14;
+const hissDone = 0.4;
 const fangSinkY = 0.018;
 const fangSinkZ = 0.04;
+
+type PetRegion = "head" | "body";
 const sleepDrop = -0.42;
 const sleepPitch = 1.05;
 const sleepYaw = 0.12;
@@ -66,8 +74,42 @@ function strikeMotion(elapsed: number): {
   };
 }
 
-function strikingDamp(strikeElapsed: number): number {
-  return strikeElapsed >= 0 ? 18 : 5;
+function hissMotion(elapsed: number): {
+  recoil: number;
+  mouth: number;
+  fangs: number;
+  tremor: number;
+} {
+  if (elapsed < 0) {
+    return { recoil: 0, mouth: 0, fangs: 0, tremor: 0 };
+  }
+  if (elapsed < hissAttack) {
+    const open = elapsed / hissAttack;
+    const mouth = easeOutCubic(open);
+    return { recoil: easeOutBack(open), mouth, fangs: mouth, tremor: 0 };
+  }
+  return {
+    recoil: 1,
+    mouth: 1,
+    fangs: 1,
+    tremor: Math.sin(elapsed * 62) * 0.55 + Math.sin(elapsed * 28) * 0.2,
+  };
+}
+
+function escalateDamp(elapsed: number): number {
+  return elapsed >= 0 ? 18 : 5;
+}
+
+function petRegionFrom(event: ThreeEvent<PointerEvent>): PetRegion {
+  let obj: Object3D | null = event.object;
+  while (obj !== null) {
+    const region = obj.userData.petRegion;
+    if (region === "head" || region === "body") {
+      return region;
+    }
+    obj = obj.parent;
+  }
+  return "body";
 }
 
 export function BerniseCat({
@@ -76,20 +118,24 @@ export function BerniseCat({
   pointer,
   purring,
   biting,
+  hissing,
   sleeping,
   reducedMotion,
   onPurringChange,
   onBitingChange,
+  onHissingChange,
 }: {
   readonly mood: Exclude<BerniseMood, "speaking">;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
+  readonly hissing: boolean;
   readonly sleeping: boolean;
   readonly reducedMotion: boolean;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
+  readonly onHissingChange: (hissing: boolean) => void;
 }) {
   return (
     <>
@@ -106,10 +152,12 @@ export function BerniseCat({
         pointer={pointer}
         purring={purring}
         biting={biting}
+        hissing={hissing}
         sleeping={sleeping}
         reducedMotion={reducedMotion}
         onPurringChange={onPurringChange}
         onBitingChange={onBitingChange}
+        onHissingChange={onHissingChange}
       />
       <ContactShadows
         position={[0, -1.2, 0]}
@@ -144,20 +192,24 @@ function BerniseFigure({
   pointer,
   purring,
   biting,
+  hissing,
   sleeping,
   reducedMotion,
   onPurringChange,
   onBitingChange,
+  onHissingChange,
 }: {
   readonly mood: Exclude<BerniseMood, "speaking">;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
+  readonly hissing: boolean;
   readonly sleeping: boolean;
   readonly reducedMotion: boolean;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
+  readonly onHissingChange: (hissing: boolean) => void;
 }) {
   const gl = useThree((state) => state.gl);
   const materials = useCatMaterials();
@@ -172,13 +224,22 @@ function BerniseFigure({
   const twitch = useRef({ nextAt: 2.6, amount: 0 });
   const speech = useRef({ key: "", until: 0 });
   const rumble = useRef({ amp: 0, y: 0 });
-  const overpet = useRef({ heldSince: -1, strikeAt: -1, signaled: false, chomped: false });
+  const petRegion = useRef<PetRegion>("body");
+  const overpet = useRef({
+    heldSince: -1,
+    strikeAt: -1,
+    signaled: false,
+    chomped: false,
+    hissed: false,
+    region: "body" as PetRegion,
+  });
 
   const onPetDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
-    if (biting) {
+    if (biting || hissing) {
       return;
     }
+    petRegion.current = petRegionFrom(event);
     gl.domElement.setPointerCapture(event.pointerId);
     onPurringChange(true);
   };
@@ -190,6 +251,7 @@ function BerniseFigure({
     }
     onPurringChange(false);
     onBitingChange(false);
+    onHissingChange(false);
   };
 
   useFrame(({ clock }, delta) => {
@@ -231,17 +293,23 @@ function BerniseFigure({
       speech.current.until = t + 2.4;
     }
 
-    if (!purring && !biting) {
+    if (!purring && !biting && !hissing) {
+      const escalateElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
       const strikingNow =
-        overpet.current.strikeAt >= 0 && t - overpet.current.strikeAt < strikeDone;
-      if (!strikingNow) {
+        overpet.current.region === "head" && escalateElapsed >= 0 && escalateElapsed < strikeDone;
+      const hissingNow =
+        overpet.current.region === "body" && escalateElapsed >= 0 && escalateElapsed < hissDone;
+      if (!strikingNow && !hissingNow) {
         overpet.current.heldSince = -1;
         overpet.current.strikeAt = -1;
         overpet.current.signaled = false;
         overpet.current.chomped = false;
+        overpet.current.hissed = false;
+        overpet.current.region = "body";
       }
     } else if (purring && overpet.current.heldSince < 0) {
       overpet.current.heldSince = t;
+      overpet.current.region = petRegion.current;
     }
     if (
       purring &&
@@ -252,9 +320,14 @@ function BerniseFigure({
       overpet.current.signaled = true;
       overpet.current.strikeAt = t;
       onPurringChange(false);
-      onBitingChange(true);
+      if (overpet.current.region === "head") {
+        onBitingChange(true);
+      } else {
+        onHissingChange(true);
+      }
     }
     if (
+      overpet.current.region === "head" &&
       overpet.current.strikeAt >= 0 &&
       t - overpet.current.strikeAt >= strikeChomp &&
       !overpet.current.chomped
@@ -264,16 +337,31 @@ function BerniseFigure({
         playChomp();
       }
     }
+    if (
+      overpet.current.region === "body" &&
+      overpet.current.strikeAt >= 0 &&
+      !overpet.current.hissed
+    ) {
+      overpet.current.hissed = true;
+      if (!reducedMotion) {
+        playHiss();
+      }
+    }
 
-    const strikeElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
-    const strike = strikeMotion(strikeElapsed);
-    const striking = strikeElapsed >= 0;
-    const happyPurr = purring && !striking;
-    const asleep = sleeping && !happyPurr && !striking;
+    const escalateElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
+    const striking = escalateElapsed >= 0 && overpet.current.region === "head";
+    const recoiling = escalateElapsed >= 0 && overpet.current.region === "body";
+    const strike = striking ? strikeMotion(escalateElapsed) : strikeMotion(-1);
+    const hiss = recoiling ? hissMotion(escalateElapsed) : hissMotion(-1);
+    const fangAmount = Math.max(strike.fangs, hiss.fangs);
+    const happyPurr = purring && !striking && !recoiling;
+    const asleep = sleeping && !happyPurr && !striking && !recoiling;
     const listening = mood === "listening";
     const thinking = mood === "thinking";
-    const speaking = mood === "idle" && t < speech.current.until && !striking && !asleep;
+    const speaking =
+      mood === "idle" && t < speech.current.until && !striking && !recoiling && !asleep;
     const restOpenness = 0.9;
+    const escalate = striking || recoiling;
 
     const poseEyes = (openness: number, width: number, innerScale: number, instant: boolean) => {
       for (const id of ["leftEye", "rightEye"] as const) {
@@ -326,45 +414,88 @@ function BerniseFigure({
         rightPaw.rotation.set(-0.18, 0, -0.08);
         refs.leftEar.current?.rotation.set(0.22, 0, 0.08);
         refs.rightEar.current?.rotation.set(0.22, 0, -0.08);
+        refs.whiskers.current?.rotation.set(0, 0, 0);
+        tail.scale.setScalar(1);
         poseEyes(squintOpenness, squintWidth, 0, true);
+        for (const id of ["leftPupil", "rightPupil"] as const) {
+          refs[id].current?.scale.set(1, 1, 1);
+        }
         return;
       }
-      root.position.set(0, 0, 0);
-      root.rotation.set(0.02, 0, 0);
+      root.position.set(0, recoiling ? 0.05 : 0, recoiling ? -0.22 : 0);
+      root.rotation.set(recoiling ? -0.06 : 0.02, 0, 0);
       body.scale.set(1, 1, 1);
-      head.position.set(0, 0, 0);
+      head.position.set(0, 0, recoiling ? -0.08 : 0);
       head.rotation.set(
-        striking ? 0.08 : happyPurr ? 0.04 : -0.02,
+        recoiling ? 0.16 : striking ? 0.08 : happyPurr ? 0.04 : -0.02,
         0,
         striking ? -0.04 : happyPurr ? 0.05 : 0,
       );
-      mouth.scale.set(1, striking ? 1.53 : 1, 1);
-      fangs.scale.setScalar(striking ? 1 : 0);
+      mouth.scale.set(recoiling ? 1.85 : 1, recoiling ? 5.4 : striking ? 1.53 : 1, 1);
+      fangs.scale.setScalar(fangAmount);
       fangs.position.set(
         restPose.fangs.x,
-        restPose.fangs.y - (striking ? fangSinkY : 0),
-        restPose.fangs.z + (striking ? fangSinkZ : 0),
+        restPose.fangs.y - fangSinkY * fangAmount,
+        restPose.fangs.z + fangSinkZ * fangAmount,
       );
-      leftPaw.position.copy(restPose.leftPaw);
-      rightPaw.position.copy(restPose.rightPaw);
-      leftPaw.rotation.set(0, 0, 0);
-      rightPaw.rotation.set(0, 0, 0);
-      refs.leftEar.current?.rotation.set(striking ? -0.42 : 0, 0, striking ? 0.2 : 0);
-      refs.rightEar.current?.rotation.set(striking ? -0.42 : 0, 0, striking ? -0.2 : 0);
+      leftPaw.position.set(
+        restPose.leftPaw.x + (recoiling ? -0.08 : 0),
+        restPose.leftPaw.y,
+        restPose.leftPaw.z + (recoiling ? -0.06 : 0),
+      );
+      rightPaw.position.set(
+        restPose.rightPaw.x + (recoiling ? 0.08 : 0),
+        restPose.rightPaw.y,
+        restPose.rightPaw.z + (recoiling ? -0.06 : 0),
+      );
+      leftPaw.rotation.set(recoiling ? -0.28 : 0, 0, recoiling ? 0.12 : 0);
+      rightPaw.rotation.set(recoiling ? -0.28 : 0, 0, recoiling ? -0.12 : 0);
+      refs.leftEar.current?.rotation.set(
+        recoiling ? -0.55 : striking ? -0.42 : 0,
+        0,
+        recoiling ? 0.35 : striking ? 0.2 : 0,
+      );
+      refs.rightEar.current?.rotation.set(
+        recoiling ? -0.55 : striking ? -0.42 : 0,
+        0,
+        recoiling ? -0.35 : striking ? -0.2 : 0,
+      );
+      refs.whiskers.current?.rotation.set(recoiling ? -0.22 : 0, 0, 0);
+      tail.scale.setScalar(recoiling ? 1.18 : 1);
       poseEyes(
-        striking ? biteOpenness : happyPurr ? squintOpenness : restOpenness,
-        striking ? biteWidth : happyPurr ? squintWidth : 1,
+        recoiling
+          ? hissOpenness
+          : striking
+            ? biteOpenness
+            : happyPurr
+              ? squintOpenness
+              : restOpenness,
+        recoiling ? hissWidth : striking ? biteWidth : happyPurr ? squintWidth : 1,
         happyPurr ? 0 : 1,
         true,
       );
+      for (const id of ["leftPupil", "rightPupil"] as const) {
+        const pupil = refs[id].current;
+        if (pupil !== null) {
+          if (recoiling) {
+            pupil.scale.set(hissPupilX, hissPupilY, 1);
+          } else if (striking) {
+            pupil.scale.set(1.22, 1.22, 1);
+          } else {
+            pupil.scale.set(1, 1, 1);
+          }
+        }
+      }
       return;
     }
 
     const breathSpeed =
-      thinking && !happyPurr && !striking
+      thinking && !happyPurr && !escalate
         ? 1.35
-        : striking
-          ? 2.4
+        : escalate
+          ? recoiling
+            ? 3.1
+            : 2.4
           : happyPurr
             ? 1.5
             : asleep
@@ -394,23 +525,33 @@ function BerniseFigure({
 
     const lookX = MathUtils.clamp(pointer.current.x, -1, 1);
     const lookY = MathUtils.clamp(pointer.current.y, -1, 1);
-    const lookScale = asleep ? 0.06 : happyPurr ? 0.45 : 1;
+    const lookScale = asleep ? 0.06 : happyPurr ? 0.45 : recoiling ? 0.35 : 1;
     const settle = asleep ? 3.2 : 5;
+    const snap = escalate ? 18 : settle;
 
-    root.position.y = rumble.current.y + shake + strike.lunge * 0.04 + strike.shake * 0.012;
-    root.position.x = shake * 0.35 + lookX * strike.lunge * 0.1 + strike.shake * 0.02;
+    root.position.y =
+      rumble.current.y +
+      shake +
+      strike.lunge * 0.04 +
+      strike.shake * 0.012 +
+      hiss.recoil * 0.05 +
+      hiss.tremor * 0.008;
+    root.position.x =
+      shake * 0.35 + lookX * strike.lunge * 0.1 + strike.shake * 0.02 + hiss.tremor * 0.012;
     root.position.z = MathUtils.damp(
       root.position.z,
       (striking ? -0.05 : asleep ? sleepPush : happyPurr ? 0.04 : listening ? 0.12 : 0) +
-        strike.lunge * 0.26,
-      strikingDamp(strikeElapsed),
+        strike.lunge * 0.26 -
+        hiss.recoil * 0.22,
+      escalateDamp(escalateElapsed),
       dt,
     );
     root.rotation.x = MathUtils.damp(
       root.rotation.x,
       (striking ? 0.08 : asleep ? sleepPitch : happyPurr ? 0.03 : listening ? 0.07 : 0.015) +
-        strike.lunge * 0.18,
-      striking ? 18 : settle,
+        strike.lunge * 0.18 -
+        hiss.recoil * 0.06,
+      snap,
       dt,
     );
     root.rotation.y = MathUtils.damp(root.rotation.y, asleep ? sleepYaw : 0, settle, dt);
@@ -418,7 +559,7 @@ function BerniseFigure({
 
     body.scale.y =
       (asleep ? 0.88 : 1) +
-      breath * (asleep ? 0.012 : thinking && !happyPurr && !striking ? 0.018 : 0.028);
+      breath * (asleep ? 0.012 : thinking && !happyPurr && !escalate ? 0.018 : 0.028);
     body.scale.x = (asleep ? 1.06 : 1) - breath * (asleep ? 0.006 : 0.012);
     body.scale.z = (asleep ? 1.04 : 1) - breath * (asleep ? 0.004 : 0.008);
 
@@ -430,13 +571,13 @@ function BerniseFigure({
     );
     head.position.y = MathUtils.damp(
       head.position.y,
-      asleep ? -0.06 : -lookY * strike.lunge * 0.05,
+      asleep ? -0.06 : -lookY * strike.lunge * 0.05 + hiss.recoil * 0.02,
       asleep ? settle : 18,
       dt,
     );
     head.position.z = MathUtils.damp(
       head.position.z,
-      asleep ? 0.14 : strike.lunge * 0.2,
+      asleep ? 0.14 : strike.lunge * 0.2 - hiss.recoil * 0.08,
       asleep ? settle : 18,
       dt,
     );
@@ -455,7 +596,7 @@ function BerniseFigure({
                   ? -0.03
                   : 0) +
         strike.shake * 0.12,
-      striking ? 18 : asleep ? settle : 5.2,
+      escalate ? 18 : asleep ? settle : 5.2,
       dt,
     );
     head.rotation.x = MathUtils.damp(
@@ -463,17 +604,20 @@ function BerniseFigure({
       -lookY * 0.2 * lookScale +
         (striking
           ? 0.1
-          : asleep
-            ? 0.12
-            : happyPurr
-              ? 0.05
-              : listening
-                ? 0.04
-                : thinking
-                  ? -0.05
-                  : -0.01) +
-        strike.lunge * 0.22,
-      striking ? 18 : asleep ? settle : 5.2,
+          : recoiling
+            ? 0.16
+            : asleep
+              ? 0.12
+              : happyPurr
+                ? 0.05
+                : listening
+                  ? 0.04
+                  : thinking
+                    ? -0.05
+                    : -0.01) +
+        strike.lunge * 0.22 +
+        hiss.tremor * 0.03,
+      escalate ? 18 : asleep ? settle : 5.2,
       dt,
     );
     head.rotation.z = MathUtils.damp(
@@ -489,8 +633,9 @@ function BerniseFigure({
               : listening
                 ? 0.035
                 : 0) +
-        strike.shake * 0.16,
-      striking ? 18 : asleep ? settle : 5.2,
+        strike.shake * 0.16 +
+        hiss.tremor * 0.04,
+      escalate ? 18 : asleep ? settle : 5.2,
       dt,
     );
 
@@ -516,7 +661,10 @@ function BerniseFigure({
     for (const id of ["leftPupil", "rightPupil"] as const) {
       const pupil = refs[id].current;
       if (pupil !== null) {
-        if (striking) {
+        if (recoiling) {
+          pupil.scale.x = MathUtils.damp(pupil.scale.x, hissPupilX, 18, dt);
+          pupil.scale.y = MathUtils.damp(pupil.scale.y, hissPupilY, 18, dt);
+        } else if (striking) {
           pupil.scale.x = dilate;
           pupil.scale.y = dilate;
         } else {
@@ -526,14 +674,17 @@ function BerniseFigure({
       }
     }
 
-    if (!happyPurr && !striking && !asleep && t > blink.current.nextAt) {
+    if (!happyPurr && !escalate && !asleep && t > blink.current.nextAt) {
       blink.current.closeUntil = t + 0.14;
       blink.current.nextAt = t + 3.6 + Math.random() * 4.4;
     }
     let openness = restOpenness;
     let width = 1;
     let innerScale = 1;
-    if (striking) {
+    if (recoiling) {
+      openness = hissOpenness;
+      width = hissWidth;
+    } else if (striking) {
       openness = biteOpenness;
       width = biteWidth;
     } else if (happyPurr) {
@@ -549,71 +700,96 @@ function BerniseFigure({
       const closed = progress < 0.45 ? progress / 0.45 : 1 - (progress - 0.45) / 0.55;
       openness = restOpenness - closed * (restOpenness - 0.08);
     }
-    poseEyes(openness, width, innerScale, striking);
+    poseEyes(openness, width, innerScale, escalate);
 
     if (t > twitch.current.nextAt) {
       twitch.current.amount = 1;
       twitch.current.nextAt = t + 2.6 + Math.random() * 4.6;
     }
     twitch.current.amount = MathUtils.damp(twitch.current.amount, 0, 7, dt);
-    const perk = striking
-      ? -0.42
-      : asleep
-        ? 0.22
-        : happyPurr
-          ? 0.1
-          : listening
-            ? -0.14
-            : thinking
-              ? 0.05
-              : 0;
-    const flatten = striking ? 0.2 : asleep ? 0.08 : 0;
+    const perk = recoiling
+      ? -0.55
+      : striking
+        ? -0.42
+        : asleep
+          ? 0.22
+          : happyPurr
+            ? 0.1
+            : listening
+              ? -0.14
+              : thinking
+                ? 0.05
+                : 0;
+    const flatten = recoiling ? 0.35 : striking ? 0.2 : asleep ? 0.08 : 0;
     const flick =
-      happyPurr || asleep ? 0 : Math.sin(t * (striking ? 18 : 32)) * twitch.current.amount * 0.12;
+      happyPurr || asleep || recoiling
+        ? 0
+        : Math.sin(t * (striking ? 18 : 32)) * twitch.current.amount * 0.12;
     refs.leftEar.current?.rotation.set(perk, 0, flatten + flick);
     refs.rightEar.current?.rotation.set(perk, 0, -flatten - flick * 0.6);
 
+    const whiskers = refs.whiskers.current;
+    if (whiskers !== null) {
+      whiskers.rotation.x = MathUtils.damp(whiskers.rotation.x, hiss.recoil * -0.22, 18, dt);
+    }
+
+    const mouthOpen = hiss.mouth > 0 || strike.mouth > 0;
     mouth.scale.y = MathUtils.damp(
       mouth.scale.y,
-      strike.mouth > 0
-        ? 1 + strike.mouth * 4.4
-        : happyPurr || asleep
-          ? 0.72
-          : speaking
-            ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4
-            : 1,
-      strike.mouth > 0 ? 28 : 12,
+      hiss.mouth > 0
+        ? 1 + hiss.mouth * 4.8
+        : strike.mouth > 0
+          ? 1 + strike.mouth * 4.4
+          : happyPurr || asleep
+            ? 0.72
+            : speaking
+              ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4
+              : 1,
+      mouthOpen ? 28 : 12,
       dt,
     );
     mouth.scale.x = MathUtils.damp(
       mouth.scale.x,
-      strike.mouth > 0 ? 1 + strike.mouth * 0.7 : happyPurr || asleep ? 1.15 : speaking ? 1.25 : 1,
+      hiss.mouth > 0
+        ? 1 + hiss.mouth * 0.85
+        : strike.mouth > 0
+          ? 1 + strike.mouth * 0.7
+          : happyPurr || asleep
+            ? 1.15
+            : speaking
+              ? 1.25
+              : 1,
       12,
       dt,
     );
-    fangs.scale.setScalar(strike.fangs);
-    fangs.position.y = restPose.fangs.y - fangSinkY * strike.fangs;
-    fangs.position.z = restPose.fangs.z + fangSinkZ * strike.fangs;
+    fangs.scale.setScalar(fangAmount);
+    fangs.position.y = restPose.fangs.y - fangSinkY * fangAmount;
+    fangs.position.z = restPose.fangs.z + fangSinkZ * fangAmount;
 
-    const tailSpeed = striking ? 6.4 : asleep ? 0.55 : happyPurr ? 0.9 : 1.7;
-    const tailSwing = striking ? 1.45 : asleep ? 0.28 : happyPurr ? 0.45 : 1;
+    const tailSpeed = recoiling ? 9.2 : striking ? 6.4 : asleep ? 0.55 : happyPurr ? 0.9 : 1.7;
+    const tailSwing = recoiling ? 1.7 : striking ? 1.45 : asleep ? 0.28 : happyPurr ? 0.45 : 1;
+    tail.scale.setScalar(MathUtils.damp(tail.scale.x, recoiling ? 1.18 : 1, 8, dt));
     tail.rotation.x =
       restPose.tail.x +
       Math.sin(t * tailSpeed) * 0.08 * tailSwing +
-      (listening && !happyPurr && !striking ? -0.1 : 0) +
+      (listening && !happyPurr && !escalate ? -0.1 : 0) +
       (asleep ? 0.12 : 0);
     tail.rotation.y =
       restPose.tail.y +
-      Math.sin(t * (striking ? 5.2 : asleep ? 0.48 : happyPurr ? 0.7 : 1.15)) * 0.12 * tailSwing +
+      Math.sin(t * (recoiling ? 8.4 : striking ? 5.2 : asleep ? 0.48 : happyPurr ? 0.7 : 1.15)) *
+        0.12 *
+        tailSwing +
       (asleep ? 0.18 : 0);
     tail.rotation.z =
       restPose.tail.z +
-      Math.sin(t * (striking ? 7.1 : asleep ? 0.62 : happyPurr ? 1.05 : 2.1)) * 0.14 * tailSwing +
+      Math.sin(t * (recoiling ? 10.6 : striking ? 7.1 : asleep ? 0.62 : happyPurr ? 1.05 : 2.1)) *
+        0.14 *
+        tailSwing +
       (asleep ? 0.32 : 0);
 
     leftPaw.position.x = MathUtils.damp(
       leftPaw.position.x,
-      restPose.leftPaw.x + (asleep ? 0.1 : 0),
+      restPose.leftPaw.x + (recoiling ? -0.08 : asleep ? 0.1 : 0),
       6,
       dt,
     );
@@ -622,48 +798,65 @@ function BerniseFigure({
       restPose.leftPaw.y +
         (striking
           ? 0.08
-          : asleep
-            ? 0.05
-            : !happyPurr && thinking
-              ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08
-              : 0),
+          : recoiling
+            ? 0.02
+            : asleep
+              ? 0.05
+              : !happyPurr && thinking
+                ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08
+                : 0),
       6,
       dt,
     );
     leftPaw.position.z = MathUtils.damp(
       leftPaw.position.z,
-      restPose.leftPaw.z + (asleep ? 0.1 : 0),
+      restPose.leftPaw.z + (recoiling ? -0.06 : asleep ? 0.1 : 0),
       6,
       dt,
     );
     leftPaw.rotation.x = MathUtils.damp(
       leftPaw.rotation.x,
-      striking ? -0.22 : asleep ? -0.18 : !happyPurr && thinking ? -0.3 : 0,
+      recoiling ? -0.28 : striking ? -0.22 : asleep ? -0.18 : !happyPurr && thinking ? -0.3 : 0,
       6,
       dt,
     );
-    leftPaw.rotation.z = MathUtils.damp(leftPaw.rotation.z, asleep ? 0.08 : 0, 6, dt);
+    leftPaw.rotation.z = MathUtils.damp(
+      leftPaw.rotation.z,
+      recoiling ? 0.12 : asleep ? 0.08 : 0,
+      6,
+      dt,
+    );
 
     rightPaw.position.x = MathUtils.damp(
       rightPaw.position.x,
-      restPose.rightPaw.x + (asleep ? -0.1 : 0),
+      restPose.rightPaw.x + (recoiling ? 0.08 : asleep ? -0.1 : 0),
       6,
       dt,
     );
     rightPaw.position.y = MathUtils.damp(
       rightPaw.position.y,
-      restPose.rightPaw.y + (asleep ? 0.05 : 0),
+      restPose.rightPaw.y + (recoiling ? 0.02 : asleep ? 0.05 : 0),
       6,
       dt,
     );
     rightPaw.position.z = MathUtils.damp(
       rightPaw.position.z,
-      restPose.rightPaw.z + (asleep ? 0.1 : 0),
+      restPose.rightPaw.z + (recoiling ? -0.06 : asleep ? 0.1 : 0),
       6,
       dt,
     );
-    rightPaw.rotation.x = MathUtils.damp(rightPaw.rotation.x, asleep ? -0.18 : 0, 6, dt);
-    rightPaw.rotation.z = MathUtils.damp(rightPaw.rotation.z, asleep ? -0.08 : 0, 6, dt);
+    rightPaw.rotation.x = MathUtils.damp(
+      rightPaw.rotation.x,
+      recoiling ? -0.28 : asleep ? -0.18 : 0,
+      6,
+      dt,
+    );
+    rightPaw.rotation.z = MathUtils.damp(
+      rightPaw.rotation.z,
+      recoiling ? -0.12 : asleep ? -0.08 : 0,
+      6,
+      dt,
+    );
   });
 
   return (
@@ -683,12 +876,14 @@ function Part({
   readonly refs: PartRefs;
 }) {
   if (node.kind === "group") {
+    const petRegion = node.id === "head" || node.id === "body" ? node.id : undefined;
     return (
       <group
         ref={node.id === undefined ? null : refs[node.id]}
         position={node.position ?? origin}
         rotation={node.rotation ?? origin}
         scale={node.scale ?? 1}
+        {...(petRegion === undefined ? {} : { userData: { petRegion } })}
       >
         {node.children.map((child, index) => (
           <Part key={index} node={child} materials={materials} refs={refs} />
@@ -753,6 +948,7 @@ function usePartRefs(): PartRefs {
   const rightPupil = useRef<Group>(null);
   const mouth = useRef<Group>(null);
   const fangs = useRef<Group>(null);
+  const whiskers = useRef<Group>(null);
   const tail = useRef<Group>(null);
   const leftPaw = useRef<Group>(null);
   const rightPaw = useRef<Group>(null);
@@ -773,6 +969,7 @@ function usePartRefs(): PartRefs {
       rightPupil,
       mouth,
       fangs,
+      whiskers,
       tail,
       leftPaw,
       rightPaw,
