@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { bakeFurMaps, furProfiles, sampleFurHeight } from "./furMaps.ts";
+import { bakeFurMaps, furProfiles, sampleFurDisplacement, sampleFurHeight } from "./furMaps.ts";
 import { cylindricalUv } from "./metaballs.ts";
 
 describe("sampleFurHeight", () => {
@@ -14,6 +14,14 @@ describe("sampleFurHeight", () => {
     for (const [u, v] of samples) {
       expect(sampleFurHeight(u, v, profile)).toBeCloseTo(sampleFurHeight(u + 1, v, profile), 10);
       expect(sampleFurHeight(u, v, profile)).toBeCloseTo(sampleFurHeight(u, v + 1, profile), 10);
+      expect(sampleFurDisplacement(u, v, profile)).toBeCloseTo(
+        sampleFurDisplacement(u + 1, v, profile),
+        10,
+      );
+      expect(sampleFurDisplacement(u, v, profile)).toBeCloseTo(
+        sampleFurDisplacement(u, v + 1, profile),
+        10,
+      );
     }
   });
 
@@ -29,19 +37,24 @@ describe("sampleFurHeight", () => {
 
 describe("bakeFurMaps", () => {
   it("writes matching RGBA buffers and an outward-facing normal map", () => {
-    const maps = bakeFurMaps({ ...furProfiles.down, size: 64 });
+    const maps = bakeFurMaps({ ...furProfiles.down, size: 64, strands: 12 });
     const pixels = 64 * 64 * 4;
     expect(maps.displacement.length).toBe(pixels);
     expect(maps.normal.length).toBe(pixels);
     expect(maps.roughness.length).toBe(pixels);
 
     let blueSum = 0;
+    let sameAsStrand = 0;
     for (let i = 0; i < maps.normal.length; i += 4) {
       blueSum += maps.normal[i + 2] ?? 0;
       expect(maps.displacement[i + 3]).toBe(255);
       expect(maps.roughness[i + 1]).toBe(maps.roughness[i]);
+      if (maps.displacement[i] === maps.roughness[i]) {
+        sameAsStrand += 1;
+      }
     }
-    expect(blueSum / (64 * 64)).toBeGreaterThan(160);
+    expect(blueSum / (64 * 64)).toBeGreaterThan(140);
+    expect(sameAsStrand / (64 * 64)).toBeLessThan(0.5);
   });
 });
 

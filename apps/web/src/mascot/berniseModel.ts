@@ -141,7 +141,7 @@ const faceFur: ReadonlyArray<Metaball> = [
   { position: [0.1, 0.19, 0.36], radius: 0.18 },
 ];
 
-const headBake: BakeOptions = { center: [0, 0.36, 0], half: 0.88, resolution: 64 };
+const headBake: BakeOptions = { center: [0, 0.36, 0], half: 0.88, resolution: 80 };
 
 const headMass: Mass = { balls: [...crown, ...faceFur], bake: headBake };
 
@@ -151,7 +151,7 @@ const headMass: Mass = { balls: [...crown, ...faceFur], bake: headBake };
  */
 const capMass: Mass = {
   balls: crown,
-  bake: { ...headBake, resolution: 56, inflate: 0.035 },
+  bake: { ...headBake, resolution: 72, inflate: 0.035 },
 };
 
 const ruffMass: Mass = {
@@ -169,7 +169,7 @@ const ruffMass: Mass = {
     { position: [-0.36, -0.5, 0.06], radius: 0.15 },
     { position: [0.36, -0.5, 0.06], radius: 0.15 },
   ],
-  bake: { center: [0, -0.28, 0.06], half: 0.8, resolution: 60 },
+  bake: { center: [0, -0.28, 0.06], half: 0.8, resolution: 76 },
 };
 
 const bodyMass: Mass = {
@@ -187,7 +187,7 @@ const bodyMass: Mass = {
     { position: [-0.34, -0.85, 0], radius: 0.14 },
     { position: [0.34, -0.85, 0], radius: 0.14 },
   ],
-  bake: { center: [0, -0.62, -0.02], half: 0.82, resolution: 60 },
+  bake: { center: [0, -0.62, -0.02], half: 0.82, resolution: 76 },
 };
 
 /** Baked around its own pivot so the whole tail sways as one rigid piece. */
@@ -202,7 +202,7 @@ const tailMass: Mass = {
     { position: [0.36, 0.55, -0.1], radius: 0.1 },
     { position: [-0.02, 0.46, -0.05], radius: 0.11 },
   ],
-  bake: { center: [0.15, 0.36, -0.08], half: 0.7, resolution: 48 },
+  bake: { center: [0.15, 0.36, -0.08], half: 0.7, resolution: 64 },
 };
 
 function eye(side: -1 | 1): Node {
@@ -307,7 +307,7 @@ const earMass: Mass = {
     { position: [0.085, 0.33, -0.012], radius: 0.068 },
     { position: [0.1, 0.4, -0.015], radius: 0.042 },
   ],
-  bake: { center: [0.05, 0.2, -0.01], half: 0.34, resolution: 44 },
+  bake: { center: [0.05, 0.2, -0.01], half: 0.34, resolution: 56 },
 };
 
 /** Authored leaning right; the left ear is the same group mirrored. */
