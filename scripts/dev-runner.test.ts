@@ -48,8 +48,17 @@ const DESKTOP_MODE_ARGS = [
   "dev",
 ] as const;
 
+const WEB_MODE_ARGS = [
+  "run",
+  "--filter=@bernise/web",
+  "--filter=@bernise/server",
+  "--parallel",
+  "dev",
+] as const;
+
 const devServerInput = {
   mode: "dev:server",
+  browser: undefined,
   host: undefined,
   port: BASE_SERVER_PORT,
   devUrl: undefined,
@@ -68,6 +77,12 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
     it.effect("treats root dev as the desktop stack", () =>
       Effect.sync(() => {
         assert.deepStrictEqual(getDevRunnerModeArgs("dev"), [...DESKTOP_MODE_ARGS]);
+      }),
+    );
+
+    it.effect("runs web and server in parallel for browser dev", () =>
+      Effect.sync(() => {
+        assert.deepStrictEqual(getDevRunnerModeArgs("dev:web"), [...WEB_MODE_ARGS]);
       }),
     );
   });
@@ -116,6 +131,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
+          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
@@ -139,6 +155,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
+          browser: false,
           host: "0.0.0.0",
           port: 4222,
           devUrl: new URL("http://localhost:7331"),
@@ -160,6 +177,7 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: {},
           serverOffset: 0,
           webOffset: 0,
+          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
@@ -179,12 +197,90 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
           baseEnv: { HOST: "0.0.0.0" },
           serverOffset: 0,
           webOffset: 0,
+          browser: undefined,
           host: undefined,
           port: undefined,
           devUrl: undefined,
         });
 
         assert.equal(env.HOST, "127.0.0.1");
+      }),
+    );
+
+    it.effect("disables browser auto-open by default in web mode", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:web",
+          baseEnv: {},
+          serverOffset: 0,
+          webOffset: 0,
+          browser: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.BERNISE_NO_BROWSER, "1");
+        assert.equal(env.BERNISE_PORT, String(BASE_SERVER_PORT));
+        assert.equal(env.PORT, String(BASE_WEB_PORT));
+        assert.equal(env.HOST, undefined);
+        assert.equal(env.BERNISE_WEB_URL, `http://localhost:${BASE_WEB_PORT}`);
+        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, "1");
+        assert.equal(env.VITE_HTTP_URL, undefined);
+        assert.equal(env.VITE_WS_URL, undefined);
+      }),
+    );
+
+    it.effect("allows browser auto-open to be explicitly enabled", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:web",
+          baseEnv: {},
+          serverOffset: 0,
+          webOffset: 0,
+          browser: true,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.BERNISE_NO_BROWSER, "0");
+      }),
+    );
+
+    it.effect("leaves the client backend URLs unset in browser mode", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:web",
+          baseEnv: { VITE_HTTP_URL: "http://localhost:9", VITE_WS_URL: "ws://localhost:9" },
+          serverOffset: 0,
+          webOffset: 0,
+          browser: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.VITE_HTTP_URL, undefined);
+        assert.equal(env.VITE_WS_URL, undefined);
+        assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, "1");
+      }),
+    );
+
+    it.effect("drops an inherited HOST in browser mode", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:web",
+          baseEnv: { HOST: "0.0.0.0" },
+          serverOffset: 0,
+          webOffset: 0,
+          browser: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.HOST, undefined);
       }),
     );
   });
@@ -344,6 +440,21 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
       }),
     );
 
+    it.effect("uses a shared fallback offset for browser web mode", () =>
+      Effect.gen(function* () {
+        const taken = new Set([BASE_SERVER_PORT, BASE_WEB_PORT]);
+        const offsets = yield* resolveModePortOffsets({
+          mode: "dev:web",
+          startOffset: 0,
+          hasExplicitServerPort: false,
+          hasExplicitDevUrl: false,
+          checkPortAvailability: (port) => Effect.succeed(!taken.has(port)),
+        });
+
+        assert.deepStrictEqual(offsets, { serverOffset: 1, webOffset: 1 });
+      }),
+    );
+
     it.effect("shifts only server offset for dev:server", () =>
       Effect.gen(function* () {
         const taken = new Set([BASE_SERVER_PORT]);
@@ -442,6 +553,45 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
         yield* runDevRunnerWithInput({
           ...devServerInput,
           mode: "dev",
+          host: "0.0.0.0",
+          port: undefined,
+        }).pipe(Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)));
+
+        assert.equal(spawnCount, 1);
+      });
+    });
+
+    it.effect("rejects a specific non-loopback --host for browser web mode", () => {
+      return Effect.gen(function* () {
+        const error = yield* runDevRunnerWithInput({
+          ...devServerInput,
+          mode: "dev:web",
+          host: "192.168.1.10",
+          dryRun: true,
+        }).pipe(Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer)), Effect.flip);
+
+        if (error._tag !== "DevRunnerHostNotProxiableError") {
+          assert.fail(`Unexpected error: ${error._tag}`);
+        }
+        assert.equal(error.host, "192.168.1.10");
+        assert.equal(error.mode, "dev:web");
+      });
+    });
+
+    it.effect("still spawns the stack for a wildcard --host in web mode", () => {
+      let spawnCount = 0;
+      const spawnerLayer = Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() => {
+          spawnCount += 1;
+          return Effect.succeed(mockProcess(0));
+        }),
+      );
+
+      return Effect.gen(function* () {
+        yield* runDevRunnerWithInput({
+          ...devServerInput,
+          mode: "dev:web",
           host: "0.0.0.0",
           port: undefined,
         }).pipe(Effect.provide(Layer.mergeAll(emptyConfigLayer, netServiceLayer, spawnerLayer)));

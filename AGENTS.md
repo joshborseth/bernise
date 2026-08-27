@@ -39,6 +39,7 @@ Install the global `vp` CLI first (`curl -fsSL https://vite.plus | bash`).
 - `vp i` — install workspace dependencies
 - `vp run dev` — Electron + Vite renderer; Electron supervises the Effect server (ports 13773 / 5733)
 - `vp run dev:desktop` — same as `dev`
+- `vp run dev:web` — Vite + Effect server in a browser (ports 13773 / 5733)
 - `vp test run` — `@effect/vitest`
 - `vp run typecheck` — `tsc --build` plus the web and scripts projects
 - `vp lint` — oxlint via Vite+
