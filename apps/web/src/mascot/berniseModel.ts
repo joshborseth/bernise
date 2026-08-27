@@ -59,7 +59,8 @@ export type PartId =
   | "mouth"
   | "fangs"
   | "tail"
-  | "leftPaw";
+  | "leftPaw"
+  | "rightPaw";
 
 export type Mass = {
   readonly balls: ReadonlyArray<Metaball>;
@@ -522,7 +523,7 @@ export const bernise: Node = {
         },
         { kind: "mass", surface: "silver", mass: bodyMass, outline: true },
         paw("leftPaw"),
-        paw(),
+        paw("rightPaw"),
         { kind: "mass", surface: "snow", mass: ruffMass, outline: true },
       ],
     },

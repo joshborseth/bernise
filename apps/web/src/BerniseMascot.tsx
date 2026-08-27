@@ -4,6 +4,8 @@ import { BerniseCat, type PointerGoal } from "./mascot/BerniseCat.tsx";
 import type { BerniseMood } from "./mascot/mood.ts";
 import { startPurr } from "./mascot/purr.ts";
 
+const idleUntilSleepMs = 14_000;
+
 export function BerniseMascot({
   mood,
   speakKey,
@@ -16,7 +18,12 @@ export function BerniseMascot({
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [purring, setPurring] = useState(false);
   const [biting, setBiting] = useState(false);
+  const [sleeping, setSleeping] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
+  const awake = mood !== "idle" || purring || biting;
+  if (awake && sleeping) {
+    setSleeping(false);
+  }
 
   useLayoutEffect(() => {
     const stage = stageRef.current;
@@ -69,6 +76,18 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
+    if (awake || sleeping) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSleeping(true);
+    }, idleUntilSleepMs);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [awake, sleeping]);
+
+  useEffect(() => {
     if (!purring) {
       return;
     }
@@ -79,18 +98,34 @@ export function BerniseMascot({
     ? `mascot mascot-${mood} mascot-biting`
     : purring
       ? `mascot mascot-${mood} mascot-purring`
-      : `mascot mascot-${mood}`;
+      : sleeping
+        ? `mascot mascot-${mood} mascot-sleeping`
+        : `mascot mascot-${mood}`;
 
   return (
     <div
       className={className}
       role="img"
       aria-label={
-        biting ? "Bernise has had enough" : purring ? "Bernise is purring" : "Bernise. Hold to pet."
+        biting
+          ? "Bernise has had enough"
+          : purring
+            ? "Bernise is purring"
+            : sleeping
+              ? "Bernise is sleeping"
+              : "Bernise. Hold to pet."
       }
       aria-pressed={purring}
     >
       <div className="mascot-halo" aria-hidden="true" />
+      {sleeping ? (
+        <div className="mascot-zzz" aria-hidden="true">
+          <span>z</span>
+          <span>z</span>
+          <span>Z</span>
+          <span>Z</span>
+        </div>
+      ) : null}
       <div ref={stageRef} className="mascot-stage">
         {stageSize.width > 0 && stageSize.height > 0 ? (
           <Canvas
@@ -120,6 +155,7 @@ export function BerniseMascot({
               pointer={pointer}
               purring={purring}
               biting={biting}
+              sleeping={sleeping}
               reducedMotion={reducedMotion}
               onPurringChange={setPurring}
               onBitingChange={setBiting}

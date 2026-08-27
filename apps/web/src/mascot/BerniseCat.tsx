@@ -22,6 +22,11 @@ const strikeChomp = 0.18;
 const strikeDone = 0.3;
 const fangSinkY = 0.018;
 const fangSinkZ = 0.04;
+const sleepDrop = -0.42;
+const sleepPitch = 1.05;
+const sleepYaw = 0.12;
+const sleepRoll = 0.28;
+const sleepPush = 0.18;
 
 function easeOutCubic(value: number): number {
   return 1 - (1 - value) ** 3;
@@ -71,6 +76,7 @@ export function BerniseCat({
   pointer,
   purring,
   biting,
+  sleeping,
   reducedMotion,
   onPurringChange,
   onBitingChange,
@@ -80,6 +86,7 @@ export function BerniseCat({
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
+  readonly sleeping: boolean;
   readonly reducedMotion: boolean;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
@@ -99,6 +106,7 @@ export function BerniseCat({
         pointer={pointer}
         purring={purring}
         biting={biting}
+        sleeping={sleeping}
         reducedMotion={reducedMotion}
         onPurringChange={onPurringChange}
         onBitingChange={onBitingChange}
@@ -136,6 +144,7 @@ function BerniseFigure({
   pointer,
   purring,
   biting,
+  sleeping,
   reducedMotion,
   onPurringChange,
   onBitingChange,
@@ -145,6 +154,7 @@ function BerniseFigure({
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
+  readonly sleeping: boolean;
   readonly reducedMotion: boolean;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
@@ -152,7 +162,12 @@ function BerniseFigure({
   const gl = useThree((state) => state.gl);
   const materials = useCatMaterials();
   const refs = usePartRefs();
-  const rest = useRef<{ tail: Euler; leftPaw: Vector3; fangs: Vector3 } | null>(null);
+  const rest = useRef<{
+    tail: Euler;
+    leftPaw: Vector3;
+    rightPaw: Vector3;
+    fangs: Vector3;
+  } | null>(null);
   const blink = useRef({ nextAt: 2.4, closeUntil: 0 });
   const twitch = useRef({ nextAt: 2.6, amount: 0 });
   const speech = useRef({ key: "", until: 0 });
@@ -183,6 +198,7 @@ function BerniseFigure({
     const head = refs.head.current;
     const tail = refs.tail.current;
     const leftPaw = refs.leftPaw.current;
+    const rightPaw = refs.rightPaw.current;
     const mouth = refs.mouth.current;
     const fangs = refs.fangs.current;
     if (
@@ -191,6 +207,7 @@ function BerniseFigure({
       head === null ||
       tail === null ||
       leftPaw === null ||
+      rightPaw === null ||
       mouth === null ||
       fangs === null
     ) {
@@ -200,6 +217,7 @@ function BerniseFigure({
       rest.current = {
         tail: tail.rotation.clone(),
         leftPaw: leftPaw.position.clone(),
+        rightPaw: rightPaw.position.clone(),
         fangs: fangs.position.clone(),
       };
     }
@@ -251,9 +269,10 @@ function BerniseFigure({
     const strike = strikeMotion(strikeElapsed);
     const striking = strikeElapsed >= 0;
     const happyPurr = purring && !striking;
+    const asleep = sleeping && !happyPurr && !striking;
     const listening = mood === "listening";
     const thinking = mood === "thinking";
-    const speaking = mood === "idle" && t < speech.current.until && !striking;
+    const speaking = mood === "idle" && t < speech.current.until && !striking && !asleep;
     const restOpenness = 0.9;
 
     const poseEyes = (openness: number, width: number, innerScale: number, instant: boolean) => {
@@ -264,12 +283,7 @@ function BerniseFigure({
             eye.scale.y = openness;
             eye.scale.x = width;
           } else {
-            eye.scale.y = MathUtils.damp(
-              eye.scale.y,
-              openness,
-              happyPurr ? 14 : 22,
-              dt,
-            );
+            eye.scale.y = MathUtils.damp(eye.scale.y, openness, happyPurr || asleep ? 14 : 22, dt);
             eye.scale.x = MathUtils.damp(eye.scale.x, width, 14, dt);
           }
         }
@@ -289,6 +303,32 @@ function BerniseFigure({
     };
 
     if (reducedMotion) {
+      if (asleep) {
+        root.position.set(0, sleepDrop, sleepPush);
+        root.rotation.set(sleepPitch, sleepYaw, sleepRoll);
+        body.scale.set(1.06, 0.88, 1.04);
+        head.position.set(0.08, -0.06, 0.14);
+        head.rotation.set(0.12, 0.16, 0.38);
+        mouth.scale.set(1.15, 0.72, 1);
+        fangs.scale.setScalar(0);
+        fangs.position.copy(restPose.fangs);
+        leftPaw.position.set(
+          restPose.leftPaw.x + 0.1,
+          restPose.leftPaw.y + 0.05,
+          restPose.leftPaw.z + 0.1,
+        );
+        rightPaw.position.set(
+          restPose.rightPaw.x - 0.1,
+          restPose.rightPaw.y + 0.05,
+          restPose.rightPaw.z + 0.1,
+        );
+        leftPaw.rotation.set(-0.18, 0, 0.08);
+        rightPaw.rotation.set(-0.18, 0, -0.08);
+        refs.leftEar.current?.rotation.set(0.22, 0, 0.08);
+        refs.rightEar.current?.rotation.set(0.22, 0, -0.08);
+        poseEyes(squintOpenness, squintWidth, 0, true);
+        return;
+      }
       root.position.set(0, 0, 0);
       root.rotation.set(0.02, 0, 0);
       body.scale.set(1, 1, 1);
@@ -305,6 +345,10 @@ function BerniseFigure({
         restPose.fangs.y - (striking ? fangSinkY : 0),
         restPose.fangs.z + (striking ? fangSinkZ : 0),
       );
+      leftPaw.position.copy(restPose.leftPaw);
+      rightPaw.position.copy(restPose.rightPaw);
+      leftPaw.rotation.set(0, 0, 0);
+      rightPaw.rotation.set(0, 0, 0);
       refs.leftEar.current?.rotation.set(striking ? -0.42 : 0, 0, striking ? 0.2 : 0);
       refs.rightEar.current?.rotation.set(striking ? -0.42 : 0, 0, striking ? -0.2 : 0);
       poseEyes(
@@ -323,11 +367,13 @@ function BerniseFigure({
           ? 2.4
           : happyPurr
             ? 1.5
-            : listening
-              ? 2.15
-              : speaking
-                ? 2.6
-                : 1.7;
+            : asleep
+              ? 0.72
+              : listening
+                ? 2.15
+                : speaking
+                  ? 2.6
+                  : 1.7;
     const breath = (Math.sin(t * breathSpeed) + 1) / 2;
     const burst = purrBurst();
     rumble.current.amp = MathUtils.damp(
@@ -339,58 +385,112 @@ function BerniseFigure({
     const shake = Math.sin(t * Math.PI * 2 * burst.hz) * rumble.current.amp;
     rumble.current.y = MathUtils.damp(
       rumble.current.y,
-      Math.sin(t * 1.05) * 0.02 + (speaking && !happyPurr ? Math.abs(Math.sin(t * 9)) * 0.026 : 0),
-      6,
+      (asleep ? sleepDrop : 0) +
+        Math.sin(t * (asleep ? 0.55 : 1.05)) * (asleep ? 0.01 : 0.02) +
+        (speaking && !happyPurr ? Math.abs(Math.sin(t * 9)) * 0.026 : 0),
+      asleep ? 3.2 : 6,
       dt,
     );
 
     const lookX = MathUtils.clamp(pointer.current.x, -1, 1);
     const lookY = MathUtils.clamp(pointer.current.y, -1, 1);
-    const lookScale = happyPurr ? 0.45 : 1;
+    const lookScale = asleep ? 0.06 : happyPurr ? 0.45 : 1;
+    const settle = asleep ? 3.2 : 5;
 
     root.position.y = rumble.current.y + shake + strike.lunge * 0.04 + strike.shake * 0.012;
     root.position.x = shake * 0.35 + lookX * strike.lunge * 0.1 + strike.shake * 0.02;
     root.position.z = MathUtils.damp(
       root.position.z,
-      (striking ? -0.05 : happyPurr ? 0.04 : listening ? 0.12 : 0) + strike.lunge * 0.26,
+      (striking ? -0.05 : asleep ? sleepPush : happyPurr ? 0.04 : listening ? 0.12 : 0) +
+        strike.lunge * 0.26,
       strikingDamp(strikeElapsed),
       dt,
     );
     root.rotation.x = MathUtils.damp(
       root.rotation.x,
-      (striking ? 0.08 : happyPurr ? 0.03 : listening ? 0.07 : 0.015) + strike.lunge * 0.18,
-      striking ? 18 : 5,
+      (striking ? 0.08 : asleep ? sleepPitch : happyPurr ? 0.03 : listening ? 0.07 : 0.015) +
+        strike.lunge * 0.18,
+      striking ? 18 : settle,
       dt,
     );
+    root.rotation.y = MathUtils.damp(root.rotation.y, asleep ? sleepYaw : 0, settle, dt);
+    root.rotation.z = MathUtils.damp(root.rotation.z, asleep ? sleepRoll : 0, settle, dt);
 
-    body.scale.y = 1 + breath * (thinking && !happyPurr && !striking ? 0.018 : 0.028);
-    body.scale.x = 1 - breath * 0.012;
-    body.scale.z = 1 - breath * 0.008;
+    body.scale.y =
+      (asleep ? 0.88 : 1) +
+      breath * (asleep ? 0.012 : thinking && !happyPurr && !striking ? 0.018 : 0.028);
+    body.scale.x = (asleep ? 1.06 : 1) - breath * (asleep ? 0.006 : 0.012);
+    body.scale.z = (asleep ? 1.04 : 1) - breath * (asleep ? 0.004 : 0.008);
 
-    head.position.x = MathUtils.damp(head.position.x, lookX * strike.lunge * 0.08, 18, dt);
-    head.position.y = MathUtils.damp(head.position.y, -lookY * strike.lunge * 0.05, 18, dt);
-    head.position.z = MathUtils.damp(head.position.z, strike.lunge * 0.2, 18, dt);
+    head.position.x = MathUtils.damp(
+      head.position.x,
+      asleep ? 0.08 : lookX * strike.lunge * 0.08,
+      asleep ? settle : 18,
+      dt,
+    );
+    head.position.y = MathUtils.damp(
+      head.position.y,
+      asleep ? -0.06 : -lookY * strike.lunge * 0.05,
+      asleep ? settle : 18,
+      dt,
+    );
+    head.position.z = MathUtils.damp(
+      head.position.z,
+      asleep ? 0.14 : strike.lunge * 0.2,
+      asleep ? settle : 18,
+      dt,
+    );
     head.rotation.y = MathUtils.damp(
       head.rotation.y,
       lookX * 0.34 * lookScale +
-        (happyPurr ? 0 : striking ? lookX * 0.08 : thinking ? 0.16 : listening ? -0.03 : 0) +
+        (happyPurr
+          ? 0
+          : asleep
+            ? 0.16
+            : striking
+              ? lookX * 0.08
+              : thinking
+                ? 0.16
+                : listening
+                  ? -0.03
+                  : 0) +
         strike.shake * 0.12,
-      striking ? 18 : 5.2,
+      striking ? 18 : asleep ? settle : 5.2,
       dt,
     );
     head.rotation.x = MathUtils.damp(
       head.rotation.x,
       -lookY * 0.2 * lookScale +
-        (striking ? 0.1 : happyPurr ? 0.05 : listening ? 0.04 : thinking ? -0.05 : -0.01) +
+        (striking
+          ? 0.1
+          : asleep
+            ? 0.12
+            : happyPurr
+              ? 0.05
+              : listening
+                ? 0.04
+                : thinking
+                  ? -0.05
+                  : -0.01) +
         strike.lunge * 0.22,
-      striking ? 18 : 5.2,
+      striking ? 18 : asleep ? settle : 5.2,
       dt,
     );
     head.rotation.z = MathUtils.damp(
       head.rotation.z,
-      (striking ? -0.05 : happyPurr ? 0.06 : thinking ? -0.08 : listening ? 0.035 : 0) +
+      (striking
+        ? -0.05
+        : asleep
+          ? 0.38
+          : happyPurr
+            ? 0.06
+            : thinking
+              ? -0.08
+              : listening
+                ? 0.035
+                : 0) +
         strike.shake * 0.16,
-      striking ? 18 : 5.2,
+      striking ? 18 : asleep ? settle : 5.2,
       dt,
     );
 
@@ -406,7 +506,7 @@ function BerniseFigure({
 
     const dilate = striking
       ? 1.22
-      : happyPurr
+      : happyPurr || asleep
         ? 0.88
         : listening
           ? 1.1
@@ -426,7 +526,7 @@ function BerniseFigure({
       }
     }
 
-    if (!happyPurr && !striking && t > blink.current.nextAt) {
+    if (!happyPurr && !striking && !asleep && t > blink.current.nextAt) {
       blink.current.closeUntil = t + 0.14;
       blink.current.nextAt = t + 3.6 + Math.random() * 4.4;
     }
@@ -440,6 +540,10 @@ function BerniseFigure({
       openness = squintOpenness + burst.amp * (purrOpenness - squintOpenness);
       width = squintWidth;
       innerScale = burst.amp * purrIrisScale;
+    } else if (asleep) {
+      openness = squintOpenness;
+      width = squintWidth;
+      innerScale = 0;
     } else if (t < blink.current.closeUntil) {
       const progress = 1 - (blink.current.closeUntil - t) / 0.14;
       const closed = progress < 0.45 ? progress / 0.45 : 1 - (progress - 0.45) / 0.55;
@@ -452,9 +556,20 @@ function BerniseFigure({
       twitch.current.nextAt = t + 2.6 + Math.random() * 4.6;
     }
     twitch.current.amount = MathUtils.damp(twitch.current.amount, 0, 7, dt);
-    const perk = striking ? -0.42 : happyPurr ? 0.1 : listening ? -0.14 : thinking ? 0.05 : 0;
-    const flatten = striking ? 0.2 : 0;
-    const flick = happyPurr ? 0 : Math.sin(t * (striking ? 18 : 32)) * twitch.current.amount * 0.12;
+    const perk = striking
+      ? -0.42
+      : asleep
+        ? 0.22
+        : happyPurr
+          ? 0.1
+          : listening
+            ? -0.14
+            : thinking
+              ? 0.05
+              : 0;
+    const flatten = striking ? 0.2 : asleep ? 0.08 : 0;
+    const flick =
+      happyPurr || asleep ? 0 : Math.sin(t * (striking ? 18 : 32)) * twitch.current.amount * 0.12;
     refs.leftEar.current?.rotation.set(perk, 0, flatten + flick);
     refs.rightEar.current?.rotation.set(perk, 0, -flatten - flick * 0.6);
 
@@ -462,7 +577,7 @@ function BerniseFigure({
       mouth.scale.y,
       strike.mouth > 0
         ? 1 + strike.mouth * 4.4
-        : happyPurr
+        : happyPurr || asleep
           ? 0.72
           : speaking
             ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4
@@ -472,7 +587,7 @@ function BerniseFigure({
     );
     mouth.scale.x = MathUtils.damp(
       mouth.scale.x,
-      strike.mouth > 0 ? 1 + strike.mouth * 0.7 : happyPurr ? 1.15 : speaking ? 1.25 : 1,
+      strike.mouth > 0 ? 1 + strike.mouth * 0.7 : happyPurr || asleep ? 1.15 : speaking ? 1.25 : 1,
       12,
       dt,
     );
@@ -480,30 +595,75 @@ function BerniseFigure({
     fangs.position.y = restPose.fangs.y - fangSinkY * strike.fangs;
     fangs.position.z = restPose.fangs.z + fangSinkZ * strike.fangs;
 
-    const tailSpeed = striking ? 6.4 : happyPurr ? 0.9 : 1.7;
-    const tailSwing = striking ? 1.45 : happyPurr ? 0.45 : 1;
+    const tailSpeed = striking ? 6.4 : asleep ? 0.55 : happyPurr ? 0.9 : 1.7;
+    const tailSwing = striking ? 1.45 : asleep ? 0.28 : happyPurr ? 0.45 : 1;
     tail.rotation.x =
       restPose.tail.x +
       Math.sin(t * tailSpeed) * 0.08 * tailSwing +
-      (listening && !happyPurr && !striking ? -0.1 : 0);
+      (listening && !happyPurr && !striking ? -0.1 : 0) +
+      (asleep ? 0.12 : 0);
     tail.rotation.y =
-      restPose.tail.y + Math.sin(t * (striking ? 5.2 : happyPurr ? 0.7 : 1.15)) * 0.12 * tailSwing;
+      restPose.tail.y +
+      Math.sin(t * (striking ? 5.2 : asleep ? 0.48 : happyPurr ? 0.7 : 1.15)) * 0.12 * tailSwing +
+      (asleep ? 0.18 : 0);
     tail.rotation.z =
-      restPose.tail.z + Math.sin(t * (striking ? 7.1 : happyPurr ? 1.05 : 2.1)) * 0.14 * tailSwing;
+      restPose.tail.z +
+      Math.sin(t * (striking ? 7.1 : asleep ? 0.62 : happyPurr ? 1.05 : 2.1)) * 0.14 * tailSwing +
+      (asleep ? 0.32 : 0);
 
+    leftPaw.position.x = MathUtils.damp(
+      leftPaw.position.x,
+      restPose.leftPaw.x + (asleep ? 0.1 : 0),
+      6,
+      dt,
+    );
     leftPaw.position.y = MathUtils.damp(
       leftPaw.position.y,
       restPose.leftPaw.y +
-        (striking ? 0.08 : !happyPurr && thinking ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08 : 0),
+        (striking
+          ? 0.08
+          : asleep
+            ? 0.05
+            : !happyPurr && thinking
+              ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08
+              : 0),
+      6,
+      dt,
+    );
+    leftPaw.position.z = MathUtils.damp(
+      leftPaw.position.z,
+      restPose.leftPaw.z + (asleep ? 0.1 : 0),
       6,
       dt,
     );
     leftPaw.rotation.x = MathUtils.damp(
       leftPaw.rotation.x,
-      striking ? -0.22 : !happyPurr && thinking ? -0.3 : 0,
+      striking ? -0.22 : asleep ? -0.18 : !happyPurr && thinking ? -0.3 : 0,
       6,
       dt,
     );
+    leftPaw.rotation.z = MathUtils.damp(leftPaw.rotation.z, asleep ? 0.08 : 0, 6, dt);
+
+    rightPaw.position.x = MathUtils.damp(
+      rightPaw.position.x,
+      restPose.rightPaw.x + (asleep ? -0.1 : 0),
+      6,
+      dt,
+    );
+    rightPaw.position.y = MathUtils.damp(
+      rightPaw.position.y,
+      restPose.rightPaw.y + (asleep ? 0.05 : 0),
+      6,
+      dt,
+    );
+    rightPaw.position.z = MathUtils.damp(
+      rightPaw.position.z,
+      restPose.rightPaw.z + (asleep ? 0.1 : 0),
+      6,
+      dt,
+    );
+    rightPaw.rotation.x = MathUtils.damp(rightPaw.rotation.x, asleep ? -0.18 : 0, 6, dt);
+    rightPaw.rotation.z = MathUtils.damp(rightPaw.rotation.z, asleep ? -0.08 : 0, 6, dt);
   });
 
   return (
@@ -595,6 +755,7 @@ function usePartRefs(): PartRefs {
   const fangs = useRef<Group>(null);
   const tail = useRef<Group>(null);
   const leftPaw = useRef<Group>(null);
+  const rightPaw = useRef<Group>(null);
   return useMemo(
     () => ({
       root,
@@ -614,6 +775,7 @@ function usePartRefs(): PartRefs {
       fangs,
       tail,
       leftPaw,
+      rightPaw,
     }),
     [],
   );

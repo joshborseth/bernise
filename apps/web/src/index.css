@@ -137,6 +137,67 @@ body::after {
   cursor: grabbing;
 }
 
+.mascot-sleeping .mascot-halo {
+  animation-duration: 6.4s;
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--sky) 62%, white) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--sky-deep) 32%, transparent),
+      transparent 72%
+    );
+}
+
+.mascot-zzz {
+  position: absolute;
+  left: 52%;
+  top: 30%;
+  z-index: 2;
+  width: 8.5rem;
+  height: 10rem;
+  pointer-events: none;
+}
+
+.mascot-zzz span {
+  position: absolute;
+  left: 0;
+  bottom: 0.4rem;
+  margin: 0;
+  font-family: Fraunces, ui-serif, serif;
+  font-style: italic;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  line-height: 1;
+  color: color-mix(in srgb, var(--sky-deep) 78%, var(--ink));
+  text-shadow: 0 0.12em 0.18em color-mix(in srgb, var(--sky) 55%, transparent);
+  animation: zzz-drift 3.2s cubic-bezier(0.22, 0.7, 0.28, 1) infinite;
+  opacity: 0;
+}
+
+.mascot-zzz span:nth-child(1) {
+  font-size: 1.05rem;
+  animation-delay: 0s;
+}
+
+.mascot-zzz span:nth-child(2) {
+  font-size: 1.4rem;
+  animation-delay: 0.7s;
+}
+
+.mascot-zzz span:nth-child(3) {
+  font-size: 1.85rem;
+  animation-delay: 1.4s;
+}
+
+.mascot-zzz span:nth-child(4) {
+  font-size: 2.35rem;
+  animation-delay: 2.1s;
+}
+
 .mascot-biting .mascot-halo {
   animation-duration: 0.55s;
   background:
@@ -268,9 +329,47 @@ body::after {
   }
 }
 
+@keyframes zzz-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(-10deg) scale(0.62);
+  }
+  10% {
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(3.6rem, -7.2rem) rotate(16deg) scale(1.12);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mascot-halo,
-  .user-bubble {
+  .user-bubble,
+  .mascot-zzz span {
     animation: none;
+  }
+
+  .mascot-zzz span {
+    opacity: 0.78;
+  }
+
+  .mascot-zzz span:nth-child(1) {
+    transform: translate(0.15rem, -0.4rem) rotate(-8deg);
+  }
+
+  .mascot-zzz span:nth-child(2) {
+    transform: translate(1.15rem, -1.7rem) rotate(4deg);
+  }
+
+  .mascot-zzz span:nth-child(3) {
+    transform: translate(2.2rem, -3.2rem) rotate(10deg);
+  }
+
+  .mascot-zzz span:nth-child(4) {
+    transform: translate(3.4rem, -4.8rem) rotate(14deg);
   }
 }
