@@ -18,6 +18,7 @@ export type Surface =
   | "irisGlow"
   | "pupil"
   | "shine"
+  | "fang"
   | "whisker";
 
 export const palette: Record<Surface, string> = {
@@ -36,6 +37,7 @@ export const palette: Record<Surface, string> = {
   irisGlow: "#9fd9f6",
   pupil: "#141a20",
   shine: "#ffffff",
+  fang: "#f3ece1",
   whisker: "#c9bbae",
 };
 
@@ -55,6 +57,7 @@ export type PartId =
   | "leftPupil"
   | "rightPupil"
   | "mouth"
+  | "fangs"
   | "tail"
   | "leftPaw";
 
@@ -414,6 +417,30 @@ const muzzle: Node = {
       id: "mouth",
       position: [0, -0.062, 0.115],
       children: [{ kind: "sphere", surface: "mouth", radius: 0.062, scale: [1, 0.36, 0.55] }],
+    },
+    {
+      kind: "group",
+      id: "fangs",
+      position: [0, -0.03, 0.14],
+      scale: 0,
+      children: [
+        {
+          kind: "cone",
+          surface: "fang",
+          radius: 0.018,
+          height: 0.07,
+          position: [-0.036, -0.02, 0.02],
+          rotation: [Math.PI, 0, 0.14],
+        },
+        {
+          kind: "cone",
+          surface: "fang",
+          radius: 0.018,
+          height: 0.07,
+          position: [0.036, -0.02, 0.02],
+          rotation: [Math.PI, 0, -0.14],
+        },
+      ],
     },
     {
       kind: "sphere",

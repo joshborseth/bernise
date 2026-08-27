@@ -120,6 +120,49 @@ export function purrBurst(): { amp: number; hz: number } {
   return { amp, hz };
 }
 
+/** A short snap for the over-pet chomp. */
+export function playChomp(): void {
+  const ctx = audioContext();
+  void ctx.resume();
+  const now = ctx.currentTime;
+  const dur = 0.08;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.2, now);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  master.connect(ctx.destination);
+
+  const osc = ctx.createOscillator();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(210, now);
+  osc.frequency.exponentialRampToValueAtTime(62, now + dur);
+  osc.connect(master);
+
+  const click = ctx.createOscillator();
+  click.type = "square";
+  click.frequency.value = 90;
+  const clickGain = ctx.createGain();
+  clickGain.gain.setValueAtTime(0.08, now);
+  clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+  click.connect(clickGain);
+  clickGain.connect(master);
+
+  osc.start(now);
+  click.start(now);
+  osc.stop(now + dur);
+  click.stop(now + dur);
+
+  window.setTimeout(
+    () => {
+      osc.disconnect();
+      click.disconnect();
+      clickGain.disconnect();
+      master.disconnect();
+    },
+    dur * 1000 + 24,
+  );
+}
+
 /** Starts a bursting cat purr. The returned function fades it out and tears the graph down. */
 export function startPurr(): () => void {
   const ctx = audioContext();

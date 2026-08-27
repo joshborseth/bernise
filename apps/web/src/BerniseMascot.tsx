@@ -15,6 +15,7 @@ export function BerniseMascot({
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [purring, setPurring] = useState(false);
+  const [biting, setBiting] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
 
   useLayoutEffect(() => {
@@ -57,6 +58,7 @@ export function BerniseMascot({
   useEffect(() => {
     const stop = () => {
       setPurring(false);
+      setBiting(false);
     };
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -73,13 +75,19 @@ export function BerniseMascot({
     return startPurr();
   }, [purring]);
 
-  const className = purring ? `mascot mascot-${mood} mascot-purring` : `mascot mascot-${mood}`;
+  const className = biting
+    ? `mascot mascot-${mood} mascot-biting`
+    : purring
+      ? `mascot mascot-${mood} mascot-purring`
+      : `mascot mascot-${mood}`;
 
   return (
     <div
       className={className}
       role="img"
-      aria-label={purring ? "Bernise is purring" : "Bernise. Hold to pet."}
+      aria-label={
+        biting ? "Bernise has had enough" : purring ? "Bernise is purring" : "Bernise. Hold to pet."
+      }
       aria-pressed={purring}
     >
       <div className="mascot-halo" aria-hidden="true" />
@@ -94,7 +102,7 @@ export function BerniseMascot({
               preserveDrawingBuffer: true,
               powerPreference: "high-performance",
             }}
-            camera={{ position: [0, 0.22, 6.6], fov: 30 }}
+            camera={{ position: [0, 0.22, 5.6], fov: 30 }}
             resize={{ debounce: 0, scroll: false }}
             style={{
               width: stageSize.width,
@@ -111,8 +119,10 @@ export function BerniseMascot({
               speakKey={speakKey}
               pointer={pointer}
               purring={purring}
+              biting={biting}
               reducedMotion={reducedMotion}
               onPurringChange={setPurring}
+              onBitingChange={setBiting}
             />
           </Canvas>
         ) : null}
