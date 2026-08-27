@@ -2,6 +2,24 @@ import { BufferAttribute, BufferGeometry, MeshBasicMaterial } from "three";
 import { MarchingCubes } from "three-stdlib";
 
 /**
+ * Cylindrical pelt UVs. The 0/1 seam sits on the back (-Z) so the face
+ * stays clean for fur maps.
+ */
+export function cylindricalUv(
+  x: number,
+  y: number,
+  z: number,
+  centerX: number,
+  centerZ: number,
+  minY: number,
+  height: number,
+): readonly [number, number] {
+  const u = 0.5 + Math.atan2(x - centerX, z - centerZ) / (Math.PI * 2);
+  const v = height === 0 ? 0.5 : (y - minY) / height;
+  return [u, v];
+}
+
+/**
  * A single blob in a metaball field. Overlapping blobs fuse into one smooth
  * surface, which is what separates "fur" from "a pile of spheres".
  */
@@ -79,10 +97,38 @@ export function bakeMetaballs(
   geometry.scale(half, half, half);
   geometry.translate(centerX, centerY, centerZ);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+  assignCylindricalUvs(geometry);
 
   material.dispose();
   field.geometry.dispose();
 
   return geometry;
+}
+
+function assignCylindricalUvs(geometry: BufferGeometry): void {
+  const positions = geometry.getAttribute("position");
+  const box = geometry.boundingBox;
+  if (positions === undefined || box === null) {
+    return;
+  }
+  const height = box.max.y - box.min.y;
+  const centerX = (box.min.x + box.max.x) * 0.5;
+  const centerZ = (box.min.z + box.max.z) * 0.5;
+  const uvs = new Float32Array(positions.count * 2);
+  for (let i = 0; i < positions.count; i++) {
+    const [u, v] = cylindricalUv(
+      positions.getX(i),
+      positions.getY(i),
+      positions.getZ(i),
+      centerX,
+      centerZ,
+      box.min.y,
+      height,
+    );
+    uvs[i * 2] = u;
+    uvs[i * 2 + 1] = v;
+  }
+  geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
 }
