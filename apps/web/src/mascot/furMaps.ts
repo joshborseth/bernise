@@ -5,34 +5,30 @@ import {
   NoColorSpace,
   RepeatWrapping,
   RGBAFormat,
-  SRGBColorSpace,
   UnsignedByteType,
 } from "three";
 import type { Texture } from "three";
 
 /**
  * Coat profiles for Bernise. Down is the pale undercoat, plush the silver
- * body, guard the tabby points, velvet the inner ear.
+ * body, guard the tabby points, velvet the inner ear. Frequencies stay
+ * integer so RepeatWrapping stays seamless.
  */
 export type FurKind = "down" | "plush" | "guard" | "velvet";
 
 export type FurProfile = {
   readonly kind: FurKind;
   readonly size: number;
-  readonly strands: number;
-  readonly flowWaves: number;
-  readonly sharpness: number;
-  readonly clump: number;
-  readonly fuzz: number;
+  readonly freqU: number;
+  readonly freqV: number;
+  readonly octaves: number;
+  readonly warp: number;
   readonly normalStrength: number;
   readonly roughnessLow: number;
   readonly roughnessHigh: number;
-  readonly repeatU: number;
-  readonly repeatV: number;
 };
 
 export type FurTextures = {
-  readonly map: Texture;
   readonly normalMap: Texture;
   readonly displacementMap: Texture;
   readonly roughnessMap: Texture;
@@ -42,110 +38,130 @@ export const furProfiles: Record<FurKind, FurProfile> = {
   down: {
     kind: "down",
     size: 512,
-    strands: 32,
-    flowWaves: 2,
-    sharpness: 1.7,
-    clump: 0.85,
-    fuzz: 1.2,
-    normalStrength: 8,
-    roughnessLow: 0.78,
-    roughnessHigh: 0.96,
-    repeatU: 2.2,
-    repeatV: 1.0,
+    freqU: 18,
+    freqV: 16,
+    octaves: 5,
+    warp: 0.12,
+    normalStrength: 3.4,
+    roughnessLow: 0.82,
+    roughnessHigh: 0.97,
   },
   plush: {
     kind: "plush",
     size: 512,
-    strands: 28,
-    flowWaves: 2,
-    sharpness: 1.85,
-    clump: 0.95,
-    fuzz: 1,
-    normalStrength: 9,
-    roughnessLow: 0.68,
-    roughnessHigh: 0.93,
-    repeatU: 2.0,
-    repeatV: 1.0,
+    freqU: 14,
+    freqV: 12,
+    octaves: 5,
+    warp: 0.14,
+    normalStrength: 3.8,
+    roughnessLow: 0.76,
+    roughnessHigh: 0.94,
   },
   guard: {
     kind: "guard",
     size: 512,
-    strands: 24,
-    flowWaves: 2,
-    sharpness: 2.0,
-    clump: 1.05,
-    fuzz: 0.8,
-    normalStrength: 10,
-    roughnessLow: 0.55,
-    roughnessHigh: 0.88,
-    repeatU: 1.8,
-    repeatV: 1.0,
+    freqU: 12,
+    freqV: 10,
+    octaves: 4,
+    warp: 0.16,
+    normalStrength: 4.2,
+    roughnessLow: 0.7,
+    roughnessHigh: 0.9,
   },
   velvet: {
     kind: "velvet",
     size: 512,
-    strands: 40,
-    flowWaves: 2,
-    sharpness: 1.45,
-    clump: 0.4,
-    fuzz: 1.35,
-    normalStrength: 6.5,
-    roughnessLow: 0.72,
-    roughnessHigh: 0.9,
-    repeatU: 2.4,
-    repeatV: 1.15,
+    freqU: 22,
+    freqV: 20,
+    octaves: 5,
+    warp: 0.08,
+    normalStrength: 2.4,
+    roughnessLow: 0.8,
+    roughnessHigh: 0.94,
   },
 };
 
-const twoPi = Math.PI * 2;
+function wrapInt(value: number, period: number): number {
+  return ((value % period) + period) % period;
+}
 
-/**
- * Tileable strand height in 0..1. U runs across the pelt, V along the lie
- * of the hair. Used for normals and roughness, not vertex displacement —
- * the metaball meshes are too coarse to carry this frequency.
- */
-export function sampleFurHeight(u: number, v: number, profile: FurProfile): number {
-  const lie =
-    profile.clump * 0.045 * Math.sin(v * twoPi * profile.flowWaves) +
-    profile.clump * 0.018 * Math.sin(v * twoPi * (profile.flowWaves + 1) + u * twoPi) +
-    0.016 * Math.sin(u * twoPi * 5 + v * twoPi * 3);
+function fade(t: number): number {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
 
-  const strandU = u + lie;
-  const fiber = Math.abs(Math.sin(strandU * twoPi * profile.strands));
-  const under = Math.abs(Math.sin(strandU * twoPi * profile.strands * 2 + 0.85));
-  const fuzz = 0.5 + 0.5 * Math.sin(strandU * twoPi * profile.strands * 3 + v * twoPi);
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
-  const shafts = fiber ** profile.sharpness;
-  const pile = 0.58 * shafts + 0.28 * under ** 1.35 + 0.1 * fuzz * profile.fuzz;
+function hash2(ix: number, iy: number, periodX: number, periodY: number): number {
+  const x = wrapInt(ix, periodX);
+  const y = wrapInt(iy, periodY);
+  const n = Math.sin(x * 127.1 + y * 311.7 + 19.19) * 43758.5453;
+  return n - Math.floor(n);
+}
 
-  const guard =
-    profile.kind === "guard" ? 0.16 * Math.abs(Math.sin(u * twoPi * 8 + v * twoPi)) ** 8 : 0;
+/** Tileable value noise. `freqU` and `freqV` must be integers. */
+export function tileNoise(u: number, v: number, freqU: number, freqV: number): number {
+  const x = (((u % 1) + 1) % 1) * freqU;
+  const y = (((v % 1) + 1) % 1) * freqV;
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = fade(x - x0);
+  const fy = fade(y - y0);
+  const n00 = hash2(x0, y0, freqU, freqV);
+  const n10 = hash2(x0 + 1, y0, freqU, freqV);
+  const n01 = hash2(x0, y0 + 1, freqU, freqV);
+  const n11 = hash2(x0 + 1, y0 + 1, freqU, freqV);
+  return lerp(lerp(n00, n10, fx), lerp(n01, n11, fx), fy);
+}
 
-  return Math.min(1, pile + guard);
+export function tileFbm(
+  u: number,
+  v: number,
+  freqU: number,
+  freqV: number,
+  octaves: number,
+): number {
+  let sum = 0;
+  let amp = 0.5;
+  let fu = freqU;
+  let fv = freqV;
+  let norm = 0;
+  for (let i = 0; i < octaves; i++) {
+    sum += amp * tileNoise(u, v, fu, fv);
+    norm += amp;
+    fu *= 2;
+    fv *= 2;
+    amp *= 0.5;
+  }
+  return norm === 0 ? 0 : sum / norm;
 }
 
 /**
- * Low-frequency pile volume. One to two tufts around the body so marching
- * cubes vertices can actually represent the swell.
+ * Soft pile height in 0..1. Fractal noise, not sine strands — cylindrical
+ * UVs turn periodic ridges into carved grooves on a round cat.
  */
+export function sampleFurHeight(u: number, v: number, profile: FurProfile): number {
+  const wu = u + profile.warp * (tileFbm(u, v, 4, 4, 3) - 0.5);
+  const wv = v + profile.warp * (tileFbm(u + 0.37, v + 0.11, 4, 3, 3) - 0.5);
+  return tileFbm(wu, wv, profile.freqU, profile.freqV, profile.octaves);
+}
+
+/** Low-frequency tufts the coarse metaball meshes can actually hold. */
 export function sampleFurDisplacement(u: number, v: number, profile: FurProfile): number {
-  const tufts = 0.5 + 0.5 * Math.sin(u * twoPi * 2 + 0.25 * Math.sin(v * twoPi));
-  const swell = 0.5 + 0.5 * Math.sin(v * twoPi + u * twoPi);
-  const mix = 0.6 * tufts + 0.4 * swell;
-  const amount = profile.kind === "velvet" ? 0.22 : profile.kind === "down" ? 0.72 : 0.5;
-  return 0.5 + (mix - 0.5) * amount;
+  const amount = profile.kind === "velvet" ? 0.35 : profile.kind === "down" ? 0.7 : 0.55;
+  const tuft = tileFbm(u, v, 3, 2, 3);
+  return 0.5 + (tuft - 0.5) * amount;
 }
 
 export function sampleFurRoughness(u: number, v: number, profile: FurProfile): number {
   const height = sampleFurHeight(u, v, profile);
   const span = profile.roughnessHigh - profile.roughnessLow;
-  const variation = 0.035 * Math.sin(u * twoPi * 5 - v * twoPi * 2);
-  return Math.min(1, Math.max(0, profile.roughnessHigh - span * height + variation));
+  return Math.min(1, Math.max(0, profile.roughnessHigh - span * height));
 }
 
 export type FurMapBuffers = {
   readonly size: number;
-  readonly albedo: Uint8Array;
   readonly displacement: Uint8Array;
   readonly normal: Uint8Array;
   readonly roughness: Uint8Array;
@@ -154,7 +170,6 @@ export type FurMapBuffers = {
 export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
   const size = profile.size;
   const heights = new Float32Array(size * size);
-  const albedo = new Uint8Array(size * size * 4);
   const displacement = new Uint8Array(size * size * 4);
   const roughness = new Uint8Array(size * size * 4);
 
@@ -168,12 +183,6 @@ export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
       heights[y * size + x] = height;
 
       const di = (y * size + x) * 4;
-      const tone = Math.round((0.8 + 0.2 * height) * 255);
-      albedo[di] = tone;
-      albedo[di + 1] = tone;
-      albedo[di + 2] = tone;
-      albedo[di + 3] = 255;
-
       const d = Math.round(pile * 255);
       displacement[di] = d;
       displacement[di + 1] = d;
@@ -190,7 +199,6 @@ export function bakeFurMaps(profile: FurProfile): FurMapBuffers {
 
   return {
     size,
-    albedo,
     displacement,
     normal: heightToNormal(heights, size, profile.normalStrength),
     roughness,
@@ -201,11 +209,9 @@ export function createFurTextures(kind: FurKind, anisotropy: number): FurTexture
   const profile = furProfiles[kind];
   const maps = bakeFurMaps(profile);
   return {
-    map: dataMap(maps.albedo, maps.size, anisotropy, profile.repeatU, profile.repeatV, true),
-    normalMap: dataMap(maps.normal, maps.size, anisotropy, profile.repeatU, profile.repeatV),
-    roughnessMap: dataMap(maps.roughness, maps.size, anisotropy, profile.repeatU, profile.repeatV),
-    // Pile must not inherit the strand repeat or the coarse mesh rings.
-    displacementMap: dataMap(maps.displacement, maps.size, anisotropy, 1, 1.05),
+    normalMap: dataMap(maps.normal, maps.size, anisotropy, 1, 1),
+    roughnessMap: dataMap(maps.roughness, maps.size, anisotropy, 1, 1),
+    displacementMap: dataMap(maps.displacement, maps.size, anisotropy, 1, 1),
   };
 }
 
@@ -215,7 +221,6 @@ function dataMap(
   anisotropy: number,
   repeatU: number,
   repeatV: number,
-  color = false,
 ): DataTexture {
   const texture = new DataTexture(pixels, size, size, RGBAFormat, UnsignedByteType);
   texture.wrapS = RepeatWrapping;
@@ -224,7 +229,7 @@ function dataMap(
   texture.minFilter = LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
   texture.anisotropy = Math.max(1, anisotropy);
-  texture.colorSpace = color ? SRGBColorSpace : NoColorSpace;
+  texture.colorSpace = NoColorSpace;
   texture.flipY = false;
   texture.repeat.set(repeatU, repeatV);
   texture.needsUpdate = true;

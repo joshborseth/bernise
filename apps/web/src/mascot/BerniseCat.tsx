@@ -95,6 +95,7 @@ export function BerniseCat({
   return (
     <>
       <FitCamera />
+      <fog attach="fog" args={["#f6efe4", 5.2, 8.6]} />
       <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
       <ambientLight intensity={0.5} color="#fff6ea" />
       <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.22} color="#fff7ee" />
@@ -626,7 +627,7 @@ function useCatMaterials(): Record<Surface, Material> {
     };
     const textures: Texture[] = [];
     for (const coat of Object.values(coats)) {
-      textures.push(coat.map, coat.normalMap, coat.displacementMap, coat.roughnessMap);
+      textures.push(coat.normalMap, coat.displacementMap, coat.roughnessMap);
     }
 
     const fur = (
@@ -642,7 +643,6 @@ function useCatMaterials(): Record<Surface, Material> {
     ) => {
       const material = new MeshPhysicalMaterial({
         color: palette[surface],
-        map: coat.map,
         roughness: 1,
         metalness: 0,
         roughnessMap: coat.roughnessMap,
@@ -651,10 +651,10 @@ function useCatMaterials(): Record<Surface, Material> {
         displacementScale: options.displacementScale,
         displacementBias: 0,
         sheen: options.sheen,
-        sheenColor: palette[surface],
+        sheenColor: "#fff6ea",
         sheenRoughness: options.sheenRoughness,
         emissive: palette[surface],
-        emissiveIntensity: options.emissiveIntensity ?? 0.018,
+        emissiveIntensity: options.emissiveIntensity ?? 0.02,
       });
       material.normalScale = new Vector2(options.normalScale, options.normalScale);
       return material;
@@ -681,40 +681,40 @@ function useCatMaterials(): Record<Surface, Material> {
       textures,
       materials: {
         snow: fur("snow", coats.down, {
-          displacementScale: 0.0022,
-          normalScale: 1.25,
-          sheen: 0.48,
-          sheenRoughness: 0.78,
+          displacementScale: 0.0012,
+          normalScale: 0.72,
+          sheen: 0.62,
+          sheenRoughness: 0.82,
         }),
         snowShade: fur("snowShade", coats.down, {
-          displacementScale: 0.0018,
-          normalScale: 1.15,
-          sheen: 0.4,
-          sheenRoughness: 0.74,
+          displacementScale: 0.001,
+          normalScale: 0.64,
+          sheen: 0.55,
+          sheenRoughness: 0.8,
         }),
         silver: fur("silver", coats.plush, {
-          displacementScale: 0.002,
-          normalScale: 1.35,
-          sheen: 0.42,
-          sheenRoughness: 0.66,
+          displacementScale: 0.0011,
+          normalScale: 0.78,
+          sheen: 0.52,
+          sheenRoughness: 0.74,
         }),
         tabby: fur("tabby", coats.guard, {
-          displacementScale: 0.0016,
-          normalScale: 1.45,
-          sheen: 0.3,
-          sheenRoughness: 0.52,
+          displacementScale: 0.0009,
+          normalScale: 0.85,
+          sheen: 0.4,
+          sheenRoughness: 0.62,
         }),
         tabbyDark: fur("tabbyDark", coats.guard, {
-          displacementScale: 0.0014,
-          normalScale: 1.35,
-          sheen: 0.26,
-          sheenRoughness: 0.48,
+          displacementScale: 0.0008,
+          normalScale: 0.8,
+          sheen: 0.36,
+          sheenRoughness: 0.58,
         }),
         innerEar: fur("innerEar", coats.velvet, {
-          displacementScale: 0.0006,
-          normalScale: 0.9,
-          sheen: 0.58,
-          sheenRoughness: 0.86,
+          displacementScale: 0.0004,
+          normalScale: 0.48,
+          sheen: 0.7,
+          sheenRoughness: 0.9,
           emissiveIntensity: 0.012,
         }),
         nose: glass("nose", 0.35, 0.5),

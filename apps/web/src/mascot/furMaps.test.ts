@@ -37,12 +37,11 @@ describe("sampleFurHeight", () => {
 
 describe("bakeFurMaps", () => {
   it("writes matching RGBA buffers and an outward-facing normal map", () => {
-    const maps = bakeFurMaps({ ...furProfiles.down, size: 64, strands: 12 });
+    const maps = bakeFurMaps({ ...furProfiles.down, size: 64, freqU: 8, freqV: 8, octaves: 3 });
     const pixels = 64 * 64 * 4;
     expect(maps.displacement.length).toBe(pixels);
     expect(maps.normal.length).toBe(pixels);
     expect(maps.roughness.length).toBe(pixels);
-    expect(maps.albedo.length).toBe(pixels);
 
     let blueSum = 0;
     let sameAsStrand = 0;
