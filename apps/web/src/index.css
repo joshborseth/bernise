@@ -269,6 +269,40 @@ body::after {
   line-height: 1.45;
 }
 
+.assistant-bubble {
+  justify-self: start;
+  max-width: min(28rem, 86%);
+  padding: 0.75rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--peach-deep) 42%, var(--line));
+  border-radius: 1.35rem 1.35rem 1.35rem 0.4rem;
+  background: color-mix(in srgb, var(--peach) 78%, white);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--peach-deep) 16%, transparent);
+  animation: bubble-in 0.45s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+}
+
+.assistant-bubble p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.error-bubble {
+  justify-self: center;
+  max-width: min(32rem, 92%);
+  padding: 0.7rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--rose) 55%, var(--line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--rose) 28%, white);
+  animation: bubble-in 0.45s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+}
+
+.error-bubble p {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .composer {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -373,6 +407,8 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   .mascot-halo,
   .user-bubble,
+  .assistant-bubble,
+  .error-bubble,
   .mascot-zzz span {
     animation: none;
   }

@@ -1,6 +1,6 @@
 # Bernise
 
-Desktop control surface for grilling technical decisions until they are explicit. Scaffold only: Effect-native Electron shell, no agents or editor yet.
+Desktop control surface for grilling technical decisions until they are explicit. Effect-native Electron shell with a Cursor ACP harness.
 
 ## Effect Best Practices
 
@@ -22,7 +22,7 @@ details when the documentation isn't enough.
 
 ## Agent harness
 
-Bernise is a harness control surface (t3code-style). Do not call model APIs for coding work. See [docs/harness.md](docs/harness.md). First live provider later: Cursor CLI. `Provider` is a service tag only — no adapters in this scaffold.
+Bernise is a harness control surface (t3code-style). Coding work must not call model APIs; Cursor CLI is the live provider. See [docs/harness.md](docs/harness.md). `Provider` is implemented by `CursorProviderLive` (`cursor-agent acp`).
 
 ## TypeScript 7 / effect-tsgo
 

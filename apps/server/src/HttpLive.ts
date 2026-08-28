@@ -4,8 +4,9 @@ import { Config, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import * as Http from "node:http";
+import { CursorProviderLive } from "./CursorProviderLive.ts";
 import { HealthLive } from "./HealthLive.ts";
-import { PingLive } from "./PingLive.ts";
+import { RpcHandlersLive } from "./RpcLive.ts";
 
 export const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
 export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault("127.0.0.1"));
@@ -13,7 +14,8 @@ export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault(
 const RpcLive = RpcServer.layerHttp({
   group: BerniseRpcs,
   path: "/rpc",
-}).pipe(Layer.provide(PingLive));
+  protocol: "http",
+}).pipe(Layer.provide(RpcHandlersLive), Layer.provide(CursorProviderLive));
 
 export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cors());
 
