@@ -27,7 +27,7 @@ Tool permissions are auto-approved for this first shot so the agent can write fi
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc`. The Speak composer starts one session, subscribes, and appends assistant text as it streams.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over HTTP NDJSON (`protocol: "http"`). The Speak composer starts one session, subscribes, and appends assistant text as it streams. `SendTurn` also returns the turn's text so the bubble still appears if the browser buffers the long-lived subscribe response.
 
 ## Later
 
