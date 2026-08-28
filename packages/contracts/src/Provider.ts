@@ -20,3 +20,7 @@ export class ProviderError extends Schema.TaggedError<ProviderError>()("Provider
 export class SessionStarted extends Schema.Class<SessionStarted>("SessionStarted")({
   sessionId: SessionId,
 }) {}
+
+export class TurnResult extends Schema.Class<TurnResult>("TurnResult")({
+  text: Schema.String,
+}) {}

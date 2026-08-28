@@ -74,7 +74,8 @@ describe("CursorProviderLive", () => {
     return Effect.gen(function* () {
       const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
-      yield* provider.sendTurn(sessionId, "hello");
+      const text = yield* provider.sendTurn(sessionId, "hello");
+      expect(text).toBe("Hello from ACP");
       const events = yield* Stream.runCollect(Stream.take(provider.subscribeEvents(sessionId), 2));
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),

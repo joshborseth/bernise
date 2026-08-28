@@ -1,6 +1,17 @@
 import { ProviderError, ProviderEvent, ProviderTurnDelta, SessionId } from "@bernise/contracts";
 import { NodeServices } from "@effect/platform-node";
-import { Config, Effect, Exit, Layer, Option, Queue, Scope, Stream, SynchronizedRef } from "effect";
+import {
+  Config,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Queue,
+  Ref,
+  Scope,
+  Stream,
+  SynchronizedRef,
+} from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { AcpTransportError, makeAcpConnection } from "./acp/JsonRpcStdio.ts";
 import { Provider } from "./Provider.ts";
@@ -14,6 +25,7 @@ interface SessionState {
   readonly acpSessionId: string;
   readonly send: (method: string, params: unknown) => Effect.Effect<unknown, AcpTransportError>;
   readonly events: Queue.Queue<ProviderEvent>;
+  readonly turnText: Ref.Ref<string>;
   readonly scope: Scope.Closeable;
 }
 
@@ -119,6 +131,7 @@ export const CursorProviderLive = Layer.effect(
       const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
       const sessionScope = yield* Scope.fork(parentScope);
       const events = yield* Queue.unbounded<ProviderEvent>();
+      const turnText = yield* Ref.make("");
       yield* Scope.addFinalizer(sessionScope, Queue.shutdown(events).pipe(Effect.asVoid));
 
       const connection = yield* makeAcpConnection({
@@ -133,7 +146,10 @@ export const CursorProviderLive = Layer.effect(
           if (text === undefined) {
             return Effect.void;
           }
-          return Queue.offer(events, new ProviderTurnDelta({ text })).pipe(Effect.asVoid);
+          return Ref.update(turnText, (current) => `${current}${text}`).pipe(
+            Effect.andThen(Queue.offer(events, new ProviderTurnDelta({ text }))),
+            Effect.asVoid,
+          );
         },
         onRequest: (method, params) => Effect.succeed(autoApproveRequest(method, params)),
       }).pipe(
@@ -179,6 +195,7 @@ export const CursorProviderLive = Layer.effect(
           acpSessionId,
           send: connection.send,
           events,
+          turnText,
           scope: sessionScope,
         });
         return next;
@@ -191,6 +208,7 @@ export const CursorProviderLive = Layer.effect(
       prompt: string,
     ) {
       const session = yield* getSession(sessionId);
+      yield* Ref.set(session.turnText, "");
       yield* session
         .send("session/prompt", {
           sessionId: session.acpSessionId,
@@ -199,6 +217,7 @@ export const CursorProviderLive = Layer.effect(
         .pipe(
           Effect.mapError((error) => toProviderError(error, "Cursor ACP session/prompt failed")),
         );
+      return yield* Ref.get(session.turnText);
     });
 
     const subscribeEvents = (sessionId: SessionId) =>

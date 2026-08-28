@@ -1,4 +1,4 @@
-import { BerniseRpcs, Pong, SessionStarted } from "@bernise/contracts";
+import { BerniseRpcs, Pong, SessionStarted, TurnResult } from "@bernise/contracts";
 import { Config, Effect, Option } from "effect";
 import { Provider } from "./Provider.ts";
 
@@ -18,7 +18,10 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
           const sessionId = yield* provider.startSession(workspace);
           return new SessionStarted({ sessionId });
         }),
-      SendTurn: (payload) => provider.sendTurn(payload.sessionId, payload.prompt),
+      SendTurn: (payload) =>
+        provider
+          .sendTurn(payload.sessionId, payload.prompt)
+          .pipe(Effect.map((text) => new TurnResult({ text }))),
       SubscribeEvents: (payload) => provider.subscribeEvents(payload.sessionId),
     };
   }),

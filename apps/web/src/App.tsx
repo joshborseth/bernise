@@ -109,7 +109,18 @@ export function App() {
           subscribeFiberRef.current = fiber;
           yield* Effect.sleep("50 millis");
         }
-        yield* client.SendTurn({ sessionId: sessionRef.current, prompt: text });
+        yield* client.SendTurn({ sessionId: sessionRef.current, prompt: text }).pipe(
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              if (result.text.length === 0 || assistantIdRef.current !== undefined) {
+                return;
+              }
+              const id = crypto.randomUUID();
+              assistantIdRef.current = id;
+              setMessages((current) => [...current, { id, from: "assistant", text: result.text }]);
+            }),
+          ),
+        );
       }),
     )
       .catch((error: unknown) => {

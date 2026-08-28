@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
-import { ProviderError, ProviderEvent, SessionId, SessionStarted } from "./Provider.ts";
+import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } from "./Provider.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
@@ -23,6 +23,7 @@ export class SendTurn extends Rpc.make("SendTurn", {
     sessionId: SessionId,
     prompt: Schema.String,
   },
+  success: TurnResult,
   error: ProviderError,
 }) {}
 
