@@ -1,4 +1,4 @@
-import type { ProviderError, ProviderEvent, SessionId } from "@bernise/contracts";
+import type { ProviderError, ProviderEvent, SessionId, TurnResult } from "@bernise/contracts";
 import { Effect, Stream } from "effect";
 import * as Context from "effect/Context";
 
@@ -13,7 +13,10 @@ export class Provider extends Context.Service<
   Provider,
   {
     readonly startSession: (workspace: string) => Effect.Effect<SessionId, ProviderError>;
-    readonly sendTurn: (sessionId: SessionId, prompt: string) => Effect.Effect<void, ProviderError>;
+    readonly sendTurn: (
+      sessionId: SessionId,
+      prompt: string,
+    ) => Effect.Effect<TurnResult, ProviderError>;
     readonly subscribeEvents: (sessionId: SessionId) => Stream.Stream<ProviderEvent, ProviderError>;
   }
 >()("@bernise/Provider") {}

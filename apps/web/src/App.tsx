@@ -1,7 +1,7 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useState, type FormEvent } from "react";
-import { lastFromAtom, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import { speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
 import { BerniseMascot } from "./BerniseMascot.tsx";
 import { deriveBerniseMood } from "./mascot/mood.ts";
 
@@ -9,14 +9,13 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
-  const lastFrom = useAtomValue(lastFromAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const pending = AsyncResult.isWaiting(speakResult);
 
   const mood = deriveBerniseMood({
     composerFocused,
-    lastFrom,
+    pending,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
 
@@ -52,6 +51,11 @@ export function App() {
             </article>
           ),
         )}
+        {pending ? (
+          <article className="status-bubble" aria-live="polite">
+            <p>Bernise is thinking…</p>
+          </article>
+        ) : null}
       </section>
 
       <form className="composer" onSubmit={onSpeak}>
@@ -72,7 +76,7 @@ export function App() {
           disabled={pending}
         />
         <button type="submit" disabled={!canSpeak}>
-          Speak
+          {pending ? "Thinking…" : "Speak"}
         </button>
       </form>
     </main>

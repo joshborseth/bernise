@@ -1,25 +1,61 @@
-import { ProviderError, ProviderTurnDelta, SessionId, SessionStarted } from "@bernise/contracts";
+import {
+  ProviderError,
+  ProviderTurnDelta,
+  SessionId,
+  SessionStarted,
+  TurnResult,
+} from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import {
   appendError,
   appendUser,
   applyProviderEvent,
   chatAtom,
+  formatError,
   initialChat,
   lastFromAtom,
   opening,
   speakAtom,
   speakKeyAtom,
+  stopReasonFromTurn,
   visibleMessagesAtom,
 } from "./chat.ts";
 import { BerniseRpc } from "./rpc.ts";
+import type { ChatState } from "./chat.ts";
 
 const sessionId = SessionId.make("sess-1");
 
 const isSettled = (value: AsyncResult.AsyncResult<unknown, unknown>): boolean =>
   !AsyncResult.isWaiting(value) && value._tag !== "Initial";
+
+const waitForChat = async (
+  registry: AtomRegistry.AtomRegistry,
+  predicate: (chat: ChatState) => boolean,
+) => {
+  if (predicate(registry.get(chatAtom))) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cancel();
+      reject(new Error("chatAtom did not match"));
+    }, 2000);
+    const cancel = registry.subscribe(chatAtom, (value) => {
+      if (predicate(value)) {
+        clearTimeout(timeout);
+        cancel();
+        resolve();
+      }
+    });
+    if (predicate(registry.get(chatAtom))) {
+      clearTimeout(timeout);
+      cancel();
+      resolve();
+    }
+  });
+};
 
 const waitWhileWaiting = async (registry: AtomRegistry.AtomRegistry) => {
   if (isSettled(registry.get(speakAtom))) {
@@ -78,6 +114,26 @@ describe("chat reducers", () => {
     const next = appendError(initialChat, "nope", "e1");
     expect(next.messages).toEqual([opening, { id: "e1", from: "error", text: "nope" }]);
   });
+
+  it("formats tagged records without falling back to object Object", () => {
+    expect(formatError({ _tag: "RpcClientError", message: "socket closed" })).toBe(
+      "RpcClientError: socket closed",
+    );
+  });
+
+  it("formats schema decode errors with a restart hint", () => {
+    try {
+      Schema.decodeUnknownSync(TurnResult)(null);
+    } catch (error) {
+      expect(formatError(error)).toMatch(/Could not decode the server reply/i);
+      expect(formatError(error)).toMatch(/Restart Bernise/i);
+    }
+  });
+
+  it("reads stopReason from a turn or falls back after a void reply", () => {
+    expect(stopReasonFromTurn(new TurnResult({ stopReason: "max_tokens" }))).toBe("max_tokens");
+    expect(stopReasonFromTurn(null)).toBe("end_turn");
+  });
 });
 
 describe("chat atoms", () => {
@@ -105,7 +161,7 @@ describe("chat atoms", () => {
         case "StartSession":
           return Effect.succeed(new SessionStarted({ sessionId }));
         case "SendTurn":
-          return Effect.void;
+          return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
         case "SubscribeEvents":
           return Stream.make(
             new ProviderTurnDelta({ text: "Hello" }),
@@ -172,7 +228,7 @@ describe("chat atoms", () => {
         case "StartSession":
           return Effect.fail(new ProviderError({ message: "no agent" }));
         case "SendTurn":
-          return Effect.void;
+          return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
         case "SubscribeEvents":
           return Stream.never;
         default:
@@ -193,5 +249,70 @@ describe("chat atoms", () => {
     expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
       expect.objectContaining({ from: "error", text: "no agent" }),
     ]);
+  });
+
+  it("appends an error bubble when SendTurn succeeds with no stream text", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "StartSession":
+          return Effect.succeed(new SessionStarted({ sessionId }));
+        case "SendTurn":
+          return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
+        case "SubscribeEvents":
+          return Stream.never;
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitWhileWaiting(registry);
+
+    expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
+      expect.objectContaining({
+        from: "error",
+        text: "No reply from Cursor (stopReason: end_turn).",
+      }),
+    ]);
+  });
+
+  it("appends an error bubble when SubscribeEvents fails after the session starts", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "StartSession":
+          return Effect.succeed(new SessionStarted({ sessionId }));
+        case "SendTurn":
+          return Effect.never;
+        case "SubscribeEvents":
+          return Stream.fromEffect(
+            Effect.fail(new ProviderError({ message: "subscribe died" })).pipe(
+              Effect.delay("10 millis"),
+            ),
+          );
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitForChat(registry, (chat) =>
+      chat.messages.some(
+        (message) => message.from === "error" && message.text.includes("subscribe died"),
+      ),
+    );
   });
 });

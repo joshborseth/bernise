@@ -303,6 +303,22 @@ body::after {
   line-height: 1.45;
 }
 
+.status-bubble {
+  justify-self: center;
+  max-width: min(32rem, 92%);
+  padding: 0.55rem 0.85rem;
+  border: 1px dashed color-mix(in srgb, var(--muted) 45%, var(--line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--bg-wash) 70%, white);
+  color: var(--muted);
+}
+
+.status-bubble p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 .composer {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -409,6 +425,7 @@ body::after {
   .user-bubble,
   .assistant-bubble,
   .error-bubble,
+  .status-bubble,
   .mascot-zzz span {
     animation: none;
   }

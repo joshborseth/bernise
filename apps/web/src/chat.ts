@@ -1,7 +1,10 @@
 import { ProviderError, type ProviderEvent, type SessionId } from "@bernise/contracts";
-import { Cause, Effect, Stream } from "effect";
+import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export type ChatMessage =
   | { readonly id: string; readonly from: "bernise" }
@@ -30,11 +33,22 @@ export const formatError = (error: unknown): string => {
   if (error instanceof ProviderError) {
     return error.message;
   }
+  if (Schema.isSchemaError(error)) {
+    const detail = error.message.replace(/\s+/g, " ").trim();
+    return `Could not decode the server reply (${detail}). Restart Bernise so the UI and server share the same schema.`;
+  }
   if (error instanceof Error && error.message.length > 0) {
     return error.message;
   }
+  if (isRecord(error) && typeof error.message === "string" && error.message.length > 0) {
+    const tag = typeof error._tag === "string" ? `${error._tag}: ` : "";
+    return `${tag}${error.message}`;
+  }
   return String(error);
 };
+
+export const stopReasonFromTurn = (result: { readonly stopReason: string } | null): string =>
+  result?.stopReason ?? "end_turn";
 
 export const appendUser = (state: ChatState, text: string, id: string): ChatState => ({
   ...state,
@@ -102,15 +116,30 @@ export const sessionAtom = BerniseRpc.runtime
     Effect.gen(function* () {
       const client = yield* BerniseRpc;
       const started = yield* client("StartSession", {});
-      get.set(chatAtom, { ...get.once(chatAtom), sessionId: started.sessionId });
-      yield* Stream.runForEach(
-        client("SubscribeEvents", { sessionId: started.sessionId }),
-        (event) =>
+      const fiber = yield* Effect.forkChild(
+        Stream.runForEach(client("SubscribeEvents", { sessionId: started.sessionId }), (event) =>
           Effect.sync(() => {
             get.set(chatAtom, applyProviderEvent(get.once(chatAtom), event, crypto.randomUUID()));
           }),
+        ),
+        { startImmediately: true },
       );
-    }),
+      get.set(chatAtom, { ...get.once(chatAtom), sessionId: started.sessionId });
+      yield* Fiber.join(fiber);
+    }).pipe(
+      Effect.catchCause((cause) => {
+        if (!Cause.hasInterruptsOnly(cause)) {
+          const chat = get.once(chatAtom);
+          if (chat.sessionId !== undefined) {
+            get.set(
+              chatAtom,
+              appendError(chat, formatError(Cause.squash(cause)), crypto.randomUUID()),
+            );
+          }
+        }
+        return Effect.failCause(cause);
+      }),
+    ),
   )
   .pipe(Atom.keepAlive);
 
@@ -161,7 +190,18 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
       });
     });
     const client = yield* BerniseRpc;
-    yield* client("SendTurn", { sessionId, prompt: text });
+    const result = yield* client("SendTurn", { sessionId, prompt: text });
+    const chat = readChat(get);
+    if (chat.assistantId === undefined) {
+      get.set(
+        chatAtom,
+        appendError(
+          chat,
+          `No reply from Cursor (stopReason: ${stopReasonFromTurn(result)}).`,
+          crypto.randomUUID(),
+        ),
+      );
+    }
   }).pipe(
     Effect.catchCause((cause) => {
       if (Cause.hasInterruptsOnly(cause)) {
