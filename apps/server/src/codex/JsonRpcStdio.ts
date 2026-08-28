@@ -3,15 +3,16 @@ import type { Duration } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
-export class AcpTransportError extends Schema.TaggedError<AcpTransportError>()(
-  "AcpTransportError",
+export class CodexTransportError extends Schema.TaggedError<CodexTransportError>()(
+  "CodexTransportError",
   {
     message: Schema.String,
   },
 ) {}
 
-export interface AcpConnection {
-  readonly send: (method: string, params: unknown) => Effect.Effect<unknown, AcpTransportError>;
+export interface CodexConnection {
+  readonly send: (method: string, params?: unknown) => Effect.Effect<unknown, CodexTransportError>;
+  readonly notify: (method: string, params?: unknown) => Effect.Effect<void, CodexTransportError>;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -20,31 +21,26 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const jsonRpcMethodNotFound = -32601;
 const stderrLineLimit = 40;
 
-const readNumericId = (value: unknown): number | undefined => {
+const readId = (value: unknown): string | number | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
   if (typeof value === "string" && value.length > 0) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
+    return value;
   }
   return undefined;
 };
 
-export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (options: {
+export const makeCodexConnection = Effect.fn("makeCodexConnection")(function* (options: {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd: string;
   readonly env?: Record<string, string | undefined>;
   readonly forceKillAfter?: Duration.Input;
-  readonly commandLabel?: string;
   readonly spawnHint?: string;
   readonly onNotification: (method: string, params: unknown) => Effect.Effect<void>;
   readonly onRequest: (method: string, params: unknown) => Effect.Effect<unknown | undefined>;
 }) {
-  const label = options.commandLabel ?? "Cursor ACP";
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const handle = yield* spawner
     .spawn(
@@ -62,13 +58,13 @@ export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (optio
     .pipe(
       Effect.mapError(
         (cause: PlatformError) =>
-          new AcpTransportError({
+          new CodexTransportError({
             message: formatSpawnFailure(options.command, cause, options.spawnHint),
           }),
       ),
     );
 
-  const pending = new Map<number, Deferred.Deferred<unknown, AcpTransportError>>();
+  const pending = new Map<string, Deferred.Deferred<unknown, CodexTransportError>>();
   let nextId = 1;
   const writes = yield* Queue.unbounded<string>();
   const stderrLines: Array<string> = [];
@@ -90,7 +86,7 @@ export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (optio
       if (pending.size === 0) {
         return;
       }
-      const error = new AcpTransportError({ message: withStderr(message) });
+      const error = new CodexTransportError({ message: withStderr(message) });
       const waiters = [...pending.values()];
       pending.clear();
       for (const deferred of waiters) {
@@ -98,16 +94,10 @@ export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (optio
       }
     });
 
-  const respond = (id: unknown, result: unknown) =>
-    writeLine({
-      jsonrpc: "2.0",
-      id,
-      result,
-    });
+  const respond = (id: unknown, result: unknown) => writeLine({ id, result });
 
   const respondError = (id: unknown, code: number, message: string) =>
     writeLine({
-      jsonrpc: "2.0",
       id,
       error: { code, message },
     });
@@ -132,22 +122,22 @@ export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (optio
         return;
       }
 
-      const id = readNumericId(message.id);
+      const id = readId(message.id);
       if (!hasId || id === undefined) {
         return;
       }
 
-      const deferred = pending.get(id);
+      const deferred = pending.get(String(id));
       if (deferred === undefined) {
         return;
       }
-      pending.delete(id);
+      pending.delete(String(id));
       if (isRecord(message.error)) {
         const errorMessage =
           typeof message.error.message === "string"
             ? message.error.message
             : JSON.stringify(message.error);
-        yield* Deferred.fail(deferred, new AcpTransportError({ message: errorMessage }));
+        yield* Deferred.fail(deferred, new CodexTransportError({ message: errorMessage }));
         return;
       }
       yield* Deferred.succeed(deferred, message.result);
@@ -197,35 +187,42 @@ export const makeAcpConnection = Effect.fn("makeAcpConnection")(function* (optio
       return handleMessage(parsed).pipe(Effect.ignoreCause);
     }),
     Effect.matchCauseEffect({
-      onFailure: () => failAllPending(`${label} stdout closed.`),
-      onSuccess: () => failAllPending(`${label} stdout closed.`),
+      onFailure: () => failAllPending("Codex App Server stdout closed."),
+      onSuccess: () => failAllPending("Codex App Server stdout closed."),
     }),
     Effect.forkScoped,
   );
   yield* handle.exitCode.pipe(
-    Effect.flatMap((code) => failAllPending(`${label} exited (code ${String(Number(code))}).`)),
+    Effect.flatMap((code) =>
+      failAllPending(`Codex App Server exited (code ${String(Number(code))}).`),
+    ),
     Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause) ? Effect.void : failAllPending(`${label} exited.`),
+      Cause.hasInterruptsOnly(cause) ? Effect.void : failAllPending("Codex App Server exited."),
     ),
     Effect.forkScoped,
   );
 
-  const send = (method: string, params: unknown) =>
+  const send = (method: string, params?: unknown) =>
     Effect.gen(function* () {
       const id = nextId;
       nextId += 1;
-      const deferred = yield* Deferred.make<unknown, AcpTransportError>();
-      pending.set(id, deferred);
+      const deferred = yield* Deferred.make<unknown, CodexTransportError>();
+      pending.set(String(id), deferred);
       yield* writeLine({
-        jsonrpc: "2.0",
         id,
         method,
-        params,
+        ...(params === undefined ? {} : { params }),
       });
       return yield* Deferred.await(deferred);
     });
 
-  return { send } satisfies AcpConnection;
+  const notify = (method: string, params?: unknown) =>
+    writeLine({
+      method,
+      ...(params === undefined ? {} : { params }),
+    }).pipe(Effect.asVoid);
+
+  return { send, notify } satisfies CodexConnection;
 });
 
 function formatSpawnFailure(command: string, cause: PlatformError, spawnHint?: string): string {
@@ -233,7 +230,7 @@ function formatSpawnFailure(command: string, cause: PlatformError, spawnHint?: s
   if (notFound) {
     return (
       spawnHint ??
-      `Could not spawn ${command}. Install Cursor CLI (\`cursor-agent\`) and run \`agent login\`.`
+      `Could not spawn ${command}. Install Codex CLI (\`codex\`) and run \`codex login\`.`
     );
   }
   return `Could not spawn ${command}: ${cause.message}`;

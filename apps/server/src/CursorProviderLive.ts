@@ -20,11 +20,11 @@ import {
 } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { AcpTransportError, makeAcpConnection } from "./acp/JsonRpcStdio.ts";
-import { Provider } from "./Provider.ts";
+import { CursorProvider } from "./Provider.ts";
+import { resolveCursorBin } from "./providerBins.ts";
+import { ServerSettings } from "./ServerSettings.ts";
 
-const cursorBinConfig = Config.string("BERNISE_CURSOR_BIN").pipe(
-  Config.withDefault("cursor-agent"),
-);
+const cursorBinEnv = Config.string("BERNISE_CURSOR_BIN").pipe(Config.option);
 const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 const handshakeTimeout = "20 seconds";
 
@@ -154,12 +154,13 @@ const withHandshakeTimeout = <A>(
   );
 
 export const CursorProviderLive = Layer.effect(
-  Provider,
+  CursorProvider,
   Effect.gen(function* () {
     const parentScope = yield* Scope.Scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const cursorBin = yield* cursorBinConfig;
+    const envBin = yield* cursorBinEnv;
     const configuredWorkspace = yield* workspaceConfig;
+    const serverSettings = yield* ServerSettings;
     const sessions = yield* SynchronizedRef.make(new Map<SessionId, SessionState>());
 
     const defaultWorkspace = () => Option.getOrElse(configuredWorkspace, () => process.cwd());
@@ -174,8 +175,10 @@ export const CursorProviderLive = Layer.effect(
         }),
       );
 
-    const startSession = Effect.fn("Provider.startSession")(function* (workspace: string) {
+    const startSession = Effect.fn("CursorProvider.startSession")(function* (workspace: string) {
       const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
+      const settings = yield* serverSettings.get;
+      const cursorBin = resolveCursorBin(settings.cursor.binaryPath, envBin);
       const sessionScope = yield* Scope.fork(parentScope);
       const events = yield* Queue.unbounded<ProviderEvent>();
       yield* Scope.addFinalizer(sessionScope, Queue.shutdown(events).pipe(Effect.asVoid));
@@ -253,7 +256,7 @@ export const CursorProviderLive = Layer.effect(
       return sessionId;
     });
 
-    const sendTurn = Effect.fn("Provider.sendTurn")(function* (
+    const sendTurn = Effect.fn("CursorProvider.sendTurn")(function* (
       sessionId: SessionId,
       prompt: string,
     ) {
@@ -274,7 +277,7 @@ export const CursorProviderLive = Layer.effect(
         getSession(sessionId).pipe(Effect.map((session) => Stream.fromQueue(session.events))),
       );
 
-    return Provider.of({
+    return CursorProvider.of({
       startSession,
       sendTurn,
       subscribeEvents,

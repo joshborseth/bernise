@@ -1,12 +1,16 @@
-import { BerniseRpcs, Pong, SessionStarted } from "@bernise/contracts";
+import { BerniseRpcs, HarnessSettingsPatch, Pong, SessionStarted } from "@bernise/contracts";
 import { Config, Effect, Option } from "effect";
 import { Provider } from "./Provider.ts";
+import { ProviderHealth } from "./ProviderHealth.ts";
+import { ServerSettings } from "./ServerSettings.ts";
 
 const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 
 export const RpcHandlersLive = BerniseRpcs.toLayer(
   Effect.gen(function* () {
     const provider = yield* Provider;
+    const serverSettings = yield* ServerSettings;
+    const providerHealth = yield* ProviderHealth;
     const configuredWorkspace = yield* workspaceConfig;
 
     return {
@@ -20,6 +24,10 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
         }),
       SendTurn: (payload) => provider.sendTurn(payload.sessionId, payload.prompt),
       SubscribeEvents: (payload) => provider.subscribeEvents(payload.sessionId),
+      GetSettings: () => serverSettings.get,
+      UpdateSettings: (payload) => serverSettings.update(new HarnessSettingsPatch(payload)),
+      GetProviderSnapshots: () => providerHealth.snapshots,
+      RefreshProviders: () => providerHealth.refresh,
     };
   }),
 );

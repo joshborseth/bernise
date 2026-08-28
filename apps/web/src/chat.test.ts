@@ -16,7 +16,9 @@ import {
   formatError,
   initialChat,
   lastFromAtom,
+  noReplyMessage,
   opening,
+  resetSession,
   speakAtom,
   speakKeyAtom,
   stopReasonFromTurn,
@@ -115,6 +117,15 @@ describe("chat reducers", () => {
     expect(next.messages).toEqual([opening, { id: "e1", from: "error", text: "nope" }]);
   });
 
+  it("resets the session when switching providers", () => {
+    const spoken = applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "hi" }), "a1");
+    const next = resetSession(spoken, "codex");
+    expect(next.sessionId).toBeUndefined();
+    expect(next.assistantId).toBeUndefined();
+    expect(next.activeProvider).toBe("codex");
+    expect(next.messages).toEqual(spoken.messages);
+  });
+
   it("formats tagged records without falling back to object Object", () => {
     expect(formatError({ _tag: "RpcClientError", message: "socket closed" })).toBe(
       "RpcClientError: socket closed",
@@ -133,6 +144,15 @@ describe("chat reducers", () => {
   it("reads stopReason from a turn or falls back after a void reply", () => {
     expect(stopReasonFromTurn(new TurnResult({ stopReason: "max_tokens" }))).toBe("max_tokens");
     expect(stopReasonFromTurn(null)).toBe("end_turn");
+  });
+
+  it("names the active CLI in the empty-reply copy", () => {
+    expect(noReplyMessage("cursor", "end_turn")).toBe(
+      "No reply from Cursor (stopReason: end_turn).",
+    );
+    expect(noReplyMessage("codex", "completed")).toBe(
+      "No reply from Codex (stopReason: completed).",
+    );
   });
 });
 
