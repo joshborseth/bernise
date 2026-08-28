@@ -1,16 +1,26 @@
-import { BerniseRpcs, HealthStatus } from "@bernise/contracts";
+import { BerniseRpcs, HealthStatus, ProviderError } from "@bernise/contracts";
 import { NodeHttpServer } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Stream } from "effect";
 import { HttpClient, HttpClientResponse, HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcTest } from "effect/unstable/rpc";
 import { HttpRoutesLive } from "../src/HttpLive.ts";
-import { PingLive } from "../src/PingLive.ts";
+import { Provider } from "../src/Provider.ts";
+import { RpcHandlersLive } from "../src/RpcLive.ts";
 
 const TestHttpLive = HttpRouter.serve(HttpRoutesLive, {
   disableListenLog: true,
   disableLogger: true,
 }).pipe(Layer.provide(RpcSerialization.layerNdjson), Layer.provideMerge(NodeHttpServer.layerTest));
+
+const StubProviderLive = Layer.succeed(
+  Provider,
+  Provider.of({
+    startSession: () => Effect.fail(new ProviderError({ message: "stub" })),
+    sendTurn: () => Effect.fail(new ProviderError({ message: "stub" })),
+    subscribeEvents: () => Stream.fail(new ProviderError({ message: "stub" })),
+  }),
+);
 
 describe("bernise server", () => {
   it.effect("GET /health reports ok", () =>
@@ -27,6 +37,6 @@ describe("bernise server", () => {
       const client = yield* RpcTest.makeClient(BerniseRpcs);
       const pong = yield* client.Ping();
       expect(pong.pong).toBe(true);
-    }).pipe(Effect.provide(PingLive)),
+    }).pipe(Effect.provide(RpcHandlersLive), Effect.provide(StubProviderLive)),
   );
 });

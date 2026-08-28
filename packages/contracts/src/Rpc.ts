@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
+import { ProviderError, ProviderEvent, SessionId, SessionStarted } from "./Provider.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
@@ -9,4 +10,29 @@ export class Ping extends Rpc.make("Ping", {
   success: Pong,
 }) {}
 
-export const BerniseRpcs = RpcGroup.make(Ping);
+export class StartSession extends Rpc.make("StartSession", {
+  payload: {
+    workspace: Schema.optionalKey(Schema.String),
+  },
+  success: SessionStarted,
+  error: ProviderError,
+}) {}
+
+export class SendTurn extends Rpc.make("SendTurn", {
+  payload: {
+    sessionId: SessionId,
+    prompt: Schema.String,
+  },
+  error: ProviderError,
+}) {}
+
+export class SubscribeEvents extends Rpc.make("SubscribeEvents", {
+  payload: {
+    sessionId: SessionId,
+  },
+  success: ProviderEvent,
+  error: ProviderError,
+  stream: true,
+}) {}
+
+export const BerniseRpcs = RpcGroup.make(Ping, StartSession, SendTurn, SubscribeEvents);
