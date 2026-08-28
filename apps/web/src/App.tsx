@@ -52,7 +52,11 @@ export function App() {
     lastFrom: lastMessage.from === "user" ? "user" : "bernise",
   });
   const canSpeak = draft.trim().length > 0 && !pending;
-  const speakKey = messages.findLast((message) => message.from === "assistant")?.id ?? opening.id;
+  const lastAssistant = messages.reduce<ChatMessage | undefined>(
+    (found, message) => (message.from === "assistant" ? message : found),
+    undefined,
+  );
+  const speakKey = lastAssistant?.id ?? opening.id;
 
   const appendDelta = (event: ProviderEvent) => {
     if (event._tag !== "ProviderTurnDelta" || event.text.length === 0) {
