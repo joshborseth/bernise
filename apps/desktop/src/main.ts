@@ -5,6 +5,11 @@ import { spawn, type ChildProcess } from "node:child_process";
 import * as Path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Must run before app.whenReady(). Chromium's overlay compositor races with
+// WebGL buffer recycling and logs SharedImageManager::ProduceOverlay /
+// Invalid mailbox. This keeps GPU/WebGL; it only skips overlay promotion.
+app.commandLine.appendSwitch("disable-gpu-memory-buffer-compositor-resources");
+
 const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
 const webUrlConfig = Config.string("BERNISE_WEB_URL").pipe(
   Config.withDefault("http://127.0.0.1:5733"),
@@ -79,11 +84,17 @@ const createWindow = Effect.fn("createWindow")(function* (webUrl: string) {
         height: 760,
         backgroundColor: "#f6efe4",
         title: "Bernise",
+        show: false,
         webPreferences: {
           sandbox: true,
           contextIsolation: true,
           nodeIntegration: false,
         },
+      });
+      window.once("ready-to-show", () => {
+        if (!window.isDestroyed()) {
+          window.show();
+        }
       });
       void window.loadURL(webUrl);
       return window;

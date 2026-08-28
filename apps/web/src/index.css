@@ -128,9 +128,14 @@ body::after {
   position: absolute;
   inset: 0;
   z-index: 1;
+  overflow: hidden;
   cursor: grab;
   touch-action: none;
   user-select: none;
+}
+
+.mascot-stage canvas {
+  display: block;
 }
 
 .mascot-purring .mascot-stage {

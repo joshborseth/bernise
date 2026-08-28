@@ -15,7 +15,7 @@ export function BerniseMascot({
 }) {
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
-  const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
+  const [stageReady, setStageReady] = useState(false);
   const [purring, setPurring] = useState(false);
   const [biting, setBiting] = useState(false);
   const [hissing, setHissing] = useState(false);
@@ -31,11 +31,21 @@ export function BerniseMascot({
     if (stage === null) {
       return;
     }
-    const sync = () => {
-      setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
+    const markReady = () => {
+      if (stage.clientWidth > 0 && stage.clientHeight > 0) {
+        setStageReady(true);
+        return true;
+      }
+      return false;
     };
-    sync();
-    const observer = new ResizeObserver(sync);
+    if (markReady()) {
+      return;
+    }
+    const observer = new ResizeObserver(() => {
+      if (markReady()) {
+        observer.disconnect();
+      }
+    });
     observer.observe(stage);
     return () => {
       observer.disconnect();
@@ -133,21 +143,22 @@ export function BerniseMascot({
         </div>
       ) : null}
       <div ref={stageRef} className="mascot-stage">
-        {stageSize.width > 0 && stageSize.height > 0 ? (
+        {stageReady ? (
           <Canvas
             flat
             dpr={[1, 2]}
             gl={{
               alpha: true,
               antialias: true,
-              preserveDrawingBuffer: true,
               powerPreference: "high-performance",
+              stencil: false,
             }}
             camera={{ position: [0, 0.22, 5.6], fov: 30 }}
-            resize={{ debounce: 0, scroll: false }}
+            resize={{ debounce: 50, scroll: false }}
             style={{
-              width: stageSize.width,
-              height: stageSize.height,
+              width: "100%",
+              height: "100%",
+              display: "block",
               pointerEvents: "auto",
               background: "transparent",
             }}
