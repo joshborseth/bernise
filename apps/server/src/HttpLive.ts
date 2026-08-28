@@ -4,18 +4,29 @@ import { Config, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import * as Http from "node:http";
+import { CodexProviderLive } from "./CodexProviderLive.ts";
 import { CursorProviderLive } from "./CursorProviderLive.ts";
 import { HealthLive } from "./HealthLive.ts";
+import { ProviderHealthLive } from "./ProviderHealth.ts";
+import { ProviderRouterLive } from "./ProviderRouterLive.ts";
 import { RpcHandlersLive } from "./RpcLive.ts";
+import { ServerSettingsLive } from "./ServerSettings.ts";
 
 export const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
 export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault("127.0.0.1"));
+
+export const HarnessLive = ProviderRouterLive.pipe(
+  Layer.provideMerge(CursorProviderLive),
+  Layer.provideMerge(CodexProviderLive),
+  Layer.provideMerge(ProviderHealthLive),
+  Layer.provideMerge(ServerSettingsLive),
+);
 
 const RpcLive = RpcServer.layerHttp({
   group: BerniseRpcs,
   path: "/rpc",
   protocol: "websocket",
-}).pipe(Layer.provide(RpcHandlersLive), Layer.provide(CursorProviderLive));
+}).pipe(Layer.provide(RpcHandlersLive), Layer.provide(HarnessLive));
 
 export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cors());
 

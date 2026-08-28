@@ -1,16 +1,56 @@
+import { providerDisplayName, type ProviderKind, type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useState, type FormEvent } from "react";
 import { speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
 import { BerniseMascot } from "./BerniseMascot.tsx";
 import { deriveBerniseMood } from "./mascot/mood.ts";
+import {
+  bootSettingsAtom,
+  refreshProvidersAtom,
+  selectProviderAtom,
+  settingsAtom,
+  settingsBusyAtom,
+  snapshotsAtom,
+  updateSettingsAtom,
+} from "./settings.ts";
+
+const loginHint = (kind: ProviderKind): string =>
+  kind === "codex" ? "codex login" : "agent login";
+
+const statusLabel = (snapshot: ProviderSnapshot): string => {
+  if (!snapshot.enabled) {
+    return "off";
+  }
+  if (snapshot.status === "ready") {
+    return "ready";
+  }
+  if (snapshot.status === "warning") {
+    return "pending";
+  }
+  return "fault";
+};
 
 export function App() {
+  const [view, setView] = useState<"chat" | "settings">("chat");
+  useAtomValue(bootSettingsAtom);
+
+  return view === "settings" ? (
+    <SettingsView onBack={() => setView("chat")} />
+  ) : (
+    <ChatView onOpenSettings={() => setView("settings")} />
+  );
+}
+
+function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
+  const settings = useAtomValue(settingsAtom);
+  const snapshots = useAtomValue(snapshotsAtom);
+  const [, selectProvider] = useAtom(selectProviderAtom);
   const pending = AsyncResult.isWaiting(speakResult);
 
   const mood = deriveBerniseMood({
@@ -31,6 +71,13 @@ export function App() {
 
   return (
     <main className="shell">
+      <header className="topbar">
+        <p className="topbar-kicker">station</p>
+        <button type="button" className="icon-button" onClick={onOpenSettings}>
+          Config
+        </button>
+      </header>
+
       <section className="stage">
         <BerniseMascot mood={mood} speakKey={speakKey} />
       </section>
@@ -59,26 +106,179 @@ export function App() {
       </section>
 
       <form className="composer" onSubmit={onSpeak}>
-        <input
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value);
-          }}
-          onFocus={() => {
-            setComposerFocused(true);
-          }}
-          onBlur={() => {
-            setComposerFocused(false);
-          }}
-          placeholder="Speak to Bernise…"
-          aria-label="Speak to Bernise"
-          autoComplete="off"
-          disabled={pending}
-        />
-        <button type="submit" disabled={!canSpeak}>
-          {pending ? "Thinking…" : "Speak"}
-        </button>
+        <div className="provider-switch" role="radiogroup" aria-label="Provider">
+          {(["cursor", "codex"] as const).map((kind) => {
+            const snapshot = snapshots[kind];
+            const disabled = pending || snapshot.status === "error" || !snapshot.enabled;
+            return (
+              <button
+                key={kind}
+                type="button"
+                role="radio"
+                aria-checked={settings.activeProvider === kind}
+                title={disabled && !pending ? snapshot.message : providerDisplayName(kind)}
+                className={settings.activeProvider === kind ? "is-active" : ""}
+                disabled={disabled}
+                onClick={() => {
+                  selectProvider(kind);
+                }}
+              >
+                {providerDisplayName(kind)}
+              </button>
+            );
+          })}
+        </div>
+        <div className="composer-row">
+          <input
+            value={draft}
+            onChange={(event) => {
+              setDraft(event.target.value);
+            }}
+            onFocus={() => {
+              setComposerFocused(true);
+            }}
+            onBlur={() => {
+              setComposerFocused(false);
+            }}
+            placeholder="Speak to Bernise…"
+            aria-label="Speak to Bernise"
+            autoComplete="off"
+            disabled={pending}
+          />
+          <button type="submit" disabled={!canSpeak}>
+            {pending ? "Thinking…" : "Speak"}
+          </button>
+        </div>
       </form>
     </main>
+  );
+}
+
+function SettingsView({ onBack }: { readonly onBack: () => void }) {
+  const settings = useAtomValue(settingsAtom);
+  const snapshots = useAtomValue(snapshotsAtom);
+  const busy = useAtomValue(settingsBusyAtom);
+  const [refreshResult, refresh] = useAtom(refreshProvidersAtom);
+  const [, updateSettings] = useAtom(updateSettingsAtom);
+  const probing = busy || AsyncResult.isWaiting(refreshResult);
+
+  return (
+    <main className="shell settings-shell">
+      <header className="topbar">
+        <button type="button" className="text-button" onClick={onBack}>
+          Back to grill
+        </button>
+        <h1>Provider bay</h1>
+      </header>
+      <p className="settings-lede">
+        Bernise drives local CLIs. Authenticate on this machine, then prove the pipe is live.
+      </p>
+      <div className="provider-grid">
+        <ProviderCard
+          kind="cursor"
+          snapshot={snapshots.cursor}
+          binaryPath={settings.cursor.binaryPath}
+          probing={probing}
+          onBinaryPath={(binaryPath) => {
+            updateSettings({ cursor: { binaryPath } });
+          }}
+        />
+        <ProviderCard
+          kind="codex"
+          snapshot={snapshots.codex}
+          binaryPath={settings.codex.binaryPath}
+          homePath={settings.codex.homePath}
+          probing={probing}
+          onBinaryPath={(binaryPath) => {
+            updateSettings({ codex: { binaryPath } });
+          }}
+          onHomePath={(homePath) => {
+            updateSettings({ codex: { homePath } });
+          }}
+        />
+      </div>
+      <button
+        type="button"
+        className="check-button"
+        disabled={probing}
+        onClick={() => {
+          refresh();
+        }}
+      >
+        {probing ? "Checking…" : "Check connections"}
+      </button>
+    </main>
+  );
+}
+
+function ProviderCard({
+  kind,
+  snapshot,
+  binaryPath,
+  homePath,
+  probing,
+  onBinaryPath,
+  onHomePath,
+}: {
+  readonly kind: ProviderKind;
+  readonly snapshot: ProviderSnapshot;
+  readonly binaryPath: string;
+  readonly homePath?: string;
+  readonly probing: boolean;
+  readonly onBinaryPath: (value: string) => void;
+  readonly onHomePath?: (value: string) => void;
+}) {
+  const name = providerDisplayName(kind);
+  return (
+    <article className={`provider-card status-${snapshot.status}`}>
+      <header>
+        <h2>{name}</h2>
+        <span className="status-pill">{statusLabel(snapshot)}</span>
+      </header>
+      <dl>
+        <div>
+          <dt>Auth</dt>
+          <dd>{snapshot.auth}</dd>
+        </div>
+        <div>
+          <dt>Version</dt>
+          <dd>{snapshot.version ?? "—"}</dd>
+        </div>
+        <div>
+          <dt>Last checked</dt>
+          <dd>
+            {snapshot.checkedAt.length > 0 ? new Date(snapshot.checkedAt).toLocaleString() : "—"}
+          </dd>
+        </div>
+      </dl>
+      <label>
+        Binary path
+        <input
+          value={binaryPath}
+          placeholder={kind === "codex" ? "codex" : "cursor-agent"}
+          disabled={probing}
+          onChange={(event) => {
+            onBinaryPath(event.target.value);
+          }}
+        />
+      </label>
+      {onHomePath !== undefined ? (
+        <label>
+          CODEX_HOME path
+          <input
+            value={homePath ?? ""}
+            placeholder="~/.codex"
+            disabled={probing}
+            onChange={(event) => {
+              onHomePath(event.target.value);
+            }}
+          />
+        </label>
+      ) : null}
+      <p className="login-hint">
+        Login with <code>{loginHint(kind)}</code> on the machine running the Bernise server.
+      </p>
+      <p className="probe-message">{snapshot.message}</p>
+    </article>
   );
 }

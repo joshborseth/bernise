@@ -8,14 +8,11 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  clientRequestResult,
-  CursorProviderLive,
-  pickPermissionOptionId,
-} from "../src/CursorProviderLive.ts";
+import { clientRequestResult, pickPermissionOptionId } from "../src/CursorProviderLive.ts";
 import { HttpRoutesLive } from "../src/HttpLive.ts";
-import { Provider } from "../src/Provider.ts";
+import { CursorProvider } from "../src/Provider.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
+import { cursorDriverLayer, harnessMemoryLayer } from "./testLayers.ts";
 
 const fakeAgentSource = fileURLToPath(new URL("./fake-acp-agent.mjs", import.meta.url));
 
@@ -34,17 +31,7 @@ ${modePrefix}exec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeAgent
   return { bin, workspace };
 };
 
-const providerLayer = (bin: string, workspace: string) =>
-  CursorProviderLive.pipe(
-    Layer.provide(
-      ConfigProvider.layer(
-        ConfigProvider.fromUnknown({
-          BERNISE_CURSOR_BIN: bin,
-          BERNISE_WORKSPACE: workspace,
-        }),
-      ),
-    ),
-  );
+const providerLayer = (bin: string, workspace: string) => cursorDriverLayer(bin, workspace);
 
 describe("pickPermissionOptionId", () => {
   it("prefers allow_once", () => {
@@ -75,7 +62,7 @@ describe("CursorProviderLive", () => {
   it.effect("starts a session, auto-approves permission, and streams text deltas", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const sessionId = yield* provider.startSession("");
       const fiber = yield* Stream.runCollect(
         Stream.take(provider.subscribeEvents(sessionId), 2),
@@ -93,7 +80,7 @@ describe("CursorProviderLive", () => {
   it.effect("delivers text deltas even if the subscriber attaches after the turn", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const sessionId = yield* provider.startSession("");
       const turn = yield* provider.sendTurn(sessionId, "hello");
       expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
@@ -108,7 +95,7 @@ describe("CursorProviderLive", () => {
   it.effect("fails sendTurn when the agent exits mid-prompt", () => {
     const fake = makeFakeBin("exit-on-prompt");
     return Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const sessionId = yield* provider.startSession("");
       const error = yield* provider.sendTurn(sessionId, "hello").pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
@@ -119,7 +106,7 @@ describe("CursorProviderLive", () => {
   it.effect("skips cursor/ask_question and still streams text", () => {
     const fake = makeFakeBin("ask-question");
     return Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const sessionId = yield* provider.startSession("");
       const fiber = yield* Stream.runCollect(
         Stream.take(provider.subscribeEvents(sessionId), 1),
@@ -134,7 +121,7 @@ describe("CursorProviderLive", () => {
   it.effect("returns stopReason when the prompt has no assistant text", () => {
     const fake = makeFakeBin("empty");
     return Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const sessionId = yield* provider.startSession("");
       const turn = yield* provider.sendTurn(sessionId, "hello");
       expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
@@ -143,24 +130,15 @@ describe("CursorProviderLive", () => {
 
   it.effect("fails startSession when the binary is missing", () =>
     Effect.gen(function* () {
-      const provider = yield* Provider;
+      const provider = yield* CursorProvider;
       const error = yield* provider.startSession("/tmp").pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
       expect(error.message).toMatch(/cursor-agent|Install Cursor CLI/i);
     }).pipe(
       Effect.provide(
-        CursorProviderLive.pipe(
-          Layer.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({
-                BERNISE_CURSOR_BIN: join(
-                  dirname(fakeAgentSource),
-                  "definitely-missing-cursor-agent",
-                ),
-                BERNISE_WORKSPACE: tmpdir(),
-              }),
-            ),
-          ),
+        cursorDriverLayer(
+          join(dirname(fakeAgentSource), "definitely-missing-cursor-agent"),
+          tmpdir(),
         ),
       ),
     ),
@@ -185,7 +163,14 @@ describe("Provider RPCs", () => {
       ]);
     }).pipe(
       Effect.provide(RpcHandlersLive),
-      Effect.provide(providerLayer(fake.bin, fake.workspace)),
+      Effect.provide(
+        harnessMemoryLayer({
+          cursorBin: fake.bin,
+          codexBin: join(fake.workspace, "unused-codex"),
+          workspace: fake.workspace,
+          stateDir: fake.workspace,
+        }),
+      ),
     );
   });
 });
@@ -203,6 +188,7 @@ describe("Provider RPCs over WebSocket", () => {
           ConfigProvider.fromUnknown({
             BERNISE_CURSOR_BIN: fake.bin,
             BERNISE_WORKSPACE: fake.workspace,
+            BERNISE_STATE_DIR: fake.workspace,
           }),
         ),
       ),

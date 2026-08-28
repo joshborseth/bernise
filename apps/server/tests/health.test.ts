@@ -1,17 +1,29 @@
 import { BerniseRpcs, HealthStatus, ProviderError } from "@bernise/contracts";
 import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
+import { ConfigProvider, Effect, Layer, Stream } from "effect";
 import { HttpClient, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http";
 import { RpcClient, RpcSerialization, RpcTest } from "effect/unstable/rpc";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { HttpRoutesLive } from "../src/HttpLive.ts";
 import { Provider } from "../src/Provider.ts";
+import { providerHealthMemory } from "../src/ProviderHealth.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
+import { serverSettingsMemory } from "../src/ServerSettings.ts";
+import { pendingSnapshots } from "./testLayers.ts";
+
+const stateDir = mkdtempSync(join(tmpdir(), "bernise-health-"));
 
 const TestHttpLive = HttpRouter.serve(HttpRoutesLive, {
   disableListenLog: true,
   disableLogger: true,
-}).pipe(Layer.provide(RpcSerialization.layerJson), Layer.provideMerge(NodeHttpServer.layerTest));
+}).pipe(
+  Layer.provide(RpcSerialization.layerJson),
+  Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ BERNISE_STATE_DIR: stateDir }))),
+  Layer.provideMerge(NodeHttpServer.layerTest),
+);
 
 const StubProviderLive = Layer.succeed(
   Provider,
@@ -51,7 +63,12 @@ describe("bernise server", () => {
       const client = yield* RpcTest.makeClient(BerniseRpcs);
       const pong = yield* client.Ping();
       expect(pong.pong).toBe(true);
-    }).pipe(Effect.provide(RpcHandlersLive), Effect.provide(StubProviderLive)),
+    }).pipe(
+      Effect.provide(RpcHandlersLive),
+      Effect.provide(StubProviderLive),
+      Effect.provide(serverSettingsMemory()),
+      Effect.provide(providerHealthMemory(pendingSnapshots())),
+    ),
   );
 
   it.effect("Ping over WebSocket /rpc", () =>
@@ -62,5 +79,25 @@ describe("bernise server", () => {
         expect(pong.pong).toBe(true);
       }),
     ).pipe(Effect.provide(WsRpcClientLive), Effect.provide(TestHttpLive)),
+  );
+
+  it.effect("GetSettings and UpdateSettings persist the active provider", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      const initial = yield* client.GetSettings();
+      expect(initial.activeProvider).toBe("cursor");
+      const next = yield* client.UpdateSettings({ activeProvider: "codex" });
+      expect(next.activeProvider).toBe("codex");
+      expect(yield* client.GetSettings()).toEqual(next);
+      const snapshots = yield* client.GetProviderSnapshots();
+      expect(snapshots.cursor.kind).toBe("cursor");
+      expect(snapshots.codex.kind).toBe("codex");
+      expect(yield* client.RefreshProviders()).toEqual(snapshots);
+    }).pipe(
+      Effect.provide(RpcHandlersLive),
+      Effect.provide(StubProviderLive),
+      Effect.provide(serverSettingsMemory()),
+      Effect.provide(providerHealthMemory(pendingSnapshots())),
+    ),
   );
 });
