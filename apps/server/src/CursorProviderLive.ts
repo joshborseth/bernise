@@ -1,6 +1,23 @@
-import { ProviderError, ProviderEvent, ProviderTurnDelta, SessionId } from "@bernise/contracts";
+import {
+  ProviderError,
+  ProviderEvent,
+  ProviderTurnDelta,
+  SessionId,
+  TurnResult,
+} from "@bernise/contracts";
 import { NodeServices } from "@effect/platform-node";
-import { Config, Effect, Exit, Layer, Option, Queue, Scope, Stream, SynchronizedRef } from "effect";
+import {
+  Cause,
+  Config,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Queue,
+  Scope,
+  Stream,
+  SynchronizedRef,
+} from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { AcpTransportError, makeAcpConnection } from "./acp/JsonRpcStdio.ts";
 import { Provider } from "./Provider.ts";
@@ -9,6 +26,7 @@ const cursorBinConfig = Config.string("BERNISE_CURSOR_BIN").pipe(
   Config.withDefault("cursor-agent"),
 );
 const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
+const handshakeTimeout = "20 seconds";
 
 interface SessionState {
   readonly acpSessionId: string;
@@ -33,7 +51,7 @@ export const pickPermissionOptionId = (params: unknown): string => {
   return typeof selected?.optionId === "string" ? selected.optionId : "allow-once";
 };
 
-const autoApproveRequest = (method: string, params: unknown): unknown => {
+export const clientRequestResult = (method: string, params: unknown): unknown | undefined => {
   if (method === "session/request_permission") {
     return {
       outcome: {
@@ -43,12 +61,32 @@ const autoApproveRequest = (method: string, params: unknown): unknown => {
     };
   }
   if (method === "cursor/create_plan") {
-    return { accepted: true };
+    return { outcome: { outcome: "accepted" } };
   }
   if (method === "cursor/ask_question") {
-    return { answers: [] };
+    return {
+      outcome: {
+        outcome: "skipped",
+        reason: "Bernise has no question UI yet",
+      },
+    };
   }
-  return {};
+  if (method === "cursor/update_todos") {
+    const todos = isRecord(params) && Array.isArray(params.todos) ? params.todos : [];
+    return { outcome: { outcome: "accepted", todos } };
+  }
+  if (method === "cursor/task") {
+    return { outcome: { outcome: "completed" } };
+  }
+  if (method === "cursor/generate_image") {
+    return {
+      outcome: {
+        outcome: "rejected",
+        reason: "Bernise has no image UI yet",
+      },
+    };
+  }
+  return undefined;
 };
 
 const extractAssistantText = (params: unknown): string | undefined => {
@@ -78,9 +116,21 @@ const readSessionId = (value: unknown): string | undefined => {
   return undefined;
 };
 
+const readStopReason = (value: unknown): string => {
+  if (isRecord(value) && typeof value.stopReason === "string" && value.stopReason.length > 0) {
+    return value.stopReason;
+  }
+  return "end_turn";
+};
+
 const toProviderError = (error: unknown, fallback: string): ProviderError => {
   if (error instanceof ProviderError) {
     return error;
+  }
+  if (Cause.isTimeoutError(error)) {
+    return new ProviderError({
+      message: `${fallback} timed out. Is cursor-agent running? Run \`agent login\` if this is an auth hang.`,
+    });
   }
   if (error instanceof AcpTransportError) {
     const loginHint = /auth|login|unauthorized|unauthenticated/i.test(error.message)
@@ -93,6 +143,15 @@ const toProviderError = (error: unknown, fallback: string): ProviderError => {
   }
   return new ProviderError({ message: fallback });
 };
+
+const withHandshakeTimeout = <A>(
+  effect: Effect.Effect<A, AcpTransportError>,
+  label: string,
+): Effect.Effect<A, ProviderError> =>
+  effect.pipe(
+    Effect.timeout(handshakeTimeout),
+    Effect.mapError((error) => toProviderError(error, label)),
+  );
 
 export const CursorProviderLive = Layer.effect(
   Provider,
@@ -135,7 +194,7 @@ export const CursorProviderLive = Layer.effect(
           }
           return Queue.offer(events, new ProviderTurnDelta({ text })).pipe(Effect.asVoid);
         },
-        onRequest: (method, params) => Effect.succeed(autoApproveRequest(method, params)),
+        onRequest: (method, params) => Effect.succeed(clientRequestResult(method, params)),
       }).pipe(
         Effect.provideService(Scope.Scope, sessionScope),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
@@ -143,27 +202,35 @@ export const CursorProviderLive = Layer.effect(
         Effect.tapError(() => Scope.close(sessionScope, Exit.void)),
       );
 
-      yield* connection
-        .send("initialize", {
+      yield* withHandshakeTimeout(
+        connection.send("initialize", {
           protocolVersion: 1,
-          clientCapabilities: {},
+          clientCapabilities: {
+            fs: { readTextFile: false, writeTextFile: false },
+            terminal: false,
+          },
           clientInfo: { name: "bernise", version: "0.0.0" },
-        })
-        .pipe(Effect.mapError((error) => toProviderError(error, "Cursor ACP initialize failed")));
+        }),
+        "Cursor ACP initialize",
+      );
 
       yield* connection.send("authenticate", { methodId: "cursor_login" }).pipe(
+        Effect.timeout(handshakeTimeout),
         Effect.matchEffect({
           onSuccess: () => Effect.void,
           onFailure: (error) =>
-            /already|authenticated/i.test(error.message)
-              ? Effect.void
-              : Effect.fail(toProviderError(error, "Cursor ACP authenticate failed")),
+            Cause.isTimeoutError(error)
+              ? Effect.fail(toProviderError(error, "Cursor ACP authenticate"))
+              : /already|authenticated/i.test(error.message)
+                ? Effect.void
+                : Effect.fail(toProviderError(error, "Cursor ACP authenticate failed")),
         }),
       );
 
-      const created = yield* connection
-        .send("session/new", { cwd, mcpServers: [] })
-        .pipe(Effect.mapError((error) => toProviderError(error, "Cursor ACP session/new failed")));
+      const created = yield* withHandshakeTimeout(
+        connection.send("session/new", { cwd, mcpServers: [] }),
+        "Cursor ACP session/new",
+      );
       const acpSessionId = readSessionId(created);
       if (acpSessionId === undefined) {
         yield* Scope.close(sessionScope, Exit.void);
@@ -191,7 +258,7 @@ export const CursorProviderLive = Layer.effect(
       prompt: string,
     ) {
       const session = yield* getSession(sessionId);
-      yield* session
+      const result = yield* session
         .send("session/prompt", {
           sessionId: session.acpSessionId,
           prompt: [{ type: "text", text: prompt }],
@@ -199,6 +266,7 @@ export const CursorProviderLive = Layer.effect(
         .pipe(
           Effect.mapError((error) => toProviderError(error, "Cursor ACP session/prompt failed")),
         );
+      return new TurnResult({ stopReason: readStopReason(result) });
     });
 
     const subscribeEvents = (sessionId: SessionId) =>

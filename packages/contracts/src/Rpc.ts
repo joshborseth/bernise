@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
-import { ProviderError, ProviderEvent, SessionId, SessionStarted } from "./Provider.ts";
+import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } from "./Provider.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
@@ -18,12 +18,16 @@ export class StartSession extends Rpc.make("StartSession", {
   error: ProviderError,
 }) {}
 
+/** Accepts `{ stopReason }` and the previous Void encoding (`null`) so a stale server cannot decode-fail Speak. */
+export const SendTurnResult = Schema.Union([TurnResult, Schema.Null]);
+export type SendTurnResult = typeof SendTurnResult.Type;
+
 export class SendTurn extends Rpc.make("SendTurn", {
   payload: {
     sessionId: SessionId,
     prompt: Schema.String,
   },
-  success: Schema.Void,
+  success: SendTurnResult,
   error: ProviderError,
 }) {}
 

@@ -1,4 +1,4 @@
-import { BerniseRpcs, ProviderTurnDelta } from "@bernise/contracts";
+import { BerniseRpcs, ProviderTurnDelta, TurnResult } from "@bernise/contracts";
 import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
@@ -8,20 +8,25 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CursorProviderLive, pickPermissionOptionId } from "../src/CursorProviderLive.ts";
+import {
+  clientRequestResult,
+  CursorProviderLive,
+  pickPermissionOptionId,
+} from "../src/CursorProviderLive.ts";
 import { HttpRoutesLive } from "../src/HttpLive.ts";
 import { Provider } from "../src/Provider.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
 
 const fakeAgentSource = fileURLToPath(new URL("./fake-acp-agent.mjs", import.meta.url));
 
-const makeFakeBin = (): { readonly bin: string; readonly workspace: string } => {
+const makeFakeBin = (mode?: string): { readonly bin: string; readonly workspace: string } => {
   const workspace = mkdtempSync(join(tmpdir(), "bernise-acp-"));
   const bin = join(workspace, "fake-cursor-agent");
+  const modePrefix = mode === undefined ? "" : `FAKE_ACP_MODE=${JSON.stringify(mode)} `;
   writeFileSync(
     bin,
     `#!/bin/sh
-exec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeAgentSource)} "$@"
+${modePrefix}exec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeAgentSource)} "$@"
 `,
     { encoding: "utf8" },
   );
@@ -54,6 +59,18 @@ describe("pickPermissionOptionId", () => {
   });
 });
 
+describe("clientRequestResult", () => {
+  it("skips ask_question and accepts create_plan with official outcomes", () => {
+    expect(clientRequestResult("cursor/ask_question", {})).toEqual({
+      outcome: { outcome: "skipped", reason: "Bernise has no question UI yet" },
+    });
+    expect(clientRequestResult("cursor/create_plan", {})).toEqual({
+      outcome: { outcome: "accepted" },
+    });
+    expect(clientRequestResult("fs/read_text_file", {})).toBeUndefined();
+  });
+});
+
 describe("CursorProviderLive", () => {
   it.effect("starts a session, auto-approves permission, and streams text deltas", () => {
     const fake = makeFakeBin();
@@ -63,7 +80,8 @@ describe("CursorProviderLive", () => {
       const fiber = yield* Stream.runCollect(
         Stream.take(provider.subscribeEvents(sessionId), 2),
       ).pipe(Effect.forkDetach);
-      yield* provider.sendTurn(sessionId, "hello");
+      const turn = yield* provider.sendTurn(sessionId, "hello");
+      expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
       const events = yield* Fiber.join(fiber);
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),
@@ -77,12 +95,49 @@ describe("CursorProviderLive", () => {
     return Effect.gen(function* () {
       const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
-      yield* provider.sendTurn(sessionId, "hello");
+      const turn = yield* provider.sendTurn(sessionId, "hello");
+      expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
       const events = yield* Stream.runCollect(Stream.take(provider.subscribeEvents(sessionId), 2));
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),
         new ProviderTurnDelta({ text: " from ACP" }),
       ]);
+    }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("fails sendTurn when the agent exits mid-prompt", () => {
+    const fake = makeFakeBin("exit-on-prompt");
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const sessionId = yield* provider.startSession("");
+      const error = yield* provider.sendTurn(sessionId, "hello").pipe(Effect.flip);
+      expect(error._tag).toBe("ProviderError");
+      expect(error.message).toMatch(/exited|stdout closed|boom from fake acp/i);
+    }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("skips cursor/ask_question and still streams text", () => {
+    const fake = makeFakeBin("ask-question");
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const sessionId = yield* provider.startSession("");
+      const fiber = yield* Stream.runCollect(
+        Stream.take(provider.subscribeEvents(sessionId), 1),
+      ).pipe(Effect.forkDetach);
+      const turn = yield* provider.sendTurn(sessionId, "hello");
+      expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
+      const events = yield* Fiber.join(fiber);
+      expect(events).toEqual([new ProviderTurnDelta({ text: "Hello from ACP" })]);
+    }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("returns stopReason when the prompt has no assistant text", () => {
+    const fake = makeFakeBin("empty");
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const sessionId = yield* provider.startSession("");
+      const turn = yield* provider.sendTurn(sessionId, "hello");
+      expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
     }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
   });
 
@@ -121,7 +176,8 @@ describe("Provider RPCs", () => {
       const fiber = yield* Stream.runCollect(
         Stream.take(client.SubscribeEvents({ sessionId: started.sessionId }), 2),
       ).pipe(Effect.forkDetach);
-      yield* client.SendTurn({ sessionId: started.sessionId, prompt: "hello" });
+      const turn = yield* client.SendTurn({ sessionId: started.sessionId, prompt: "hello" });
+      expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
       const events = yield* Fiber.join(fiber);
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),
@@ -172,7 +228,11 @@ describe("Provider RPCs over WebSocket", () => {
         const fiber = yield* Stream.runCollect(
           Stream.take(client.SubscribeEvents({ sessionId: started.sessionId }), 2),
         ).pipe(Effect.forkDetach);
-        yield* client.SendTurn({ sessionId: started.sessionId, prompt: "hello" });
+        const turn = yield* client.SendTurn({
+          sessionId: started.sessionId,
+          prompt: "hello",
+        });
+        expect(turn).toEqual(new TurnResult({ stopReason: "end_turn" }));
         const events = yield* Fiber.join(fiber);
         expect(events).toEqual([
           new ProviderTurnDelta({ text: "Hello" }),
