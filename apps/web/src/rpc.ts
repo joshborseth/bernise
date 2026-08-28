@@ -1,11 +1,16 @@
 import { BerniseRpcs } from "@bernise/contracts";
+import { BrowserSocket } from "@effect/platform-browser";
 import { Deferred, Effect, Layer } from "effect";
-import { FetchHttpClient } from "effect/unstable/http";
 import { RpcClient, RpcClientError, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
 
-const RpcClientLive = RpcClient.layerProtocolHttp({ url: "/rpc" }).pipe(
-  Layer.provide(RpcSerialization.layerNdjson),
-  Layer.provide(FetchHttpClient.layer),
+const rpcSocketUrl = (): string => {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/rpc`;
+};
+
+const RpcClientLive = RpcClient.layerProtocolSocket().pipe(
+  Layer.provide(RpcSerialization.layerJson),
+  Layer.provide(BrowserSocket.layerWebSocket(rpcSocketUrl())),
 );
 
 type BerniseClient = RpcClient.RpcClient<

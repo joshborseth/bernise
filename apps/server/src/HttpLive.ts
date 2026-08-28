@@ -14,7 +14,7 @@ export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault(
 const RpcLive = RpcServer.layerHttp({
   group: BerniseRpcs,
   path: "/rpc",
-  protocol: "http",
+  protocol: "websocket",
 }).pipe(Layer.provide(RpcHandlersLive), Layer.provide(CursorProviderLive));
 
 export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cors());
@@ -24,7 +24,7 @@ export const HttpLive = Layer.unwrap(
     const port = yield* portConfig;
     const host = yield* hostConfig;
     return HttpRouter.serve(HttpRoutesLive).pipe(
-      Layer.provide(RpcSerialization.layerNdjson),
+      Layer.provide(RpcSerialization.layerJson),
       Layer.provide(
         NodeHttpServer.layer(() => Http.createServer(), {
           port,

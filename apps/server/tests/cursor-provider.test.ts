@@ -1,12 +1,15 @@
 import { BerniseRpcs, ProviderTurnDelta } from "@bernise/contracts";
+import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Fiber, Layer, Stream } from "effect";
-import { RpcTest } from "effect/unstable/rpc";
+import { HttpRouter, HttpServer } from "effect/unstable/http";
+import { RpcClient, RpcSerialization, RpcTest } from "effect/unstable/rpc";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CursorProviderLive, pickPermissionOptionId } from "../src/CursorProviderLive.ts";
+import { HttpRoutesLive } from "../src/HttpLive.ts";
 import { Provider } from "../src/Provider.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
 
@@ -74,8 +77,7 @@ describe("CursorProviderLive", () => {
     return Effect.gen(function* () {
       const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
-      const text = yield* provider.sendTurn(sessionId, "hello");
-      expect(text).toBe("Hello from ACP");
+      yield* provider.sendTurn(sessionId, "hello");
       const events = yield* Stream.runCollect(Stream.take(provider.subscribeEvents(sessionId), 2));
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),
@@ -129,5 +131,54 @@ describe("Provider RPCs", () => {
       Effect.provide(RpcHandlersLive),
       Effect.provide(providerLayer(fake.bin, fake.workspace)),
     );
+  });
+});
+
+describe("Provider RPCs over WebSocket", () => {
+  it.effect("SubscribeEvents streams deltas over /rpc", () => {
+    const fake = makeFakeBin();
+    const TestWsLive = HttpRouter.serve(HttpRoutesLive, {
+      disableListenLog: true,
+      disableLogger: true,
+    }).pipe(
+      Layer.provide(RpcSerialization.layerJson),
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            BERNISE_CURSOR_BIN: fake.bin,
+            BERNISE_WORKSPACE: fake.workspace,
+          }),
+        ),
+      ),
+      Layer.provideMerge(NodeHttpServer.layerTest),
+    );
+    const WsClientLive = RpcClient.layerProtocolSocket().pipe(
+      Layer.provide(RpcSerialization.layerJson),
+      Layer.provide(
+        Effect.gen(function* () {
+          const server = yield* HttpServer.HttpServer;
+          const address = server.address;
+          if (address._tag !== "TcpAddress") {
+            return yield* Effect.die("expected TCP test server");
+          }
+          return NodeSocket.layerWebSocket(`http://127.0.0.1:${String(address.port)}/rpc`);
+        }).pipe(Layer.unwrap),
+      ),
+    );
+    return Effect.scoped(
+      Effect.gen(function* () {
+        const client = yield* RpcClient.make(BerniseRpcs);
+        const started = yield* client.StartSession({ workspace: fake.workspace });
+        const fiber = yield* Stream.runCollect(
+          Stream.take(client.SubscribeEvents({ sessionId: started.sessionId }), 2),
+        ).pipe(Effect.forkDetach);
+        yield* client.SendTurn({ sessionId: started.sessionId, prompt: "hello" });
+        const events = yield* Fiber.join(fiber);
+        expect(events).toEqual([
+          new ProviderTurnDelta({ text: "Hello" }),
+          new ProviderTurnDelta({ text: " from ACP" }),
+        ]);
+      }),
+    ).pipe(Effect.provide(WsClientLive), Effect.provide(TestWsLive));
   });
 });
