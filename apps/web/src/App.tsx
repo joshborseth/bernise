@@ -34,6 +34,7 @@ export function App() {
   const sessionRef = useRef<SessionId | undefined>(undefined);
   const subscribeFiberRef = useRef<Fiber.Fiber<void, unknown> | undefined>(undefined);
   const assistantIdRef = useRef<string | undefined>(undefined);
+  const usedSendTurnTextRef = useRef(false);
 
   useEffect(
     () => () => {
@@ -59,7 +60,11 @@ export function App() {
   const speakKey = lastAssistant?.id ?? opening.id;
 
   const appendDelta = (event: ProviderEvent) => {
-    if (event._tag !== "ProviderTurnDelta" || event.text.length === 0) {
+    if (
+      event._tag !== "ProviderTurnDelta" ||
+      event.text.length === 0 ||
+      usedSendTurnTextRef.current
+    ) {
       return;
     }
     setMessages((current) => {
@@ -84,6 +89,7 @@ export function App() {
       return;
     }
     assistantIdRef.current = undefined;
+    usedSendTurnTextRef.current = false;
     setMessages((current) => [...current, { id: crypto.randomUUID(), from: "user", text }]);
     setDraft("");
     setPending(true);
@@ -115,6 +121,7 @@ export function App() {
               if (result.text.length === 0 || assistantIdRef.current !== undefined) {
                 return;
               }
+              usedSendTurnTextRef.current = true;
               const id = crypto.randomUUID();
               assistantIdRef.current = id;
               setMessages((current) => [...current, { id, from: "assistant", text: result.text }]);
