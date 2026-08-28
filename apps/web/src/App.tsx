@@ -94,15 +94,18 @@ export function App() {
         if (sessionRef.current === undefined) {
           const started = yield* client.StartSession({});
           sessionRef.current = started.sessionId;
-          const fiber = yield* Effect.scoped(
-            client.SubscribeEvents({ sessionId: started.sessionId }).pipe(
-              Stream.runForEach((event) =>
-                Effect.sync(() => {
-                  appendDelta(event);
-                }),
+          const fiber = yield* Effect.forkDetach(
+            Effect.scoped(
+              client.SubscribeEvents({ sessionId: started.sessionId }).pipe(
+                Stream.runForEach((event) =>
+                  Effect.sync(() => {
+                    appendDelta(event);
+                  }),
+                ),
               ),
             ),
-          ).pipe(Effect.forkDetach);
+            { startImmediately: true },
+          );
           subscribeFiberRef.current = fiber;
           yield* Effect.sleep("50 millis");
         }

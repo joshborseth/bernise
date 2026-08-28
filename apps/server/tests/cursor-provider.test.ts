@@ -69,6 +69,20 @@ describe("CursorProviderLive", () => {
     }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
   });
 
+  it.effect("delivers text deltas even if the subscriber attaches after the turn", () => {
+    const fake = makeFakeBin();
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const sessionId = yield* provider.startSession("");
+      yield* provider.sendTurn(sessionId, "hello");
+      const events = yield* Stream.runCollect(Stream.take(provider.subscribeEvents(sessionId), 2));
+      expect(events).toEqual([
+        new ProviderTurnDelta({ text: "Hello" }),
+        new ProviderTurnDelta({ text: " from ACP" }),
+      ]);
+    }).pipe(Effect.provide(providerLayer(fake.bin, fake.workspace)));
+  });
+
   it.effect("fails startSession when the binary is missing", () =>
     Effect.gen(function* () {
       const provider = yield* Provider;

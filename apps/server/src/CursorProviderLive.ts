@@ -1,16 +1,6 @@
 import { ProviderError, ProviderEvent, ProviderTurnDelta, SessionId } from "@bernise/contracts";
 import { NodeServices } from "@effect/platform-node";
-import {
-  Config,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  PubSub,
-  Scope,
-  Stream,
-  SynchronizedRef,
-} from "effect";
+import { Config, Effect, Exit, Layer, Option, Queue, Scope, Stream, SynchronizedRef } from "effect";
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { AcpTransportError, makeAcpConnection } from "./acp/JsonRpcStdio.ts";
 import { Provider } from "./Provider.ts";
@@ -23,7 +13,7 @@ const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 interface SessionState {
   readonly acpSessionId: string;
   readonly send: (method: string, params: unknown) => Effect.Effect<unknown, AcpTransportError>;
-  readonly events: PubSub.PubSub<ProviderEvent>;
+  readonly events: Queue.Queue<ProviderEvent>;
   readonly scope: Scope.Closeable;
 }
 
@@ -128,8 +118,8 @@ export const CursorProviderLive = Layer.effect(
     const startSession = Effect.fn("Provider.startSession")(function* (workspace: string) {
       const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
       const sessionScope = yield* Scope.fork(parentScope);
-      const events = yield* PubSub.unbounded<ProviderEvent>();
-      yield* Scope.addFinalizer(sessionScope, PubSub.shutdown(events));
+      const events = yield* Queue.unbounded<ProviderEvent>();
+      yield* Scope.addFinalizer(sessionScope, Queue.shutdown(events).pipe(Effect.asVoid));
 
       const connection = yield* makeAcpConnection({
         command: cursorBin,
@@ -143,7 +133,7 @@ export const CursorProviderLive = Layer.effect(
           if (text === undefined) {
             return Effect.void;
           }
-          return PubSub.publish(events, new ProviderTurnDelta({ text })).pipe(Effect.asVoid);
+          return Queue.offer(events, new ProviderTurnDelta({ text })).pipe(Effect.asVoid);
         },
         onRequest: (method, params) => Effect.succeed(autoApproveRequest(method, params)),
       }).pipe(
@@ -213,7 +203,7 @@ export const CursorProviderLive = Layer.effect(
 
     const subscribeEvents = (sessionId: SessionId) =>
       Stream.unwrap(
-        getSession(sessionId).pipe(Effect.map((session) => Stream.fromPubSub(session.events))),
+        getSession(sessionId).pipe(Effect.map((session) => Stream.fromQueue(session.events))),
       );
 
     return Provider.of({

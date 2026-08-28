@@ -21,6 +21,8 @@ export default defineConfig({
       "/rpc": {
         target: backendTarget,
         ws: true,
+        timeout: 0,
+        proxyTimeout: 0,
       },
     },
     ...(explicitHost
