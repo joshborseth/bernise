@@ -1,0 +1,197 @@
+import { ProviderError, ProviderTurnDelta, SessionId, SessionStarted } from "@bernise/contracts";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect, Layer, Stream } from "effect";
+import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
+import {
+  appendError,
+  appendUser,
+  applyProviderEvent,
+  chatAtom,
+  initialChat,
+  lastFromAtom,
+  opening,
+  speakAtom,
+  speakKeyAtom,
+  visibleMessagesAtom,
+} from "./chat.ts";
+import { BerniseRpc } from "./rpc.ts";
+
+const sessionId = SessionId.make("sess-1");
+
+const isSettled = (value: AsyncResult.AsyncResult<unknown, unknown>): boolean =>
+  !AsyncResult.isWaiting(value) && value._tag !== "Initial";
+
+const waitWhileWaiting = async (registry: AtomRegistry.AtomRegistry) => {
+  if (isSettled(registry.get(speakAtom))) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cancel();
+      reject(new Error("speakAtom did not settle"));
+    }, 2000);
+    const cancel = registry.subscribe(speakAtom, (value) => {
+      if (isSettled(value)) {
+        clearTimeout(timeout);
+        cancel();
+        resolve();
+      }
+    });
+    if (isSettled(registry.get(speakAtom))) {
+      clearTimeout(timeout);
+      cancel();
+      resolve();
+    }
+  });
+};
+
+describe("chat reducers", () => {
+  it("appends a user message and clears the stream cursor", () => {
+    const withAssistant = applyProviderEvent(
+      initialChat,
+      new ProviderTurnDelta({ text: "hi" }),
+      "a1",
+    );
+    const next = appendUser(withAssistant, "hello", "u1");
+    expect(next.assistantId).toBeUndefined();
+    expect(next.messages).toEqual([
+      opening,
+      { id: "a1", from: "assistant", text: "hi" },
+      { id: "u1", from: "user", text: "hello" },
+    ]);
+  });
+
+  it("creates then extends an assistant bubble from deltas", () => {
+    const created = applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "Hel" }), "a1");
+    const extended = applyProviderEvent(created, new ProviderTurnDelta({ text: "lo" }), "ignored");
+    expect(extended.assistantId).toBe("a1");
+    expect(extended.messages).toEqual([opening, { id: "a1", from: "assistant", text: "Hello" }]);
+  });
+
+  it("ignores empty deltas", () => {
+    expect(applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "" }), "a1")).toEqual(
+      initialChat,
+    );
+  });
+
+  it("appends an error bubble", () => {
+    const next = appendError(initialChat, "nope", "e1");
+    expect(next.messages).toEqual([opening, { id: "e1", from: "error", text: "nope" }]);
+  });
+});
+
+describe("chat atoms", () => {
+  it("derives visible messages, lastFrom, and speakKey", () => {
+    const registry = AtomRegistry.make();
+    registry.set(
+      chatAtom,
+      appendUser(
+        applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "yo" }), "a1"),
+        "hey",
+        "u1",
+      ),
+    );
+    expect(registry.get(visibleMessagesAtom)).toEqual([
+      { id: "a1", from: "assistant", text: "yo" },
+      { id: "u1", from: "user", text: "hey" },
+    ]);
+    expect(registry.get(lastFromAtom)).toBe("user");
+    expect(registry.get(speakKeyAtom)).toBe("a1");
+  });
+
+  it("speaks through a fake RPC layer and folds stream deltas", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "StartSession":
+          return Effect.succeed(new SessionStarted({ sessionId }));
+        case "SendTurn":
+          return Effect.void;
+        case "SubscribeEvents":
+          return Stream.make(
+            new ProviderTurnDelta({ text: "Hello" }),
+            new ProviderTurnDelta({ text: "!" }),
+          );
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitWhileWaiting(registry);
+
+    const chat = registry.get(chatAtom);
+    expect(chat.sessionId).toBe(sessionId);
+    expect(chat.messages.filter((message) => message.from === "user")).toEqual([
+      expect.objectContaining({ from: "user", text: "hello" }),
+    ]);
+    expect(chat.messages.filter((message) => message.from === "assistant")).toEqual([
+      expect.objectContaining({ from: "assistant", text: "Hello!" }),
+    ]);
+    expect(AsyncResult.isWaiting(registry.get(speakAtom))).toBe(false);
+  });
+
+  it("appends an error bubble when SendTurn fails", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "StartSession":
+          return Effect.succeed(new SessionStarted({ sessionId }));
+        case "SendTurn":
+          return Effect.fail(new ProviderError({ message: "agent down" }));
+        case "SubscribeEvents":
+          return Stream.never;
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitWhileWaiting(registry);
+
+    expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
+      expect.objectContaining({ from: "error", text: "agent down" }),
+    ]);
+  });
+
+  it("appends an error bubble when StartSession fails", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "StartSession":
+          return Effect.fail(new ProviderError({ message: "no agent" }));
+        case "SendTurn":
+          return Effect.void;
+        case "SubscribeEvents":
+          return Stream.never;
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitWhileWaiting(registry);
+
+    expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
+      expect.objectContaining({ from: "error", text: "no agent" }),
+    ]);
+  });
+});

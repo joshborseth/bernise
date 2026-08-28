@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@bernise/contracts": "workspace:*",
+    "@effect/atom-react": "4.0.0-rc.112",
     "@effect/platform-browser": "rc",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
