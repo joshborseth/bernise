@@ -6,7 +6,7 @@ This is the same split as [t3code](https://github.com/pingdotgg/t3code): a serve
 
 ## Layout
 
-- `apps/web` is the renderer: a real browser via `vp run dev:web`, or Electron via `vp run dev`. Both talk to `apps/server` over HTTP (`GET /health`) and Effect RPC (`/rpc`).
+- `apps/web` is the renderer: a real browser via `vp run dev:web`, or Electron via `vp run dev`. Both talk to `apps/server` over HTTP (`GET /health`) and Effect RPC over WebSocket (`/rpc`).
 - `apps/server` owns the Cursor ACP process. It spawns `cursor-agent acp` (override with `BERNISE_CURSOR_BIN`), talks JSON-RPC over stdio, and streams `ProviderTurnDelta` events to the client.
 - `Provider` in `apps/server/src/Provider.ts` is implemented by `CursorProviderLive`.
 
@@ -27,7 +27,7 @@ Tool permissions are auto-approved for this first shot so the agent can write fi
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over HTTP NDJSON (`protocol: "http"`). The Speak composer starts one session, subscribes, and appends assistant text as it streams. `SendTurn` also returns the turn's text so the bubble still appears if the browser buffers the long-lived subscribe response.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). The Speak composer starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. `SendTurn` waits until the ACP prompt finishes so the composer can stay pending.
 
 ## Later
 
