@@ -30,11 +30,26 @@ const fangSinkY = 0.018;
 const fangSinkZ = 0.04;
 
 type PetRegion = "head" | "body";
-const sleepDrop = -0.42;
-const sleepPitch = 1.05;
-const sleepYaw = 0.12;
-const sleepRoll = 0.28;
-const sleepPush = 0.18;
+const sleepDrop = -0.06;
+const sleepPitch = 0.2;
+const sleepYaw = 0.04;
+const sleepRoll = 0.08;
+const sleepPush = 0.02;
+const sleepBodyDrop = -0.12;
+const sleepBodyScaleX = 1.08;
+const sleepBodyScaleY = 0.88;
+const sleepBodyScaleZ = 1.06;
+const sleepHeadX = 0.02;
+const sleepHeadY = -0.1;
+const sleepHeadZ = 0.12;
+const sleepHeadPitch = 0.28;
+const sleepHeadYaw = 0.08;
+const sleepHeadRoll = 0.12;
+const sleepPawIn = 0.06;
+const sleepPawForward = 0.06;
+const sleepTailX = 0.1;
+const sleepTailY = 0.16;
+const sleepTailZ = 0.24;
 
 function easeOutCubic(value: number): number {
   return 1 - (1 - value) ** 3;
@@ -161,9 +176,9 @@ export function BerniseCat({
       />
       <ContactShadows
         position={[0, -1.2, 0]}
-        opacity={0.16}
+        opacity={sleeping ? 0.26 : 0.16}
         scale={6.4}
-        blur={3.2}
+        blur={sleeping ? 1.6 : 3.2}
         far={2.2}
         resolution={256}
         frames={reducedMotion ? 1 : Number.POSITIVE_INFINITY}
@@ -394,21 +409,22 @@ function BerniseFigure({
       if (asleep) {
         root.position.set(0, sleepDrop, sleepPush);
         root.rotation.set(sleepPitch, sleepYaw, sleepRoll);
-        body.scale.set(1.06, 0.88, 1.04);
-        head.position.set(0.08, -0.06, 0.14);
-        head.rotation.set(0.12, 0.16, 0.38);
+        body.position.set(0, sleepBodyDrop, 0);
+        body.scale.set(sleepBodyScaleX, sleepBodyScaleY, sleepBodyScaleZ);
+        head.position.set(sleepHeadX, sleepHeadY, sleepHeadZ);
+        head.rotation.set(sleepHeadPitch, sleepHeadYaw, sleepHeadRoll);
         mouth.scale.set(1.15, 0.72, 1);
         fangs.scale.setScalar(0);
         fangs.position.copy(restPose.fangs);
         leftPaw.position.set(
-          restPose.leftPaw.x + 0.1,
-          restPose.leftPaw.y + 0.05,
-          restPose.leftPaw.z + 0.1,
+          restPose.leftPaw.x + sleepPawIn,
+          restPose.leftPaw.y,
+          restPose.leftPaw.z + sleepPawForward,
         );
         rightPaw.position.set(
-          restPose.rightPaw.x - 0.1,
-          restPose.rightPaw.y + 0.05,
-          restPose.rightPaw.z + 0.1,
+          restPose.rightPaw.x - sleepPawIn,
+          restPose.rightPaw.y,
+          restPose.rightPaw.z + sleepPawForward,
         );
         leftPaw.rotation.set(-0.18, 0, 0.08);
         rightPaw.rotation.set(-0.18, 0, -0.08);
@@ -416,6 +432,11 @@ function BerniseFigure({
         refs.rightEar.current?.rotation.set(0.22, 0, -0.08);
         refs.whiskers.current?.rotation.set(0, 0, 0);
         tail.scale.setScalar(1);
+        tail.rotation.set(
+          restPose.tail.x + sleepTailX,
+          restPose.tail.y + sleepTailY,
+          restPose.tail.z + sleepTailZ,
+        );
         poseEyes(squintOpenness, squintWidth, 0, true);
         for (const id of ["leftPupil", "rightPupil"] as const) {
           refs[id].current?.scale.set(1, 1, 1);
@@ -424,6 +445,7 @@ function BerniseFigure({
       }
       root.position.set(0, recoiling ? 0.05 : 0, recoiling ? -0.22 : 0);
       root.rotation.set(recoiling ? -0.06 : 0.02, 0, 0);
+      body.position.set(0, 0, 0);
       body.scale.set(1, 1, 1);
       head.position.set(0, 0, recoiling ? -0.08 : 0);
       head.rotation.set(
@@ -557,27 +579,33 @@ function BerniseFigure({
     root.rotation.y = MathUtils.damp(root.rotation.y, asleep ? sleepYaw : 0, settle, dt);
     root.rotation.z = MathUtils.damp(root.rotation.z, asleep ? sleepRoll : 0, settle, dt);
 
+    body.position.y = MathUtils.damp(
+      body.position.y,
+      asleep ? sleepBodyDrop : 0,
+      asleep ? settle : 5,
+      dt,
+    );
     body.scale.y =
-      (asleep ? 0.88 : 1) +
+      (asleep ? sleepBodyScaleY : 1) +
       breath * (asleep ? 0.012 : thinking && !happyPurr && !escalate ? 0.018 : 0.028);
-    body.scale.x = (asleep ? 1.06 : 1) - breath * (asleep ? 0.006 : 0.012);
-    body.scale.z = (asleep ? 1.04 : 1) - breath * (asleep ? 0.004 : 0.008);
+    body.scale.x = (asleep ? sleepBodyScaleX : 1) - breath * (asleep ? 0.006 : 0.012);
+    body.scale.z = (asleep ? sleepBodyScaleZ : 1) - breath * (asleep ? 0.004 : 0.008);
 
     head.position.x = MathUtils.damp(
       head.position.x,
-      asleep ? 0.08 : lookX * strike.lunge * 0.08,
+      asleep ? sleepHeadX : lookX * strike.lunge * 0.08,
       asleep ? settle : 18,
       dt,
     );
     head.position.y = MathUtils.damp(
       head.position.y,
-      asleep ? -0.06 : -lookY * strike.lunge * 0.05 + hiss.recoil * 0.02,
+      asleep ? sleepHeadY : -lookY * strike.lunge * 0.05 + hiss.recoil * 0.02,
       asleep ? settle : 18,
       dt,
     );
     head.position.z = MathUtils.damp(
       head.position.z,
-      asleep ? 0.14 : strike.lunge * 0.2 - hiss.recoil * 0.08,
+      asleep ? sleepHeadZ : strike.lunge * 0.2 - hiss.recoil * 0.08,
       asleep ? settle : 18,
       dt,
     );
@@ -587,7 +615,7 @@ function BerniseFigure({
         (happyPurr
           ? 0
           : asleep
-            ? 0.16
+            ? sleepHeadYaw
             : striking
               ? lookX * 0.08
               : thinking
@@ -607,7 +635,7 @@ function BerniseFigure({
           : recoiling
             ? 0.16
             : asleep
-              ? 0.12
+              ? sleepHeadPitch
               : happyPurr
                 ? 0.05
                 : listening
@@ -625,7 +653,7 @@ function BerniseFigure({
       (striking
         ? -0.05
         : asleep
-          ? 0.38
+          ? sleepHeadRoll
           : happyPurr
             ? 0.06
             : thinking
@@ -773,23 +801,23 @@ function BerniseFigure({
       restPose.tail.x +
       Math.sin(t * tailSpeed) * 0.08 * tailSwing +
       (listening && !happyPurr && !escalate ? -0.1 : 0) +
-      (asleep ? 0.12 : 0);
+      (asleep ? sleepTailX : 0);
     tail.rotation.y =
       restPose.tail.y +
       Math.sin(t * (recoiling ? 8.4 : striking ? 5.2 : asleep ? 0.48 : happyPurr ? 0.7 : 1.15)) *
         0.12 *
         tailSwing +
-      (asleep ? 0.18 : 0);
+      (asleep ? sleepTailY : 0);
     tail.rotation.z =
       restPose.tail.z +
       Math.sin(t * (recoiling ? 10.6 : striking ? 7.1 : asleep ? 0.62 : happyPurr ? 1.05 : 2.1)) *
         0.14 *
         tailSwing +
-      (asleep ? 0.32 : 0);
+      (asleep ? sleepTailZ : 0);
 
     leftPaw.position.x = MathUtils.damp(
       leftPaw.position.x,
-      restPose.leftPaw.x + (recoiling ? -0.08 : asleep ? 0.1 : 0),
+      restPose.leftPaw.x + (recoiling ? -0.08 : asleep ? sleepPawIn : 0),
       6,
       dt,
     );
@@ -801,7 +829,7 @@ function BerniseFigure({
           : recoiling
             ? 0.02
             : asleep
-              ? 0.05
+              ? 0
               : !happyPurr && thinking
                 ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08
                 : 0),
@@ -810,7 +838,7 @@ function BerniseFigure({
     );
     leftPaw.position.z = MathUtils.damp(
       leftPaw.position.z,
-      restPose.leftPaw.z + (recoiling ? -0.06 : asleep ? 0.1 : 0),
+      restPose.leftPaw.z + (recoiling ? -0.06 : asleep ? sleepPawForward : 0),
       6,
       dt,
     );
@@ -829,19 +857,19 @@ function BerniseFigure({
 
     rightPaw.position.x = MathUtils.damp(
       rightPaw.position.x,
-      restPose.rightPaw.x + (recoiling ? 0.08 : asleep ? -0.1 : 0),
+      restPose.rightPaw.x + (recoiling ? 0.08 : asleep ? -sleepPawIn : 0),
       6,
       dt,
     );
     rightPaw.position.y = MathUtils.damp(
       rightPaw.position.y,
-      restPose.rightPaw.y + (recoiling ? 0.02 : asleep ? 0.05 : 0),
+      restPose.rightPaw.y + (recoiling ? 0.02 : 0),
       6,
       dt,
     );
     rightPaw.position.z = MathUtils.damp(
       rightPaw.position.z,
-      restPose.rightPaw.z + (recoiling ? -0.06 : asleep ? 0.1 : 0),
+      restPose.rightPaw.z + (recoiling ? -0.06 : asleep ? sleepPawForward : 0),
       6,
       dt,
     );
