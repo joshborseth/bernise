@@ -823,16 +823,7 @@ function BerniseFigure({
     );
     leftPaw.position.y = MathUtils.damp(
       leftPaw.position.y,
-      restPose.leftPaw.y +
-        (striking
-          ? 0.08
-          : recoiling
-            ? 0.02
-            : asleep
-              ? 0
-              : !happyPurr && thinking
-                ? 0.1 + Math.abs(Math.sin(t * 3.4)) * 0.08
-                : 0),
+      restPose.leftPaw.y + (striking ? 0.08 : recoiling ? 0.02 : 0),
       6,
       dt,
     );
@@ -844,7 +835,7 @@ function BerniseFigure({
     );
     leftPaw.rotation.x = MathUtils.damp(
       leftPaw.rotation.x,
-      recoiling ? -0.28 : striking ? -0.22 : asleep ? -0.18 : !happyPurr && thinking ? -0.3 : 0,
+      recoiling ? -0.28 : striking ? -0.22 : asleep ? -0.18 : 0,
       6,
       dt,
     );
