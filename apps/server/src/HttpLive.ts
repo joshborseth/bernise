@@ -14,6 +14,7 @@ export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault(
 const RpcLive = RpcServer.layerHttp({
   group: BerniseRpcs,
   path: "/rpc",
+  protocol: "http",
 }).pipe(Layer.provide(RpcHandlersLive), Layer.provide(CursorProviderLive));
 
 export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cors());

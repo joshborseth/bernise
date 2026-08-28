@@ -39,4 +39,11 @@ describe("bernise server", () => {
       expect(pong.pong).toBe(true);
     }).pipe(Effect.provide(RpcHandlersLive), Effect.provide(StubProviderLive)),
   );
+
+  it.effect("POST /rpc is registered for HTTP RPC", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.post("/rpc");
+      expect(response.status).not.toBe(404);
+    }).pipe(Effect.provide(TestHttpLive)),
+  );
 });
