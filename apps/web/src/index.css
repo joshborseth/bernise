@@ -223,17 +223,12 @@ body::after {
   inset: 0;
   z-index: 1;
   overflow: hidden;
-  cursor: grab;
   touch-action: none;
   user-select: none;
 }
 
 .mascot-stage canvas {
   display: block;
-}
-
-.mascot-purring .mascot-stage {
-  cursor: grabbing;
 }
 
 .mascot-sleeping .mascot-halo {
@@ -312,10 +307,6 @@ body::after {
     );
 }
 
-.mascot-biting .mascot-stage {
-  cursor: grabbing;
-}
-
 .mascot-hissing .mascot-halo {
   animation-duration: 0.42s;
   background:
@@ -329,10 +320,6 @@ body::after {
       color-mix(in srgb, var(--ink) 36%, transparent),
       transparent 72%
     );
-}
-
-.mascot-hissing .mascot-stage {
-  cursor: grabbing;
 }
 
 @media (prefers-reduced-motion: reduce) {

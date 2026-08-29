@@ -240,6 +240,7 @@ function BerniseFigure({
   const speech = useRef({ key: "", until: 0 });
   const rumble = useRef({ amp: 0, y: 0 });
   const petRegion = useRef<PetRegion>("body");
+  const hoverCount = useRef(0);
   const overpet = useRef({
     heldSince: -1,
     strikeAt: -1,
@@ -249,6 +250,31 @@ function BerniseFigure({
     region: "body" as PetRegion,
   });
 
+  const setStageCursor = (holding: boolean, over: boolean) => {
+    gl.domElement.style.cursor = holding ? "grabbing" : over ? "grab" : "";
+  };
+
+  useEffect(() => {
+    setStageCursor(purring || biting || hissing, hoverCount.current > 0);
+  }, [purring, biting, hissing]);
+
+  useEffect(() => {
+    return () => {
+      gl.domElement.style.cursor = "";
+    };
+  }, [gl]);
+
+  const onPetOver = (event: ThreeEvent<PointerEvent>) => {
+    event.stopPropagation();
+    hoverCount.current += 1;
+    setStageCursor(purring || biting || hissing, true);
+  };
+
+  const onPetOut = () => {
+    hoverCount.current = Math.max(0, hoverCount.current - 1);
+    setStageCursor(purring || biting || hissing, hoverCount.current > 0);
+  };
+
   const onPetDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
     if (biting || hissing) {
@@ -256,6 +282,7 @@ function BerniseFigure({
     }
     petRegion.current = petRegionFrom(event);
     gl.domElement.setPointerCapture(event.pointerId);
+    setStageCursor(true, true);
     onPurringChange(true);
   };
 
@@ -264,6 +291,7 @@ function BerniseFigure({
     if (gl.domElement.hasPointerCapture(event.pointerId)) {
       gl.domElement.releasePointerCapture(event.pointerId);
     }
+    setStageCursor(false, hoverCount.current > 0);
     onPurringChange(false);
     onBitingChange(false);
     onHissingChange(false);
@@ -879,7 +907,13 @@ function BerniseFigure({
   });
 
   return (
-    <group onPointerDown={onPetDown} onPointerUp={onPetUp} onPointerCancel={onPetUp}>
+    <group
+      onPointerOver={onPetOver}
+      onPointerOut={onPetOut}
+      onPointerDown={onPetDown}
+      onPointerUp={onPetUp}
+      onPointerCancel={onPetUp}
+    >
       <Part node={bernise} materials={materials} refs={refs} />
     </group>
   );
