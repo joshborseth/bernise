@@ -3,12 +3,16 @@
   "compilerOptions": {
     "module": "preserve",
     "moduleResolution": "bundler",
+    "verbatimModuleSyntax": false,
     "noEmit": true,
     "composite": false,
     "declaration": false,
     "declarationMap": false,
     "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "paths": {
+      "~/*": ["./src/*"]
+    }
   },
   "include": ["src"]
 }

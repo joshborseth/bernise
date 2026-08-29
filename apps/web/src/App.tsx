@@ -1,9 +1,22 @@
 import { type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useState, useEffect, type FormEvent } from "react";
-import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import { useEffect, useState, type FormEvent } from "react";
 import { BerniseMascot } from "./BerniseMascot.tsx";
+import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { cn } from "~/lib/utils";
 import { deriveBerniseMood } from "./mascot/mood.ts";
 import {
   bootSettingsAtom,
@@ -28,6 +41,9 @@ const statusLabel = (snapshot: ProviderSnapshot): string => {
   }
   return "fault";
 };
+
+const shellClass =
+  "relative z-1 mx-auto flex min-h-dvh max-w-[52rem] flex-col px-[1.35rem] pt-7 pb-[1.15rem]";
 
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
@@ -80,44 +96,60 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   };
 
   return (
-    <main className="shell">
-      <header className="topbar">
-        <p className="topbar-kicker">station</p>
-        <button type="button" className="icon-button" onClick={onOpenSettings}>
+    <main className={shellClass}>
+      <header className="mb-1.5 flex items-baseline justify-between gap-4">
+        <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
+          station
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="rounded-full"
+          onClick={onOpenSettings}
+        >
           Config
-        </button>
+        </Button>
       </header>
 
-      <section className="stage">
+      <section className="grid flex-none justify-items-center content-center py-3 pb-[0.45rem]">
         <BerniseMascot mood={mood} speakKey={speakKey} />
       </section>
 
-      <section className="thread" aria-live="polite">
+      <section
+        className="grid content-start gap-[0.7rem] px-[0.15rem] py-1 pb-2 empty:hidden"
+        aria-live="polite"
+      >
         {visibleMessages.map((message) =>
           message.from === "user" ? (
-            <article key={message.id} className="user-bubble">
-              <p>{message.text}</p>
+            <article key={message.id} className={userBubbleClass}>
+              <p className="m-0 text-[0.92rem] leading-[1.45]">{message.text}</p>
             </article>
           ) : message.from === "assistant" ? (
-            <article key={message.id} className="assistant-bubble">
-              <p>{message.text}</p>
+            <article key={message.id} className={assistantBubbleClass}>
+              <p className="m-0 text-[0.92rem] leading-[1.45] whitespace-pre-wrap">
+                {message.text}
+              </p>
             </article>
           ) : (
-            <article key={message.id} className="error-bubble" role="alert">
-              <p>{message.text}</p>
+            <article key={message.id} className={errorBubbleClass} role="alert">
+              <p className="m-0 text-[0.86rem] leading-[1.45]">{message.text}</p>
             </article>
           ),
         )}
         {pending ? (
-          <article className="status-bubble" aria-live="polite">
-            <p>Bernise is thinking…</p>
+          <article className={statusBubbleClass} aria-live="polite">
+            <p className="m-0 text-[0.82rem] leading-[1.45]">Bernise is thinking…</p>
           </article>
         ) : null}
       </section>
 
-      <form className="composer" onSubmit={onSpeak}>
-        <div className="composer-row">
-          <input
+      <form
+        className="sticky bottom-[0.85rem] z-2 mt-auto grid gap-[0.45rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] focus-within:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] focus-within:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
+        onSubmit={onSpeak}
+      >
+        <div className="grid grid-cols-[1fr_auto] gap-2.5">
+          <Input
             value={draft}
             onChange={(event) => {
               setDraft(event.target.value);
@@ -132,33 +164,51 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             aria-label="Speak to Bernise"
             autoComplete="off"
             disabled={pending}
+            className="h-auto border-0 bg-transparent px-[0.85rem] py-[0.7rem] shadow-none md:text-[0.92rem] focus-visible:border-transparent focus-visible:ring-0"
           />
-          <button type="submit" disabled={!canSpeak}>
+          <Button
+            type="submit"
+            size="lg"
+            className="self-center tracking-[0.04em]"
+            disabled={!canSpeak}
+          >
             {pending ? "Thinking…" : "Speak"}
-          </button>
+          </Button>
         </div>
-        <div className="composer-meta">
+        <div className="flex items-center px-[0.2rem] pb-[0.1rem]">
           {modelView.kind === "error" ? (
-            <p className="composer-model-error" role="alert">
+            <p
+              className="m-0 px-[0.55rem] py-[0.15rem] pb-[0.2rem] text-[0.72rem] leading-[1.4] tracking-[0.02em] text-destructive"
+              role="alert"
+            >
               {formatError(modelView.error)}
             </p>
           ) : modelView.kind === "select" ? (
-            <label className="composer-model">
-              <span className="sr-only">Model</span>
-              <select
-                value={modelView.value}
-                disabled={pending || modelsWaiting}
-                onChange={(event) => {
-                  updateSettings({ codex: { model: event.target.value } });
-                }}
-              >
+            <Select
+              value={modelView.value}
+              disabled={pending || modelsWaiting}
+              items={modelView.options.map((option) => ({
+                value: option.id,
+                label: option.label,
+              }))}
+              onValueChange={(value) => {
+                if (value === null) {
+                  return;
+                }
+                updateSettings({ codex: { model: value } });
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Model" className="max-w-64 rounded-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent align="start" alignItemWithTrigger={false}>
                 {modelView.options.map((option) => (
-                  <option key={option.id} value={option.id}>
+                  <SelectItem key={option.id || "codex-default"} value={option.id}>
                     {option.label}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
-            </label>
+              </SelectContent>
+            </Select>
           ) : null}
         </div>
       </form>
@@ -175,16 +225,16 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
   const probing = busy || AsyncResult.isWaiting(refreshResult);
 
   return (
-    <main className="shell settings-shell">
-      <header className="topbar">
-        <button type="button" className="text-button" onClick={onBack}>
+    <main className={cn(shellClass, "gap-4")}>
+      <header className="mb-1.5 flex items-baseline justify-between gap-4">
+        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={onBack}>
           Back to grill
-        </button>
-        <h1>Provider bay</h1>
+        </Button>
+        <h1 className="m-0 text-[1.05rem] font-medium tracking-[0.04em]">Provider bay</h1>
       </header>
-      <p className="settings-lede">
+      <p className="m-0 text-[0.88rem] leading-normal text-muted-foreground">
         Bernise finds the local Codex CLI on PATH. Leave Binary path blank unless PATH is not
-        enough, run <code>codex login</code>, then Check connections.
+        enough, run <code className="text-foreground">codex login</code>, then Check connections.
       </p>
       <ProviderCard
         snapshot={snapshots.codex}
@@ -198,16 +248,17 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
           updateSettings({ codex: { homePath } });
         }}
       />
-      <button
+      <Button
         type="button"
-        className="check-button"
+        size="lg"
+        className="justify-self-start tracking-[0.04em]"
         disabled={probing}
         onClick={() => {
           refresh();
         }}
       >
         {probing ? "Checking…" : "Check connections"}
-      </button>
+      </Button>
     </main>
   );
 }
@@ -228,57 +279,116 @@ function ProviderCard({
   readonly onHomePath: (value: string) => void;
 }) {
   return (
-    <article className={`provider-card status-${snapshot.status}`}>
-      <header>
-        <h2>Codex</h2>
-        <span className="status-pill">{statusLabel(snapshot)}</span>
-      </header>
-      <dl>
-        <div>
-          <dt>Auth</dt>
-          <dd>{snapshot.auth}</dd>
+    <Card className="rounded-[1.2rem] shadow-[0_10px_22px_color-mix(in_srgb,var(--ink)_5%,transparent)] ring-border">
+      <CardHeader>
+        <CardTitle className="text-[0.95rem] font-medium">Codex</CardTitle>
+        <CardAction>
+          <Badge variant={statusBadgeVariant(snapshot)} className={statusBadgeClass(snapshot)}>
+            {statusLabel(snapshot)}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <dl className="mb-1 grid grid-cols-2 gap-x-3 gap-y-[0.45rem]">
+          <div>
+            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
+              Auth
+            </dt>
+            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">{snapshot.auth}</dd>
+          </div>
+          <div>
+            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
+              Version
+            </dt>
+            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">{snapshot.version ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
+              Last checked
+            </dt>
+            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">
+              {snapshot.checkedAt.length > 0 ? new Date(snapshot.checkedAt).toLocaleString() : "—"}
+            </dd>
+          </div>
+        </dl>
+        <div className="grid gap-1.5">
+          <Label htmlFor="codex-binary-path" className="tracking-[0.04em] text-muted-foreground">
+            Binary path
+          </Label>
+          <Input
+            id="codex-binary-path"
+            value={binaryPath}
+            placeholder="codex"
+            disabled={probing}
+            onChange={(event) => {
+              onBinaryPath(event.target.value);
+            }}
+          />
+          <p className="text-[0.72rem] leading-[1.45] tracking-normal text-muted-foreground">
+            Leave blank to use <code className="text-foreground">codex</code> on PATH. Set this only
+            when PATH cannot find the CLI.
+          </p>
         </div>
-        <div>
-          <dt>Version</dt>
-          <dd>{snapshot.version ?? "—"}</dd>
+        <div className="grid gap-1.5">
+          <Label htmlFor="codex-home-path" className="tracking-[0.04em] text-muted-foreground">
+            CODEX_HOME path
+          </Label>
+          <Input
+            id="codex-home-path"
+            value={homePath}
+            placeholder="~/.codex"
+            disabled={probing}
+            onChange={(event) => {
+              onHomePath(event.target.value);
+            }}
+          />
         </div>
-        <div>
-          <dt>Last checked</dt>
-          <dd>
-            {snapshot.checkedAt.length > 0 ? new Date(snapshot.checkedAt).toLocaleString() : "—"}
-          </dd>
-        </div>
-      </dl>
-      <label>
-        Binary path
-        <input
-          value={binaryPath}
-          placeholder="codex"
-          disabled={probing}
-          onChange={(event) => {
-            onBinaryPath(event.target.value);
-          }}
-        />
-        <span className="field-hint">
-          Leave blank to use <code>codex</code> on PATH. Set this only when PATH cannot find the
-          CLI.
-        </span>
-      </label>
-      <label>
-        CODEX_HOME path
-        <input
-          value={homePath}
-          placeholder="~/.codex"
-          disabled={probing}
-          onChange={(event) => {
-            onHomePath(event.target.value);
-          }}
-        />
-      </label>
-      <p className="login-hint">
-        Login with <code>codex login</code> on the machine running the Bernise server.
-      </p>
-      <p className="probe-message">{snapshot.message}</p>
-    </article>
+        <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
+          Login with <code className="text-foreground">codex login</code> on the machine running the
+          Bernise server.
+        </p>
+        <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
+          {snapshot.message}
+        </p>
+      </CardContent>
+    </Card>
   );
 }
+
+const bubbleMotion = "animate-bubble-in motion-reduce:animate-none";
+
+const userBubbleClass = cn(
+  bubbleMotion,
+  "justify-self-end max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_0.4rem_1.35rem] border border-[color-mix(in_srgb,var(--sky-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--sky)_82%,white)] px-[0.95rem] py-3 shadow-[0_8px_18px_color-mix(in_srgb,var(--sky-deep)_16%,transparent)]",
+);
+
+const assistantBubbleClass = cn(
+  bubbleMotion,
+  "justify-self-start max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_1.35rem_0.4rem] border border-[color-mix(in_srgb,var(--peach-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--peach)_78%,white)] px-[0.95rem] py-3 shadow-[0_8px_18px_color-mix(in_srgb,var(--peach-deep)_16%,transparent)]",
+);
+
+const errorBubbleClass = cn(
+  bubbleMotion,
+  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-[color-mix(in_srgb,var(--rose)_55%,var(--line))] bg-[color-mix(in_srgb,var(--rose)_28%,white)] px-[0.9rem] py-[0.7rem]",
+);
+
+const statusBubbleClass = cn(
+  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-dashed border-[color-mix(in_srgb,var(--muted)_45%,var(--line))] bg-[color-mix(in_srgb,var(--bg-wash)_70%,white)] px-[0.85rem] py-[0.55rem] text-muted-foreground",
+);
+
+const statusBadgeVariant = (snapshot: ProviderSnapshot) => {
+  if (snapshot.status === "error") {
+    return "destructive" as const;
+  }
+  if (snapshot.status === "ready") {
+    return "outline" as const;
+  }
+  return "secondary" as const;
+};
+
+const statusBadgeClass = (snapshot: ProviderSnapshot) => {
+  if (snapshot.status === "ready") {
+    return "border-transparent bg-[color-mix(in_srgb,var(--sky)_50%,white)] text-foreground uppercase tracking-[0.08em]";
+  }
+  return "uppercase tracking-[0.08em]";
+};
