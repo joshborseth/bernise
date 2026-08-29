@@ -5,9 +5,8 @@ import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { probeCodex, probeCursor } from "../src/ProviderHealth.ts";
+import { probeCodex } from "../src/ProviderHealth.ts";
 
-const cursorSource = fileURLToPath(new URL("./fake-acp-agent.mjs", import.meta.url));
 const codexSource = fileURLToPath(new URL("./fake-codex-app-server.mjs", import.meta.url));
 
 const makeFakeBin = (
@@ -33,33 +32,6 @@ ${modePrefix}exec ${JSON.stringify(process.execPath)} ${JSON.stringify(source)} 
 const probeLayer = NodeServices.layer;
 
 describe("provider probes", () => {
-  it.effect("reports Cursor ready when ACP initialize succeeds", () => {
-    const fake = makeFakeBin(cursorSource, "fake-cursor-agent", "FAKE_ACP_MODE");
-    return Effect.gen(function* () {
-      const snapshot = yield* probeCursor({
-        command: fake.bin,
-        cwd: fake.workspace,
-        enabled: true,
-      });
-      expect(snapshot.status).toBe("ready");
-      expect(snapshot.installed).toBe(true);
-      expect(snapshot.auth).toBe("authenticated");
-    }).pipe(Effect.scoped, Effect.provide(probeLayer));
-  });
-
-  it.effect("reports Cursor missing when the binary is absent", () =>
-    Effect.gen(function* () {
-      const snapshot = yield* probeCursor({
-        command: join(dirname(cursorSource), "definitely-missing-cursor-agent"),
-        cwd: tmpdir(),
-        enabled: true,
-      });
-      expect(snapshot.status).toBe("error");
-      expect(snapshot.installed).toBe(false);
-      expect(snapshot.message).toMatch(/cursor-agent|not found/i);
-    }).pipe(Effect.scoped, Effect.provide(probeLayer)),
-  );
-
   it.effect("reports Codex ready when account/read is authenticated", () => {
     const fake = makeFakeBin(codexSource, "fake-codex", "FAKE_CODEX_MODE");
     return Effect.gen(function* () {

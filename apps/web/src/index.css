@@ -339,32 +339,6 @@ body::after {
   gap: 0.6rem;
 }
 
-.provider-switch {
-  display: flex;
-  gap: 0.3rem;
-  padding: 0.15rem;
-}
-
-.provider-switch button {
-  flex: 1;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid transparent;
-  border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--bg-wash) 70%, white);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-
-.provider-switch button.is-active {
-  background: color-mix(in srgb, var(--sky) 55%, white);
-  border-color: color-mix(in srgb, var(--sky-deep) 40%, var(--line));
-  color: var(--ink);
-}
-
 .composer input {
   width: 100%;
   min-width: 0;
@@ -456,11 +430,6 @@ body::after {
   color: var(--muted);
   font-size: 0.88rem;
   line-height: 1.5;
-}
-
-.provider-grid {
-  display: grid;
-  gap: 0.9rem;
 }
 
 .provider-card {

@@ -81,16 +81,18 @@ describe("bernise server", () => {
     ).pipe(Effect.provide(WsRpcClientLive), Effect.provide(TestHttpLive)),
   );
 
-  it.effect("GetSettings and UpdateSettings persist the active provider", () =>
+  it.effect("GetSettings and UpdateSettings persist Codex paths", () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(BerniseRpcs);
       const initial = yield* client.GetSettings();
-      expect(initial.activeProvider).toBe("cursor");
-      const next = yield* client.UpdateSettings({ activeProvider: "codex" });
-      expect(next.activeProvider).toBe("codex");
+      expect(initial.codex.binaryPath).toBe("");
+      const next = yield* client.UpdateSettings({
+        codex: { binaryPath: "/usr/local/bin/codex", homePath: "~/.codex" },
+      });
+      expect(next.codex.binaryPath).toBe("/usr/local/bin/codex");
+      expect(next.codex.homePath).toBe("~/.codex");
       expect(yield* client.GetSettings()).toEqual(next);
       const snapshots = yield* client.GetProviderSnapshots();
-      expect(snapshots.cursor.kind).toBe("cursor");
       expect(snapshots.codex.kind).toBe("codex");
       expect(yield* client.RefreshProviders()).toEqual(snapshots);
     }).pipe(

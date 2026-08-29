@@ -1,10 +1,4 @@
-import {
-  ProviderError,
-  providerDisplayName,
-  type ProviderEvent,
-  type ProviderKind,
-  type SessionId,
-} from "@bernise/contracts";
+import { ProviderError, type ProviderEvent, type SessionId } from "@bernise/contracts";
 import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
@@ -22,7 +16,6 @@ export type ChatState = {
   readonly messages: ReadonlyArray<ChatMessage>;
   readonly sessionId: SessionId | undefined;
   readonly assistantId: string | undefined;
-  readonly activeProvider: ProviderKind;
 };
 
 export const opening: ChatMessage = {
@@ -34,7 +27,6 @@ export const initialChat: ChatState = {
   messages: [opening],
   sessionId: undefined,
   assistantId: undefined,
-  activeProvider: "cursor",
 };
 
 export const formatError = (error: unknown): string => {
@@ -94,15 +86,14 @@ export const appendError = (state: ChatState, text: string, id: string): ChatSta
   messages: [...state.messages, { id, from: "error", text }],
 });
 
-export const resetSession = (state: ChatState, activeProvider: ProviderKind): ChatState => ({
+export const resetSession = (state: ChatState): ChatState => ({
   ...state,
   sessionId: undefined,
   assistantId: undefined,
-  activeProvider,
 });
 
-export const noReplyMessage = (kind: ProviderKind, stopReason: string): string =>
-  `No reply from ${providerDisplayName(kind)} (stopReason: ${stopReason}).`;
+export const noReplyMessage = (stopReason: string): string =>
+  `No reply from Codex (stopReason: ${stopReason}).`;
 
 export const chatAtom = Atom.make(initialChat).pipe(Atom.keepAlive);
 
@@ -220,11 +211,7 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
     if (chat.assistantId === undefined) {
       get.set(
         chatAtom,
-        appendError(
-          chat,
-          noReplyMessage(chat.activeProvider, stopReasonFromTurn(result)),
-          crypto.randomUUID(),
-        ),
+        appendError(chat, noReplyMessage(stopReasonFromTurn(result)), crypto.randomUUID()),
       );
     }
   }).pipe(
