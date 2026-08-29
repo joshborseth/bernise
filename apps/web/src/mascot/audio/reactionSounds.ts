@@ -158,3 +158,60 @@ export function playScratch(): void {
     dur * 1000 + 24,
   );
 }
+
+/** Dry pellet tap that climbs about an octave across the drop sequence. */
+export function playPlink(index: number, count: number, radius: number): void {
+  const ctx = audioContext();
+  void ctx.resume();
+  const now = ctx.currentTime;
+  const dur = 0.06;
+  const size = Math.max(0, Math.min(1, (radius - 0.055) / 0.017));
+  const steps = Math.max(1, count - 1);
+  const hz = 880 * 2 ** (index / steps);
+  const peak = 0.08 + size * 0.04;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(peak, now);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  master.connect(ctx.destination);
+
+  const tap = ctx.createOscillator();
+  tap.type = "triangle";
+  tap.frequency.setValueAtTime(hz, now);
+  tap.frequency.exponentialRampToValueAtTime(hz * 0.55, now + dur);
+  tap.connect(master);
+
+  const length = Math.ceil(ctx.sampleRate * dur);
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const samples = buffer.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) {
+    samples[i] = Math.random() * 2 - 1;
+  }
+  const grit = ctx.createBufferSource();
+  grit.buffer = buffer;
+  const highpass = ctx.createBiquadFilter();
+  highpass.type = "highpass";
+  highpass.frequency.value = 1800;
+  const gritGain = ctx.createGain();
+  gritGain.gain.setValueAtTime(0.35, now);
+  gritGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.028);
+  grit.connect(highpass);
+  highpass.connect(gritGain);
+  gritGain.connect(master);
+
+  tap.start(now);
+  grit.start(now);
+  tap.stop(now + dur);
+  grit.stop(now + dur);
+
+  window.setTimeout(
+    () => {
+      tap.disconnect();
+      grit.disconnect();
+      highpass.disconnect();
+      gritGain.disconnect();
+      master.disconnect();
+    },
+    dur * 1000 + 24,
+  );
+}

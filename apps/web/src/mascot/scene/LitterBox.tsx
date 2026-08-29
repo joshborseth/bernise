@@ -88,26 +88,26 @@ export function LitterBox({
           ))}
         </group>
         <group ref={coversRef}>
-          {litterDrops.map((spec) => (
+          {litterDrops.map((spec, index) => (
             <mesh
-              key={`${String(spec.land[0])}:${String(spec.land[1])}:${String(spec.land[2])}`}
+              key={`cover-${String(index)}`}
               position={spec.land}
               visible={false}
               material={materials.litter}
             >
-              <sphereGeometry args={[spec.radius * 1.2, 12, 10]} />
+              <sphereGeometry args={[1, 12, 10]} />
             </mesh>
           ))}
         </group>
         <group ref={dropsRef}>
           {litterDrops.map((spec, index) => (
             <mesh
-              key={`${String(spec.start[0])}:${String(spec.land[0])}:${String(spec.radius)}`}
+              key={`drop-${String(index)}`}
               position={spec.start}
               frustumCulled={false}
               material={materials.drops[index]}
             >
-              <sphereGeometry args={[spec.radius, 14, 12]} />
+              <sphereGeometry args={[1, 14, 12]} />
             </mesh>
           ))}
         </group>
@@ -115,4 +115,3 @@ export function LitterBox({
     </group>
   );
 }
-
