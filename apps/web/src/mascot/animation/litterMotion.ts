@@ -1,4 +1,5 @@
-import type { Group, Vector3 } from "three";
+import { Mesh, MeshStandardMaterial } from "three";
+import type { Group, Object3D, Vector3 } from "three";
 import { clamp01, easeOutCubic } from "./easing.ts";
 
 export const litterWakeEnd = 0.4;
@@ -39,20 +40,27 @@ export const litterBoxX = 0.08;
 export const litterBoxZ = 0;
 export const litterBoxRestY = -1.16;
 export const litterBoxHiddenY = -2.3;
-export const litterDropStagger = 0.1;
+export const litterDropMin = 5;
+export const litterDropMax = 10;
+export const litterDropStaggerSpan = 0.72;
 export const litterDropFall = 0.2;
-export const litterDrops: ReadonlyArray<{
+export type LitterDrop = {
   readonly start: readonly [number, number, number];
   readonly land: readonly [number, number, number];
   readonly radius: number;
   readonly color: string;
-}> = [
+};
+export const litterDrops: ReadonlyArray<LitterDrop> = [
   { start: [0.58, 0.52, 0.26], land: [0.72, 0.19, 0.32], radius: 0.068, color: "#241510" },
   { start: [0.62, 0.54, 0.18], land: [0.88, 0.18, 0.12], radius: 0.06, color: "#1a100c" },
   { start: [0.52, 0.5, 0.34], land: [0.56, 0.19, 0.48], radius: 0.072, color: "#2e1a14" },
   { start: [0.66, 0.53, 0.22], land: [0.94, 0.17, 0.28], radius: 0.055, color: "#3a221a" },
   { start: [0.5, 0.51, 0.14], land: [0.4, 0.19, 0.02], radius: 0.064, color: "#1f120e" },
   { start: [0.6, 0.55, 0.38], land: [0.78, 0.18, 0.52], radius: 0.07, color: "#4a2c22" },
+  { start: [0.54, 0.53, 0.2], land: [0.64, 0.18, 0.08], radius: 0.058, color: "#2a1812" },
+  { start: [0.64, 0.52, 0.3], land: [0.84, 0.19, 0.4], radius: 0.066, color: "#351c16" },
+  { start: [0.48, 0.54, 0.28], land: [0.48, 0.17, 0.36], radius: 0.061, color: "#1c100c" },
+  { start: [0.7, 0.51, 0.16], land: [1.0, 0.18, 0.18], radius: 0.074, color: "#42241c" },
 ];
 export const litterKickOrigins: ReadonlyArray<readonly [number, number, number]> = [
   [0.42, 0.12, 0.22],
@@ -225,6 +233,50 @@ export function litterReducedMotion(elapsed: number): LitterMotion {
   };
 }
 
+export function litterDropStagger(count: number): number {
+  return litterDropStaggerSpan / Math.max(1, count - 1);
+}
+
+export function rollLitterDrops(): ReadonlyArray<LitterDrop> {
+  const shuffled = litterDrops.slice();
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const current = shuffled[i];
+    const swap = shuffled[j];
+    if (current === undefined || swap === undefined) {
+      continue;
+    }
+    shuffled[i] = swap;
+    shuffled[j] = current;
+  }
+  const count = litterDropMin + Math.floor(Math.random() * (litterDropMax - litterDropMin + 1));
+  return shuffled.slice(0, count);
+}
+
+export function litterDropFallProgress(dropT: number, index: number, count: number): number {
+  return easeOutCubic(clamp01((dropT - index * litterDropStagger(count)) / litterDropFall));
+}
+
+export function litterDropLanded(dropT: number, index: number, count: number): boolean {
+  return dropT - index * litterDropStagger(count) >= litterDropFall - 1e-9;
+}
+
+function hideChild(child: Object3D | undefined): void {
+  if (child !== undefined) {
+    child.visible = false;
+  }
+}
+
+function setDropColor(child: Object3D, color: string): void {
+  if (!(child instanceof Mesh)) {
+    return;
+  }
+  const material = child.material;
+  if (material instanceof MeshStandardMaterial) {
+    material.color.set(color);
+  }
+}
+
 export function poseLitterProps(
   box: Group | null,
   drops: Group | null,
@@ -232,6 +284,7 @@ export function poseLitterProps(
   covers: Group | null,
   motion: LitterMotion,
   time: number,
+  dropSpecs: ReadonlyArray<LitterDrop> = litterDrops,
 ): void {
   if (box !== null) {
     box.position.set(
@@ -242,16 +295,18 @@ export function poseLitterProps(
     box.scale.setScalar(1);
     box.visible = motion.box > 0.001;
   }
+  const count = dropSpecs.length;
   if (drops !== null) {
     for (let i = 0; i < drops.children.length; i++) {
-      const spec = litterDrops[i];
+      const spec = dropSpecs[i];
       const child = drops.children[i];
       if (spec === undefined || child === undefined) {
+        hideChild(child);
         continue;
       }
-      const fall = easeOutCubic(clamp01((motion.dropT - i * litterDropStagger) / litterDropFall));
+      const fall = litterDropFallProgress(motion.dropT, i, count);
       const appear = clamp01(fall / 0.18);
-      const size = appear * (1 - motion.bury);
+      const size = appear * (1 - motion.bury) * spec.radius;
       child.frustumCulled = false;
       child.visible = appear > 0.02 && motion.bury < 0.92;
       child.position.set(
@@ -260,31 +315,35 @@ export function poseLitterProps(
         spec.start[2] + (spec.land[2] - spec.start[2]) * fall,
       );
       child.scale.set(size, 1.1 * size, size);
+      setDropColor(child, spec.color);
     }
   }
   if (covers !== null) {
     for (let i = 0; i < covers.children.length; i++) {
-      const spec = litterDrops[i];
+      const spec = dropSpecs[i];
       const child = covers.children[i];
       if (spec === undefined || child === undefined) {
+        hideChild(child);
         continue;
       }
       const mound = easeOutCubic(motion.bury);
+      const cover = spec.radius * 1.2 * mound;
       child.visible = mound > 0.02;
       child.position.set(
         spec.land[0],
         spec.land[1] * (1 - mound * 0.35) + 0.06 * mound,
         spec.land[2],
       );
-      child.scale.set(1.7 * mound, 0.95 * mound, 1.55 * mound);
+      child.scale.set(1.7 * cover, 0.95 * cover, 1.55 * cover);
     }
   }
   if (kicks !== null) {
     for (let i = 0; i < kicks.children.length; i++) {
       const origin = litterKickOrigins[i];
-      const dest = litterDrops[i % litterDrops.length];
+      const dest = count > 0 ? dropSpecs[i % count] : undefined;
       const child = kicks.children[i];
       if (origin === undefined || dest === undefined || child === undefined) {
+        hideChild(child);
         continue;
       }
       const travel = easeOutCubic(motion.kick);

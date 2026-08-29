@@ -2,7 +2,7 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Euler, MathUtils, Vector3 } from "three";
 import type { Group, Object3D } from "three";
-import { playChomp, playHiss, playScratch } from "../audio/reactionSounds.ts";
+import { playChomp, playHiss, playPlink, playScratch } from "../audio/reactionSounds.ts";
 import { purrBurst } from "../audio/purr.ts";
 import { escalateDamp } from "../animation/easing.ts";
 import {
@@ -30,6 +30,7 @@ import {
   litterBodyScaleX,
   litterBodyScaleY,
   litterBodyScaleZ,
+  litterDropLanded,
   litterHeadPitch,
   litterHeadRoll,
   litterHeadY,
@@ -52,8 +53,10 @@ import {
   litterTailOffset,
   litterYaw,
   poseLitterProps,
+  rollLitterDrops,
   setFrontPaw,
   setPlantedHindPaw,
+  type LitterDrop,
 } from "../animation/litterMotion.ts";
 import {
   sleepBodyDrop,
@@ -154,7 +157,13 @@ export function AnimatedFigure({
     hissed: false,
     region: "body" as PetRegion,
   });
-  const litterClock = useRef({ startedAt: -1, lastScratchAt: -1, done: false });
+  const litterClock = useRef({
+    startedAt: -1,
+    lastScratchAt: -1,
+    dropHeard: 0,
+    done: false,
+    drops: [] as ReadonlyArray<LitterDrop>,
+  });
   const boxRef = useRef<Group>(null);
   const dropsRef = useRef<Group>(null);
   const kicksRef = useRef<Group>(null);
@@ -332,12 +341,16 @@ export function AnimatedFigure({
       if (litterClock.current.startedAt < 0) {
         litterClock.current.startedAt = t;
         litterClock.current.lastScratchAt = -1;
+        litterClock.current.dropHeard = 0;
         litterClock.current.done = false;
+        litterClock.current.drops = rollLitterDrops();
       }
     } else {
       litterClock.current.startedAt = -1;
       litterClock.current.lastScratchAt = -1;
+      litterClock.current.dropHeard = 0;
       litterClock.current.done = false;
+      litterClock.current.drops = [];
     }
     const litterElapsed =
       litterClock.current.startedAt < 0 ? -1 : t - litterClock.current.startedAt;
@@ -346,6 +359,24 @@ export function AnimatedFigure({
         ? litterReducedMotion(litterElapsed)
         : litterMotion(litterElapsed)
       : litterIdle;
+    const activeDrops = litterClock.current.drops;
+    if (!reducedMotion && litter.dropT > 0) {
+      for (let i = 0; i < activeDrops.length; i++) {
+        const bit = 1 << i;
+        if ((litterClock.current.dropHeard & bit) !== 0) {
+          continue;
+        }
+        if (!litterDropLanded(litter.dropT, i, activeDrops.length)) {
+          continue;
+        }
+        const spec = activeDrops[i];
+        if (spec === undefined) {
+          continue;
+        }
+        litterClock.current.dropHeard |= bit;
+        playPlink(i, activeDrops.length, spec.radius);
+      }
+    }
     if (litter.scratch > 0.5 && !reducedMotion) {
       if (
         litterClock.current.lastScratchAt < 0 ||
@@ -366,6 +397,7 @@ export function AnimatedFigure({
       coversRef.current,
       litter,
       t,
+      activeDrops,
     );
     const squat = litter.squat;
     const leftRake = inLitter ? Math.sin(t * 22) * litter.scratch : 0;
