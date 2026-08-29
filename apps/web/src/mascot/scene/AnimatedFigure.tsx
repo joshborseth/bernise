@@ -50,7 +50,6 @@ import {
   litterSquintOpen,
   litterSquintWidth,
   litterTailOffset,
-  litterTailRaise,
   litterYaw,
   poseLitterProps,
   setFrontPaw,
@@ -472,11 +471,7 @@ export function AnimatedFigure({
         refs.rightEar.current?.rotation.set(0.14, 0, -0.06);
         refs.whiskers.current?.rotation.set(0, 0, 0);
         tail.scale.setScalar(1);
-        tail.position.set(
-          restPose.tailPos.x,
-          restPose.tailPos.y + squat * litter.tailLift * litterTailRaise,
-          restPose.tailPos.z,
-        );
+        tail.position.copy(restPose.tailPos);
         tail.rotation.set(
           restPose.tail.x + tailOffset[0],
           restPose.tail.y + tailOffset[1],
@@ -980,9 +975,8 @@ export function AnimatedFigure({
         0.14 *
         tailSwing +
       (asleep ? sleepTailZ : tailOffset[2]);
-    const tailRaise = squat * litter.tailLift * litterTailRaise;
     tail.position.x = MathUtils.damp(tail.position.x, restPose.tailPos.x, 8, dt);
-    tail.position.y = MathUtils.damp(tail.position.y, restPose.tailPos.y + tailRaise, 8, dt);
+    tail.position.y = MathUtils.damp(tail.position.y, restPose.tailPos.y, 8, dt);
     tail.position.z = MathUtils.damp(tail.position.z, restPose.tailPos.z, 8, dt);
 
     leftPaw.position.x = MathUtils.damp(
@@ -1133,4 +1127,3 @@ export function AnimatedFigure({
     </group>
   );
 }
-

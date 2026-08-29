@@ -14,11 +14,11 @@ export const litterRootDrop = -0.08;
 export const litterPitch = 0.16;
 export const litterPush = 0.06;
 export const litterBodyDrop = 0.04;
-export const litterBodyScaleX = 1.1;
-export const litterBodyScaleY = 0.94;
-export const litterBodyScaleZ = 1.4;
+export const litterBodyScaleX = 1.02;
+export const litterBodyScaleY = 0.96;
+export const litterBodyScaleZ = 1;
 export const litterHeadY = -0.12;
-export const litterHeadZ = 0.2;
+export const litterHeadZ = 0.08;
 export const litterHeadPitch = 0.08;
 export const litterHeadRoll = 0.02;
 export const litterPawIn = 0.04;
@@ -27,13 +27,12 @@ export const litterPawForward = 0.08;
 export const litterHindOut = 0.08;
 export const litterHindDown = -0.16;
 export const litterHindBack = -0.02;
-export const litterTailLiftX = 0.18;
-export const litterTailLiftY = 1.2;
-export const litterTailLiftZ = 0.38;
+export const litterTailLiftX = 0.62;
+export const litterTailLiftY = 0.38;
+export const litterTailLiftZ = 0.22;
 export const litterTailCoverX = 0.08;
 export const litterTailCoverY = 0.2;
 export const litterTailCoverZ = 0.06;
-export const litterTailRaise = 0.62;
 export const litterSquintOpen = 0.28;
 export const litterSquintWidth = 1.1;
 export const litterBoxX = 0.08;
@@ -48,25 +47,20 @@ export const litterDrops: ReadonlyArray<{
   readonly radius: number;
   readonly color: string;
 }> = [
-  { start: [-0.08, 0.56, 0.22], land: [-0.52, 0.2, 0.26], radius: 0.185, color: "#241510" },
-  { start: [-0.14, 0.58, 0.16], land: [-0.76, 0.18, 0.06], radius: 0.175, color: "#1a100c" },
-  { start: [-0.04, 0.54, 0.3], land: [-0.4, 0.19, 0.48], radius: 0.2, color: "#2e1a14" },
-  { start: [-0.18, 0.57, 0.2], land: [-0.86, 0.17, 0.28], radius: 0.17, color: "#3a221a" },
-  { start: [-0.1, 0.55, 0.12], land: [-0.62, 0.19, -0.1], radius: 0.19, color: "#1f120e" },
-  { start: [-0.06, 0.59, 0.26], land: [-0.32, 0.18, 0.1], radius: 0.18, color: "#4a2c22" },
-  { start: [-0.16, 0.56, 0.14], land: [-0.7, 0.2, 0.4], radius: 0.185, color: "#241510" },
-  { start: [-0.02, 0.53, 0.24], land: [-0.48, 0.17, 0.56], radius: 0.195, color: "#2e1a14" },
+  { start: [0.58, 0.52, 0.26], land: [0.72, 0.19, 0.32], radius: 0.068, color: "#241510" },
+  { start: [0.62, 0.54, 0.18], land: [0.88, 0.18, 0.12], radius: 0.06, color: "#1a100c" },
+  { start: [0.52, 0.5, 0.34], land: [0.56, 0.19, 0.48], radius: 0.072, color: "#2e1a14" },
+  { start: [0.66, 0.53, 0.22], land: [0.94, 0.17, 0.28], radius: 0.055, color: "#3a221a" },
+  { start: [0.5, 0.51, 0.14], land: [0.4, 0.19, 0.02], radius: 0.064, color: "#1f120e" },
+  { start: [0.6, 0.55, 0.38], land: [0.78, 0.18, 0.52], radius: 0.07, color: "#4a2c22" },
 ];
 export const litterKickOrigins: ReadonlyArray<readonly [number, number, number]> = [
-  [-0.18, 0.12, 0.22],
-  [-0.08, 0.1, 0.08],
-  [-0.22, 0.11, 0.34],
-  [-0.12, 0.09, -0.02],
-  [-0.28, 0.13, 0.16],
-  [-0.04, 0.1, 0.28],
-  [-0.16, 0.12, 0.4],
-  [-0.24, 0.11, 0.02],
-  [-0.1, 0.1, 0.18],
+  [0.42, 0.12, 0.22],
+  [0.5, 0.1, 0.08],
+  [0.38, 0.11, 0.34],
+  [0.46, 0.09, -0.02],
+  [0.54, 0.13, 0.16],
+  [0.4, 0.1, 0.28],
 ];
 
 export type LitterMotion = {
@@ -99,7 +93,10 @@ export const litterIdle: LitterMotion = {
   done: false,
 };
 
-export function litterTailOffset(squat: number, tailLift: number): readonly [number, number, number] {
+export function litterTailOffset(
+  squat: number,
+  tailLift: number,
+): readonly [number, number, number] {
   const lift = squat * tailLift;
   const cover = squat * (1 - tailLift);
   return [
@@ -262,7 +259,7 @@ export function poseLitterProps(
         spec.start[1] + (spec.land[1] - spec.start[1]) * fall - motion.bury * 0.14,
         spec.start[2] + (spec.land[2] - spec.start[2]) * fall,
       );
-      child.scale.set(1.12 * size, 1.38 * size, 0.92 * size);
+      child.scale.set(size, 1.1 * size, size);
     }
   }
   if (covers !== null) {
