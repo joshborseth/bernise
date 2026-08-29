@@ -1,12 +1,14 @@
 import { type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useState, type FormEvent } from "react";
-import { speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import { useState, useEffect, type FormEvent } from "react";
+import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
 import { BerniseMascot } from "./BerniseMascot.tsx";
 import { deriveBerniseMood } from "./mascot/mood.ts";
 import {
   bootSettingsAtom,
+  composerModelView,
+  modelsResultAtom,
   refreshProvidersAtom,
   settingsAtom,
   settingsBusyAtom,
@@ -30,6 +32,7 @@ const statusLabel = (snapshot: ProviderSnapshot): string => {
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
   useAtomValue(bootSettingsAtom);
+  useAtomValue(modelsResultAtom);
 
   return view === "settings" ? (
     <SettingsView onBack={() => setView("chat")} />
@@ -44,7 +47,21 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
+  const settings = useAtomValue(settingsAtom);
+  const modelsResult = useAtomValue(modelsResultAtom);
+  const modelView = composerModelView(modelsResult, settings.codex.model);
+  const [, updateSettings] = useAtom(updateSettingsAtom);
   const pending = AsyncResult.isWaiting(speakResult);
+  const modelsWaiting = AsyncResult.isWaiting(modelsResult);
+
+  const resolvedModel = modelView.kind === "select" ? modelView.value : undefined;
+
+  useEffect(() => {
+    if (resolvedModel === undefined || resolvedModel === settings.codex.model) {
+      return;
+    }
+    updateSettings({ codex: { model: resolvedModel } });
+  }, [resolvedModel, settings.codex.model, updateSettings]);
 
   const mood = deriveBerniseMood({
     composerFocused,
@@ -120,6 +137,30 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             {pending ? "Thinking…" : "Speak"}
           </button>
         </div>
+        <div className="composer-meta">
+          {modelView.kind === "error" ? (
+            <p className="composer-model-error" role="alert">
+              {formatError(modelView.error)}
+            </p>
+          ) : modelView.kind === "select" ? (
+            <label className="composer-model">
+              <span className="sr-only">Model</span>
+              <select
+                value={modelView.value}
+                disabled={pending || modelsWaiting}
+                onChange={(event) => {
+                  updateSettings({ codex: { model: event.target.value } });
+                }}
+              >
+                {modelView.options.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </form>
     </main>
   );
@@ -142,8 +183,8 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
         <h1>Provider bay</h1>
       </header>
       <p className="settings-lede">
-        Bernise drives the local Codex CLI. Authenticate on this machine, then prove the pipe is
-        live.
+        Bernise finds the local Codex CLI on PATH. Leave Binary path blank unless PATH is not
+        enough, run <code>codex login</code>, then Check connections.
       </p>
       <ProviderCard
         snapshot={snapshots.codex}
@@ -218,6 +259,10 @@ function ProviderCard({
             onBinaryPath(event.target.value);
           }}
         />
+        <span className="field-hint">
+          Leave blank to use <code>codex</code> on PATH. Set this only when PATH cannot find the
+          CLI.
+        </span>
       </label>
       <label>
         CODEX_HOME path

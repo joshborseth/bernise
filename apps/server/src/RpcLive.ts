@@ -19,15 +19,16 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
         Effect.gen(function* () {
           const workspace =
             payload.workspace?.trim() || Option.getOrElse(configuredWorkspace, () => process.cwd());
-          const sessionId = yield* provider.startSession(workspace);
+          const sessionId = yield* provider.startSession(workspace, payload.model);
           return new SessionStarted({ sessionId });
         }),
-      SendTurn: (payload) => provider.sendTurn(payload.sessionId, payload.prompt),
+      SendTurn: (payload) => provider.sendTurn(payload.sessionId, payload.prompt, payload.model),
       SubscribeEvents: (payload) => provider.subscribeEvents(payload.sessionId),
       GetSettings: () => serverSettings.get,
       UpdateSettings: (payload) => serverSettings.update(new HarnessSettingsPatch(payload)),
       GetProviderSnapshots: () => providerHealth.snapshots,
       RefreshProviders: () => providerHealth.refresh,
+      ListModels: () => provider.listModels,
     };
   }),
 );

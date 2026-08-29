@@ -2,6 +2,7 @@ import { ProviderError, type ProviderEvent, type SessionId } from "@bernise/cont
 import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
+import { settingsAtom } from "./settings.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -123,7 +124,9 @@ const sessionByEpochAtom = Atom.family((_epoch: number) =>
   BerniseRpc.runtime.atom((get) =>
     Effect.gen(function* () {
       const client = yield* BerniseRpc;
-      const started = yield* client("StartSession", {});
+      const started = yield* client("StartSession", {
+        ...optionalModelPayload(get.once(settingsAtom).codex.model),
+      });
       const fiber = yield* Effect.forkChild(
         Stream.runForEach(client("SubscribeEvents", { sessionId: started.sessionId }), (event) =>
           Effect.sync(() => {
@@ -158,6 +161,11 @@ export const sessionAtom = Atom.make((get) => {
 
 const readChat = (get: { readonly registry: AtomRegistry.AtomRegistry }): ChatState =>
   get.registry.get(chatAtom);
+
+const optionalModelPayload = (model: string): { readonly model?: string } => {
+  const trimmed = model.trim();
+  return trimmed.length > 0 ? { model: trimmed } : {};
+};
 
 export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
   Effect.gen(function* () {
@@ -206,7 +214,11 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
       });
     });
     const client = yield* BerniseRpc;
-    const result = yield* client("SendTurn", { sessionId, prompt: text });
+    const result = yield* client("SendTurn", {
+      sessionId,
+      prompt: text,
+      ...optionalModelPayload(get.registry.get(settingsAtom).codex.model),
+    });
     const chat = readChat(get);
     if (chat.assistantId === undefined) {
       get.set(

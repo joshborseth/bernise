@@ -1,4 +1,8 @@
 import {
+  CodexModel,
+  CodexSettings,
+  HarnessSettings,
+  ModelCatalog,
   ProviderError,
   ProviderTurnDelta,
   SessionId,
@@ -6,7 +10,7 @@ import {
   TurnResult,
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Cause, Effect, Layer, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import {
   appendError,
@@ -26,6 +30,13 @@ import {
 } from "./chat.ts";
 import { BerniseRpc } from "./rpc.ts";
 import type { ChatState } from "./chat.ts";
+import {
+  catalogDefaultModelId,
+  composerModelOptions,
+  composerModelView,
+  emptyModelCatalog,
+  settingsAtom,
+} from "./settings.ts";
 
 const sessionId = SessionId.make("sess-1");
 
@@ -329,5 +340,111 @@ describe("chat atoms", () => {
         (message) => message.from === "error" && message.text.includes("subscribe died"),
       ),
     );
+  });
+
+  it("passes the selected model on StartSession and SendTurn", async () => {
+    const calls: Array<{ readonly tag: string; readonly payload: unknown }> = [];
+    const fakeClient = ((tag: string, payload: unknown) => {
+      calls.push({ tag, payload });
+      switch (tag) {
+        case "StartSession":
+          return Effect.succeed(new SessionStarted({ sessionId }));
+        case "SendTurn":
+          return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
+        case "SubscribeEvents":
+          return Stream.make(new ProviderTurnDelta({ text: "ok" }));
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+        Atom.initialValue(
+          settingsAtom,
+          new HarnessSettings({
+            codex: new CodexSettings({
+              enabled: true,
+              binaryPath: "",
+              homePath: "",
+              model: "gpt-5.4-mini",
+            }),
+          }),
+        ),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(speakAtom);
+    registry.set(speakAtom, "hello");
+    await waitWhileWaiting(registry);
+
+    expect(calls.filter((call) => call.tag === "StartSession")).toEqual([
+      expect.objectContaining({ payload: { model: "gpt-5.4-mini" } }),
+    ]);
+    expect(calls.filter((call) => call.tag === "SendTurn")).toEqual([
+      expect.objectContaining({
+        payload: { sessionId, prompt: "hello", model: "gpt-5.4-mini" },
+      }),
+    ]);
+  });
+});
+
+describe("composerModelView", () => {
+  const catalog = new ModelCatalog({
+    models: [
+      new CodexModel({ id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini", isDefault: true }),
+      new CodexModel({ id: "gpt-5.4", displayName: "GPT-5.4", isDefault: false }),
+    ],
+  });
+
+  it("lists catalog labels and keeps a stale selection", () => {
+    expect(composerModelOptions(emptyModelCatalog, "")).toEqual([]);
+    expect(composerModelOptions(catalog, "stale-model")).toEqual([
+      { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+      { id: "gpt-5.4", label: "GPT-5.4" },
+      { id: "stale-model", label: "stale-model" },
+    ]);
+    expect(catalogDefaultModelId(catalog)).toBe("gpt-5.4-mini");
+  });
+
+  it("selects the catalog default when nothing is persisted", () => {
+    expect(composerModelView(AsyncResult.success(catalog), "")).toEqual({
+      kind: "select",
+      options: [
+        { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+        { id: "gpt-5.4", label: "GPT-5.4" },
+      ],
+      value: "gpt-5.4-mini",
+    });
+  });
+
+  it("keeps the persisted model while the catalog is loading", () => {
+    expect(composerModelView(AsyncResult.initial(true), "gpt-5.4")).toEqual({
+      kind: "select",
+      options: [{ id: "gpt-5.4", label: "gpt-5.4" }],
+      value: "gpt-5.4",
+    });
+    expect(composerModelView(AsyncResult.initial(true), "")).toEqual({ kind: "pending" });
+  });
+
+  it("surfaces ListModels failures", () => {
+    const view = composerModelView(
+      AsyncResult.failure(
+        Cause.fail(new ProviderError({ message: "Codex is not authenticated." })),
+      ),
+      "",
+    );
+    expect(view).toEqual({
+      kind: "error",
+      error: new ProviderError({ message: "Codex is not authenticated." }),
+    });
+  });
+
+  it("errors when Codex returns no models", () => {
+    expect(composerModelView(AsyncResult.success(emptyModelCatalog), "")).toEqual({
+      kind: "error",
+      error: new Error("Codex did not return any models."),
+    });
   });
 });
