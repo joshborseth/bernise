@@ -186,7 +186,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
       </div>
 
       <form
-        className="sticky bottom-[0.85rem] z-2 mt-auto grid flex-none gap-[0.45rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] focus-within:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] focus-within:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
+        className="sticky bottom-[0.85rem] z-2 mt-auto grid flex-none gap-[0.15rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] pb-[0.4rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] has-[input:focus]:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] has-[input:focus]:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
         onSubmit={onSpeak}
       >
         <div className="grid grid-cols-[1fr_auto] gap-2.5">
@@ -216,15 +216,15 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             {pending ? "Thinking…" : "Speak"}
           </Button>
         </div>
-        <div className="flex items-center px-[0.2rem] pb-[0.1rem]">
-          {modelView.kind === "error" ? (
-            <p
-              className="m-0 px-[0.55rem] py-[0.15rem] pb-[0.2rem] text-[0.72rem] leading-[1.4] tracking-[0.02em] text-destructive"
-              role="alert"
-            >
-              {formatError(modelView.error)}
-            </p>
-          ) : modelView.kind === "select" ? (
+        {modelView.kind === "error" ? (
+          <p
+            className="m-0 justify-self-start px-[0.55rem] py-[0.1rem] text-[0.72rem] leading-[1.4] tracking-[0.02em] text-destructive"
+            role="alert"
+          >
+            {formatError(modelView.error)}
+          </p>
+        ) : modelView.kind === "select" ? (
+          <div className="justify-self-start px-[0.35rem]">
             <Select
               value={modelView.value}
               disabled={pending || modelsWaiting}
@@ -239,7 +239,11 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
                 updateSettings({ codex: { model: value } });
               }}
             >
-              <SelectTrigger size="sm" aria-label="Model" className="max-w-64 rounded-full">
+              <SelectTrigger
+                size="sm"
+                aria-label="Model"
+                className="rounded-full border-0 bg-transparent text-muted-foreground shadow-none hover:bg-[color-mix(in_srgb,var(--peach)_32%,transparent)] hover:text-foreground"
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent align="start" alignItemWithTrigger={false}>
@@ -250,8 +254,8 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
                 ))}
               </SelectContent>
             </Select>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </form>
     </section>
   );
