@@ -1,4 +1,4 @@
-import { providerDisplayName, type ProviderKind, type ProviderSnapshot } from "@bernise/contracts";
+import { type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useState, type FormEvent } from "react";
@@ -8,15 +8,11 @@ import { deriveBerniseMood } from "./mascot/mood.ts";
 import {
   bootSettingsAtom,
   refreshProvidersAtom,
-  selectProviderAtom,
   settingsAtom,
   settingsBusyAtom,
   snapshotsAtom,
   updateSettingsAtom,
 } from "./settings.ts";
-
-const loginHint = (kind: ProviderKind): string =>
-  kind === "codex" ? "codex login" : "agent login";
 
 const statusLabel = (snapshot: ProviderSnapshot): string => {
   if (!snapshot.enabled) {
@@ -48,9 +44,6 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
-  const settings = useAtomValue(settingsAtom);
-  const snapshots = useAtomValue(snapshotsAtom);
-  const [, selectProvider] = useAtom(selectProviderAtom);
   const pending = AsyncResult.isWaiting(speakResult);
 
   const mood = deriveBerniseMood({
@@ -106,28 +99,6 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
       </section>
 
       <form className="composer" onSubmit={onSpeak}>
-        <div className="provider-switch" role="radiogroup" aria-label="Provider">
-          {(["cursor", "codex"] as const).map((kind) => {
-            const snapshot = snapshots[kind];
-            const disabled = pending || snapshot.status === "error" || !snapshot.enabled;
-            return (
-              <button
-                key={kind}
-                type="button"
-                role="radio"
-                aria-checked={settings.activeProvider === kind}
-                title={disabled && !pending ? snapshot.message : providerDisplayName(kind)}
-                className={settings.activeProvider === kind ? "is-active" : ""}
-                disabled={disabled}
-                onClick={() => {
-                  selectProvider(kind);
-                }}
-              >
-                {providerDisplayName(kind)}
-              </button>
-            );
-          })}
-        </div>
         <div className="composer-row">
           <input
             value={draft}
@@ -171,32 +142,21 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
         <h1>Provider bay</h1>
       </header>
       <p className="settings-lede">
-        Bernise drives local CLIs. Authenticate on this machine, then prove the pipe is live.
+        Bernise drives the local Codex CLI. Authenticate on this machine, then prove the pipe is
+        live.
       </p>
-      <div className="provider-grid">
-        <ProviderCard
-          kind="cursor"
-          snapshot={snapshots.cursor}
-          binaryPath={settings.cursor.binaryPath}
-          probing={probing}
-          onBinaryPath={(binaryPath) => {
-            updateSettings({ cursor: { binaryPath } });
-          }}
-        />
-        <ProviderCard
-          kind="codex"
-          snapshot={snapshots.codex}
-          binaryPath={settings.codex.binaryPath}
-          homePath={settings.codex.homePath}
-          probing={probing}
-          onBinaryPath={(binaryPath) => {
-            updateSettings({ codex: { binaryPath } });
-          }}
-          onHomePath={(homePath) => {
-            updateSettings({ codex: { homePath } });
-          }}
-        />
-      </div>
+      <ProviderCard
+        snapshot={snapshots.codex}
+        binaryPath={settings.codex.binaryPath}
+        homePath={settings.codex.homePath}
+        probing={probing}
+        onBinaryPath={(binaryPath) => {
+          updateSettings({ codex: { binaryPath } });
+        }}
+        onHomePath={(homePath) => {
+          updateSettings({ codex: { homePath } });
+        }}
+      />
       <button
         type="button"
         className="check-button"
@@ -212,7 +172,6 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
 }
 
 function ProviderCard({
-  kind,
   snapshot,
   binaryPath,
   homePath,
@@ -220,19 +179,17 @@ function ProviderCard({
   onBinaryPath,
   onHomePath,
 }: {
-  readonly kind: ProviderKind;
   readonly snapshot: ProviderSnapshot;
   readonly binaryPath: string;
-  readonly homePath?: string;
+  readonly homePath: string;
   readonly probing: boolean;
   readonly onBinaryPath: (value: string) => void;
-  readonly onHomePath?: (value: string) => void;
+  readonly onHomePath: (value: string) => void;
 }) {
-  const name = providerDisplayName(kind);
   return (
     <article className={`provider-card status-${snapshot.status}`}>
       <header>
-        <h2>{name}</h2>
+        <h2>Codex</h2>
         <span className="status-pill">{statusLabel(snapshot)}</span>
       </header>
       <dl>
@@ -255,28 +212,26 @@ function ProviderCard({
         Binary path
         <input
           value={binaryPath}
-          placeholder={kind === "codex" ? "codex" : "cursor-agent"}
+          placeholder="codex"
           disabled={probing}
           onChange={(event) => {
             onBinaryPath(event.target.value);
           }}
         />
       </label>
-      {onHomePath !== undefined ? (
-        <label>
-          CODEX_HOME path
-          <input
-            value={homePath ?? ""}
-            placeholder="~/.codex"
-            disabled={probing}
-            onChange={(event) => {
-              onHomePath(event.target.value);
-            }}
-          />
-        </label>
-      ) : null}
+      <label>
+        CODEX_HOME path
+        <input
+          value={homePath}
+          placeholder="~/.codex"
+          disabled={probing}
+          onChange={(event) => {
+            onHomePath(event.target.value);
+          }}
+        />
+      </label>
       <p className="login-hint">
-        Login with <code>{loginHint(kind)}</code> on the machine running the Bernise server.
+        Login with <code>codex login</code> on the machine running the Bernise server.
       </p>
       <p className="probe-message">{snapshot.message}</p>
     </article>

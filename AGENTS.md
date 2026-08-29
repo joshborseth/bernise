@@ -1,6 +1,6 @@
 # Bernise
 
-Desktop control surface for grilling technical decisions until they are explicit. Effect-native Electron shell with a Cursor ACP and Codex App Server harness.
+Desktop control surface for grilling technical decisions until they are explicit. Effect-native Electron shell with a Codex App Server harness.
 
 ## Effect Best Practices
 
@@ -22,7 +22,7 @@ details when the documentation isn't enough.
 
 ## Agent harness
 
-Bernise is a harness control surface (t3code-style). Coding work must not call model APIs; Cursor CLI (`cursor-agent acp`) and Codex CLI (`codex app-server`) are the live providers. See [docs/harness.md](docs/harness.md). `Provider` is implemented by `ProviderRouterLive`.
+Bernise is a harness control surface (t3code-style). Coding work must not call model APIs; Codex CLI (`codex app-server`) is the live provider. See [docs/harness.md](docs/harness.md). `Provider` is implemented by `CodexProviderLive`.
 
 ## TypeScript 7 / effect-tsgo
 

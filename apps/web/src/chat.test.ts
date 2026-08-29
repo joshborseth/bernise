@@ -117,12 +117,11 @@ describe("chat reducers", () => {
     expect(next.messages).toEqual([opening, { id: "e1", from: "error", text: "nope" }]);
   });
 
-  it("resets the session when switching providers", () => {
+  it("resets the session without dropping messages", () => {
     const spoken = applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "hi" }), "a1");
-    const next = resetSession(spoken, "codex");
+    const next = resetSession(spoken);
     expect(next.sessionId).toBeUndefined();
     expect(next.assistantId).toBeUndefined();
-    expect(next.activeProvider).toBe("codex");
     expect(next.messages).toEqual(spoken.messages);
   });
 
@@ -146,13 +145,9 @@ describe("chat reducers", () => {
     expect(stopReasonFromTurn(null)).toBe("end_turn");
   });
 
-  it("names the active CLI in the empty-reply copy", () => {
-    expect(noReplyMessage("cursor", "end_turn")).toBe(
-      "No reply from Cursor (stopReason: end_turn).",
-    );
-    expect(noReplyMessage("codex", "completed")).toBe(
-      "No reply from Codex (stopReason: completed).",
-    );
+  it("names Codex in the empty-reply copy", () => {
+    expect(noReplyMessage("end_turn")).toBe("No reply from Codex (stopReason: end_turn).");
+    expect(noReplyMessage("completed")).toBe("No reply from Codex (stopReason: completed).");
   });
 });
 
@@ -298,7 +293,7 @@ describe("chat atoms", () => {
     expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
       expect.objectContaining({
         from: "error",
-        text: "No reply from Cursor (stopReason: end_turn).",
+        text: "No reply from Codex (stopReason: end_turn).",
       }),
     ]);
   });

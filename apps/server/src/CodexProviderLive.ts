@@ -22,7 +22,7 @@ import {
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { CodexTransportError, makeCodexConnection } from "./codex/JsonRpcStdio.ts";
 import { expandHomePath } from "./pathExpand.ts";
-import { CodexProvider } from "./Provider.ts";
+import { Provider } from "./Provider.ts";
 import { resolveCodexBin } from "./providerBins.ts";
 import { ServerSettings } from "./ServerSettings.ts";
 
@@ -116,7 +116,7 @@ const withHandshakeTimeout = <A>(
   );
 
 export const CodexProviderLive = Layer.effect(
-  CodexProvider,
+  Provider,
   Effect.gen(function* () {
     const parentScope = yield* Scope.Scope;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -245,7 +245,7 @@ export const CodexProviderLive = Layer.effect(
         getSession(sessionId).pipe(Effect.map((session) => Stream.fromQueue(session.events))),
       );
 
-    return CodexProvider.of({
+    return Provider.of({
       startSession,
       sendTurn,
       subscribeEvents,

@@ -15,15 +15,7 @@ export type ProviderApi = {
 };
 
 /**
- * Agent harness contract. Cursor ACP and Codex App Server sit behind a router.
+ * Agent harness contract. Codex App Server is the live driver.
  * See docs/harness.md.
  */
 export class Provider extends Context.Service<Provider, ProviderApi>()("@bernise/Provider") {}
-
-export class CursorProvider extends Context.Service<CursorProvider, ProviderApi>()(
-  "@bernise/CursorProvider",
-) {}
-
-export class CodexProvider extends Context.Service<CodexProvider, ProviderApi>()(
-  "@bernise/CodexProvider",
-) {}

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clientRequestResult } from "../src/CodexProviderLive.ts";
-import { CodexProvider } from "../src/Provider.ts";
+import { Provider } from "../src/Provider.ts";
 import { codexDriverLayer } from "./testLayers.ts";
 
 const fakeAgentSource = fileURLToPath(new URL("./fake-codex-app-server.mjs", import.meta.url));
@@ -39,7 +39,7 @@ describe("CodexProviderLive", () => {
   it.effect("starts a session, auto-approves, and streams text deltas", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
-      const provider = yield* CodexProvider;
+      const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
       const fiber = yield* Stream.runCollect(
         Stream.take(provider.subscribeEvents(sessionId), 2),
@@ -57,7 +57,7 @@ describe("CodexProviderLive", () => {
   it.effect("returns stopReason when the turn has no assistant text", () => {
     const fake = makeFakeBin("empty");
     return Effect.gen(function* () {
-      const provider = yield* CodexProvider;
+      const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
       const turn = yield* provider.sendTurn(sessionId, "hello");
       expect(turn).toEqual(new TurnResult({ stopReason: "completed" }));
@@ -67,7 +67,7 @@ describe("CodexProviderLive", () => {
   it.effect("fails sendTurn when the agent exits mid-turn", () => {
     const fake = makeFakeBin("exit-on-prompt");
     return Effect.gen(function* () {
-      const provider = yield* CodexProvider;
+      const provider = yield* Provider;
       const sessionId = yield* provider.startSession("");
       const error = yield* provider.sendTurn(sessionId, "hello").pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
@@ -77,7 +77,7 @@ describe("CodexProviderLive", () => {
 
   it.effect("fails startSession when the binary is missing", () =>
     Effect.gen(function* () {
-      const provider = yield* CodexProvider;
+      const provider = yield* Provider;
       const error = yield* provider.startSession("/tmp").pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
       expect(error.message).toMatch(/codex|Install Codex CLI/i);

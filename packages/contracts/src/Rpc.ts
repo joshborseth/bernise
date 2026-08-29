@@ -3,9 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } from "./Provider.ts";
 import {
   CodexSettingsPatch,
-  CursorSettingsPatch,
   HarnessSettings,
-  ProviderKind,
   ProviderSnapshots,
   SettingsError,
 } from "./Settings.ts";
@@ -54,8 +52,6 @@ export class GetSettings extends Rpc.make("GetSettings", {
 
 export class UpdateSettings extends Rpc.make("UpdateSettings", {
   payload: {
-    activeProvider: Schema.optionalKey(ProviderKind),
-    cursor: Schema.optionalKey(CursorSettingsPatch),
     codex: Schema.optionalKey(CodexSettingsPatch),
   },
   success: HarnessSettings,

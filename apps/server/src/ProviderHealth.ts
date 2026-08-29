@@ -1,25 +1,17 @@
-import {
-  ProviderKind,
-  ProviderSnapshot,
-  ProviderSnapshots,
-  type HarnessSettings,
-} from "@bernise/contracts";
+import { ProviderSnapshot, ProviderSnapshots, type HarnessSettings } from "@bernise/contracts";
 import { NodeServices } from "@effect/platform-node";
 import { Cause, Config, Effect, Layer, Result, SynchronizedRef } from "effect";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import * as Context from "effect/Context";
 import { ChildProcessSpawner } from "effect/unstable/process";
-import { makeAcpConnection } from "./acp/JsonRpcStdio.ts";
 import { makeCodexConnection } from "./codex/JsonRpcStdio.ts";
-import { resolveCodexBin, resolveCursorBin } from "./providerBins.ts";
+import { resolveCodexBin } from "./providerBins.ts";
 import { expandHomePath } from "./pathExpand.ts";
 import { ServerSettings } from "./ServerSettings.ts";
 
-const cursorBinEnv = Config.string("BERNISE_CURSOR_BIN").pipe(Config.option);
 const codexBinEnv = Config.string("BERNISE_CODEX_BIN").pipe(Config.option);
 
-const cursorProbeTimeout = "8 seconds";
 const codexProbeTimeout = "10 seconds";
 const probeKillAfter = "2 seconds";
 
@@ -36,28 +28,20 @@ export class ProviderHealth extends Context.Service<
 
 const nowIso = (): string => new Date().toISOString();
 
-export const pendingSnapshot = (
-  kind: ProviderKind,
-  enabled: boolean,
-  message: string,
-): ProviderSnapshot =>
+export const pendingSnapshot = (enabled: boolean, message: string): ProviderSnapshot =>
   new ProviderSnapshot({
-    kind,
+    kind: "codex",
     enabled,
     installed: false,
     version: null,
-    status: enabled ? "warning" : "warning",
+    status: "warning",
     auth: "unknown",
     message,
     checkedAt: nowIso(),
   });
 
-const disabledSnapshot = (kind: ProviderKind): ProviderSnapshot =>
-  pendingSnapshot(
-    kind,
-    false,
-    `${kind === "codex" ? "Codex" : "Cursor"} is disabled in Bernise settings.`,
-  );
+const disabledSnapshot = (): ProviderSnapshot =>
+  pendingSnapshot(false, "Codex is disabled in Bernise settings.");
 
 const isAuthFailure = (message: string): boolean =>
   /auth|login|unauthorized|unauthenticated/i.test(message);
@@ -69,9 +53,7 @@ const isSpawnMissing = (error: unknown, message: string): boolean => {
       return true;
     }
   }
-  return /not found|ENOENT|Could not spawn|Install Cursor CLI|Install Codex CLI|code 127/i.test(
-    message,
-  );
+  return /not found|ENOENT|Could not spawn|Install Codex CLI|code 127/i.test(message);
 };
 
 const extractErrorMessage = (error: unknown): string => {
@@ -87,18 +69,15 @@ const extractErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
-const missingBinarySnapshot = (kind: ProviderKind, checkedAt: string): ProviderSnapshot =>
+const missingBinarySnapshot = (checkedAt: string): ProviderSnapshot =>
   new ProviderSnapshot({
-    kind,
+    kind: "codex",
     enabled: true,
     installed: false,
     version: null,
     status: "error",
     auth: "unknown",
-    message:
-      kind === "codex"
-        ? "Codex CLI (`codex`) was not found on PATH."
-        : "Cursor CLI (`cursor-agent`) was not found on PATH.",
+    message: "Codex CLI (`codex`) was not found on PATH.",
     checkedAt,
   });
 
@@ -122,105 +101,6 @@ const versionFromInitialize = (result: unknown): string | null => {
   return null;
 };
 
-export const probeCursor = Effect.fn("probeCursor")(function* (input: {
-  readonly command: string;
-  readonly cwd: string;
-  readonly enabled: boolean;
-}) {
-  if (!input.enabled) {
-    return disabledSnapshot("cursor");
-  }
-  const checkedAt = nowIso();
-  if (commandIsMissingFile(input.command)) {
-    return missingBinarySnapshot("cursor", checkedAt);
-  }
-  const probe = Effect.scoped(
-    Effect.gen(function* () {
-      const connection = yield* makeAcpConnection({
-        command: input.command,
-        args: ["acp"],
-        cwd: input.cwd,
-        forceKillAfter: probeKillAfter,
-        commandLabel: "Cursor ACP",
-        spawnHint: `Could not spawn ${input.command}. Install Cursor CLI (\`cursor-agent\`) and run \`agent login\`.`,
-        onNotification: () => Effect.void,
-        onRequest: () => Effect.succeed({}),
-      });
-      const initialized = yield* connection.send("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: {
-          fs: { readTextFile: false, writeTextFile: false },
-          terminal: false,
-        },
-        clientInfo: { name: "bernise", version: "0.0.0" },
-      });
-      yield* connection
-        .send("authenticate", { methodId: "cursor_login" })
-        .pipe(
-          Effect.catch((error) =>
-            /already|authenticated/i.test(error.message) ? Effect.void : Effect.fail(error),
-          ),
-        );
-      return new ProviderSnapshot({
-        kind: "cursor",
-        enabled: true,
-        installed: true,
-        version: versionFromInitialize(initialized),
-        status: "ready",
-        auth: "authenticated",
-        message: "Cursor CLI is installed and authenticated.",
-        checkedAt,
-      });
-    }),
-  );
-
-  const result = yield* probe.pipe(Effect.timeout(cursorProbeTimeout), Effect.result);
-  if (Result.isSuccess(result)) {
-    return result.success;
-  }
-  const error = result.failure;
-  const message = Cause.isTimeoutError(error)
-    ? "Timed out while checking Cursor ACP provider status."
-    : extractErrorMessage(error);
-  if (Cause.isTimeoutError(error)) {
-    return new ProviderSnapshot({
-      kind: "cursor",
-      enabled: true,
-      installed: true,
-      version: null,
-      status: "error",
-      auth: "unknown",
-      message,
-      checkedAt,
-    });
-  }
-  if (isAuthFailure(message)) {
-    return new ProviderSnapshot({
-      kind: "cursor",
-      enabled: true,
-      installed: true,
-      version: null,
-      status: "error",
-      auth: "unauthenticated",
-      message: "Cursor Agent is not authenticated. Run `agent login` and try again.",
-      checkedAt,
-    });
-  }
-  const installed = !isSpawnMissing(error, message);
-  return new ProviderSnapshot({
-    kind: "cursor",
-    enabled: true,
-    installed,
-    version: null,
-    status: "error",
-    auth: "unknown",
-    message: installed
-      ? `Cursor ACP provider probe failed: ${message}.`
-      : "Cursor CLI (`cursor-agent`) was not found on PATH.",
-    checkedAt,
-  });
-});
-
 export const probeCodex = Effect.fn("probeCodex")(function* (input: {
   readonly command: string;
   readonly cwd: string;
@@ -228,11 +108,11 @@ export const probeCodex = Effect.fn("probeCodex")(function* (input: {
   readonly enabled: boolean;
 }) {
   if (!input.enabled) {
-    return disabledSnapshot("codex");
+    return disabledSnapshot();
   }
   const checkedAt = nowIso();
   if (commandIsMissingFile(input.command)) {
-    return missingBinarySnapshot("codex", checkedAt);
+    return missingBinarySnapshot(checkedAt);
   }
   const homePath = input.homePath.trim();
   const probe = Effect.scoped(
@@ -336,13 +216,7 @@ export const probeCodex = Effect.fn("probeCodex")(function* (input: {
 
 const initialSnapshots = (settings: HarnessSettings): ProviderSnapshots =>
   new ProviderSnapshots({
-    cursor: pendingSnapshot(
-      "cursor",
-      settings.cursor.enabled,
-      "Cursor provider status has not been checked in this session yet.",
-    ),
     codex: pendingSnapshot(
-      "codex",
       settings.codex.enabled,
       "Codex provider status has not been checked in this session yet.",
     ),
@@ -353,7 +227,6 @@ export const ProviderHealthLive = Layer.effect(
   Effect.gen(function* () {
     const serverSettings = yield* ServerSettings;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const cursorEnv = yield* cursorBinEnv;
     const codexEnv = yield* codexBinEnv;
     const settings = yield* serverSettings.get;
     const ref = yield* SynchronizedRef.make(initialSnapshots(settings));
@@ -361,23 +234,13 @@ export const ProviderHealthLive = Layer.effect(
     const refresh = Effect.gen(function* () {
       const current = yield* serverSettings.get;
       const cwd = process.cwd();
-      const [cursor, codex] = yield* Effect.all(
-        [
-          probeCursor({
-            command: resolveCursorBin(current.cursor.binaryPath, cursorEnv),
-            cwd,
-            enabled: current.cursor.enabled,
-          }),
-          probeCodex({
-            command: resolveCodexBin(current.codex.binaryPath, codexEnv),
-            cwd,
-            homePath: current.codex.homePath,
-            enabled: current.codex.enabled,
-          }),
-        ],
-        { concurrency: 2 },
-      ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
-      const next = new ProviderSnapshots({ cursor, codex });
+      const codex = yield* probeCodex({
+        command: resolveCodexBin(current.codex.binaryPath, codexEnv),
+        cwd,
+        homePath: current.codex.homePath,
+        enabled: current.codex.enabled,
+      }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+      const next = new ProviderSnapshots({ codex });
       yield* SynchronizedRef.set(ref, next);
       return next;
     });
