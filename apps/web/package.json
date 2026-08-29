@@ -20,6 +20,7 @@
     "lucide-react": "^0.564.0",
     "react": "latest",
     "react-dom": "latest",
+    "react-resizable-panels": "^4.12.3",
     "tailwind-merge": "^3.4.0",
     "three": "^0.185.1",
     "three-stdlib": "^2.36.1",
