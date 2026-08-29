@@ -1,5 +1,6 @@
-import { defineConfig, lazyPlugins } from "vite-plus";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { defineConfig, lazyPlugins } from "vite-plus";
 
 const port = Number(process.env.PORT ?? 5733);
 const backendPort = Number(process.env.BERNISE_PORT ?? 13773);
@@ -8,7 +9,10 @@ const host = explicitHost || "localhost";
 const backendTarget = `http://localhost:${String(backendPort)}`;
 
 export default defineConfig({
-  plugins: lazyPlugins(() => [react()]),
+  plugins: lazyPlugins(() => [react(), tailwindcss()]),
+  resolve: {
+    tsconfigPaths: true,
+  },
   server: {
     host,
     port,
