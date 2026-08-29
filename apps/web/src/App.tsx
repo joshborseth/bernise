@@ -2,6 +2,7 @@ import { type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useState, type FormEvent } from "react";
+import { useDefaultLayout } from "react-resizable-panels";
 import { BerniseMascot } from "./BerniseMascot.tsx";
 import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
 import { Badge } from "~/components/ui/badge";
@@ -9,6 +10,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -44,6 +46,30 @@ const statusLabel = (snapshot: ProviderSnapshot): string => {
 
 const shellClass =
   "relative z-1 mx-auto flex min-h-dvh max-w-[52rem] flex-col px-[1.35rem] pt-7 pb-[1.15rem]";
+
+const stationHandleClass =
+  "w-2.5 border-x border-[color-mix(in_srgb,var(--ink)_10%,var(--line))] bg-[color-mix(in_srgb,var(--peach)_38%,var(--bg-wash))] hover:bg-[color-mix(in_srgb,var(--peach)_62%,var(--bg-wash))] focus-visible:ring-[color-mix(in_srgb,var(--peach-deep)_70%,var(--ring))]";
+
+const threadPaneClass =
+  "flex min-h-0 flex-col px-[1.35rem] pt-7 pb-[1.15rem] lg:h-full lg:bg-[color-mix(in_srgb,var(--bg-elev)_88%,transparent)] lg:shadow-[-20px_0_36px_color-mix(in_srgb,var(--ink)_7%,transparent)]";
+
+function useMinWidth(px: number): boolean {
+  const query = `(min-width: ${String(px)}px)`;
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => {
+      setMatches(media.matches);
+    };
+    media.addEventListener("change", onChange);
+    return () => {
+      media.removeEventListener("change", onChange);
+    };
+  }, [query]);
+
+  return matches;
+}
 
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
@@ -84,6 +110,13 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     pending,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
+  const wide = useMinWidth(1024);
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: "bernise-station",
+    onlySaveAfterUserInteractions: true,
+    panelIds: ["bernise", "thread"],
+    storage: window.localStorage,
+  });
 
   const onSpeak = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -95,9 +128,21 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     speak(text);
   };
 
-  return (
-    <main className={shellClass}>
-      <header className="mb-1.5 flex items-baseline justify-between gap-4">
+  const mascot = (
+    <aside
+      className={
+        wide
+          ? "grid h-full min-h-0 content-stretch justify-items-stretch"
+          : "grid content-center justify-items-center px-[1.15rem] pt-6 pb-2"
+      }
+    >
+      <BerniseMascot mood={mood} speakKey={speakKey} />
+    </aside>
+  );
+
+  const thread = (
+    <section className={cn(threadPaneClass, wide ? undefined : "min-h-0")}>
+      <header className="mb-1.5 flex flex-none items-baseline justify-between gap-4">
         <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
           station
         </p>
@@ -112,12 +157,8 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
         </Button>
       </header>
 
-      <section className="grid flex-none justify-items-center content-center py-3 pb-[0.45rem]">
-        <BerniseMascot mood={mood} speakKey={speakKey} />
-      </section>
-
-      <section
-        className="grid content-start gap-[0.7rem] px-[0.15rem] py-1 pb-2 empty:hidden"
+      <div
+        className="grid flex-1 content-start gap-[0.7rem] overflow-y-auto px-[0.15rem] py-1 pb-2 empty:hidden"
         aria-live="polite"
       >
         {visibleMessages.map((message) =>
@@ -142,10 +183,10 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             <p className="m-0 text-[0.82rem] leading-[1.45]">Bernise is thinking…</p>
           </article>
         ) : null}
-      </section>
+      </div>
 
       <form
-        className="sticky bottom-[0.85rem] z-2 mt-auto grid gap-[0.45rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] focus-within:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] focus-within:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
+        className="sticky bottom-[0.85rem] z-2 mt-auto grid flex-none gap-[0.45rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] focus-within:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] focus-within:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
         onSubmit={onSpeak}
       >
         <div className="grid grid-cols-[1fr_auto] gap-2.5">
@@ -212,6 +253,41 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
           ) : null}
         </div>
       </form>
+    </section>
+  );
+
+  if (!wide) {
+    return (
+      <main className="relative z-1 grid min-h-dvh grid-cols-1">
+        {mascot}
+        {thread}
+      </main>
+    );
+  }
+
+  return (
+    <main className="relative z-1 h-dvh overflow-hidden">
+      <ResizablePanelGroup
+        id="bernise-station"
+        orientation="horizontal"
+        className="h-full"
+        defaultLayout={defaultLayout}
+        onLayoutChanged={onLayoutChanged}
+      >
+        <ResizablePanel
+          id="bernise"
+          defaultSize="42%"
+          minSize="28%"
+          maxSize="62%"
+          className="h-full min-h-0"
+        >
+          {mascot}
+        </ResizablePanel>
+        <ResizableHandle withHandle className={stationHandleClass} />
+        <ResizablePanel id="thread" defaultSize="58%" minSize="38%" className="h-full min-h-0">
+          {thread}
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </main>
   );
 }
