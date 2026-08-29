@@ -42,6 +42,7 @@ interface SessionState {
   readonly send: (method: string, params?: unknown) => Effect.Effect<unknown, CodexTransportError>;
   readonly events: Queue.Queue<ProviderEvent>;
   turnDone: Deferred.Deferred<{ readonly stopReason: string }, CodexTransportError>;
+  assistantText: string;
   readonly scope: Scope.Closeable;
 }
 
@@ -249,6 +250,10 @@ export const CodexProviderLive = Layer.effect(
         onNotification: (method, params) => {
           const text = extractCodexAssistantDelta(method, params);
           if (text !== undefined) {
+            const session = sessionHolder.current;
+            if (session !== undefined) {
+              session.assistantText += text;
+            }
             return Queue.offer(events, new ProviderTurnDelta({ text })).pipe(Effect.asVoid);
           }
           if (method === "turn/completed" && sessionHolder.current !== undefined) {
@@ -295,6 +300,7 @@ export const CodexProviderLive = Layer.effect(
         send: connection.send,
         events,
         turnDone: initialTurn,
+        assistantText: "",
         scope: sessionScope,
       };
       sessionHolder.current = session;
@@ -314,6 +320,7 @@ export const CodexProviderLive = Layer.effect(
       const session = yield* getSession(sessionId);
       const turnDone = yield* Deferred.make<{ readonly stopReason: string }, CodexTransportError>();
       session.turnDone = turnDone;
+      session.assistantText = "";
       yield* session
         .send(
           "turn/start",
@@ -339,6 +346,15 @@ export const CodexProviderLive = Layer.effect(
     const subscribeEvents = (sessionId: SessionId) =>
       Stream.unwrap(
         getSession(sessionId).pipe(Effect.map((session) => Stream.fromQueue(session.events))),
+      );
+
+    const consumeAssistantText = (sessionId: SessionId) =>
+      getSession(sessionId).pipe(
+        Effect.map((session) => {
+          const text = session.assistantText;
+          session.assistantText = "";
+          return text;
+        }),
       );
 
     const fetchCatalog = Effect.fn("CodexProvider.fetchCatalog")(function* (
@@ -408,6 +424,7 @@ export const CodexProviderLive = Layer.effect(
       startSession,
       sendTurn,
       subscribeEvents,
+      consumeAssistantText,
       listModels,
     });
   }),

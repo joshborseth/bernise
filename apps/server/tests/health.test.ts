@@ -14,6 +14,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HttpRoutesLive } from "../src/HttpLive.ts";
+import { threadPersistenceMemory } from "../src/persistence/ThreadPersistence.ts";
 import { Provider } from "../src/Provider.ts";
 import { providerHealthMemory } from "../src/ProviderHealth.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
@@ -37,6 +38,7 @@ const StubProviderLive = Layer.succeed(
     startSession: () => Effect.fail(new ProviderError({ message: "stub" })),
     sendTurn: () => Effect.fail(new ProviderError({ message: "stub" })),
     subscribeEvents: () => Stream.fail(new ProviderError({ message: "stub" })),
+    consumeAssistantText: () => Effect.succeed(""),
     listModels: Effect.fail(new ProviderError({ message: "stub" })),
   }),
 );
@@ -73,6 +75,7 @@ describe("bernise server", () => {
     }).pipe(
       Effect.provide(RpcHandlersLive),
       Effect.provide(StubProviderLive),
+      Effect.provide(threadPersistenceMemory),
       Effect.provide(serverSettingsMemory()),
       Effect.provide(providerHealthMemory(pendingSnapshots())),
     ),
@@ -106,6 +109,7 @@ describe("bernise server", () => {
     }).pipe(
       Effect.provide(RpcHandlersLive),
       Effect.provide(StubProviderLive),
+      Effect.provide(threadPersistenceMemory),
       Effect.provide(serverSettingsMemory()),
       Effect.provide(providerHealthMemory(pendingSnapshots())),
     ),
@@ -135,6 +139,7 @@ describe("bernise server", () => {
             startSession: () => Effect.fail(new ProviderError({ message: "stub" })),
             sendTurn: () => Effect.fail(new ProviderError({ message: "stub" })),
             subscribeEvents: () => Stream.fail(new ProviderError({ message: "stub" })),
+            consumeAssistantText: () => Effect.succeed(""),
             listModels: Effect.succeed(
               new ModelCatalog({
                 models: [
@@ -149,6 +154,7 @@ describe("bernise server", () => {
           }),
         ),
       ),
+      Effect.provide(threadPersistenceMemory),
       Effect.provide(serverSettingsMemory()),
       Effect.provide(providerHealthMemory(pendingSnapshots())),
     ),

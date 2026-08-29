@@ -6,6 +6,7 @@ import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import * as Http from "node:http";
 import { CodexProviderLive } from "./CodexProviderLive.ts";
 import { HealthLive } from "./HealthLive.ts";
+import { PersistenceLive } from "./persistence/Sqlite.ts";
 import { ProviderHealthLive } from "./ProviderHealth.ts";
 import { RpcHandlersLive } from "./RpcLive.ts";
 import { ServerSettingsLive } from "./ServerSettings.ts";
@@ -16,6 +17,7 @@ export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault(
 export const HarnessLive = CodexProviderLive.pipe(
   Layer.provideMerge(ProviderHealthLive),
   Layer.provideMerge(ServerSettingsLive),
+  Layer.provideMerge(PersistenceLive),
 );
 
 const RpcLive = RpcServer.layerHttp({

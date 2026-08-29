@@ -11,6 +11,8 @@
   "dependencies": {
     "@bernise/contracts": "workspace:*",
     "@effect/platform-node": "rc",
+    "@effect/sql-sqlite-bun": "^4.0.0-rc.112",
+    "@effect/sql-sqlite-node": "^4.0.0-rc.112",
     "effect": "rc"
   }
 }

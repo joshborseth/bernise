@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } from "./Provider.ts";
+import { PersistenceError, ThreadSnapshot } from "./Thread.ts";
 import {
   CodexSettingsPatch,
   HarnessSettings,
@@ -74,6 +75,11 @@ export class ListModels extends Rpc.make("ListModels", {
   error: ProviderError,
 }) {}
 
+export class GetThread extends Rpc.make("GetThread", {
+  success: ThreadSnapshot,
+  error: PersistenceError,
+}) {}
+
 export const BerniseRpcs = RpcGroup.make(
   Ping,
   StartSession,
@@ -84,4 +90,5 @@ export const BerniseRpcs = RpcGroup.make(
   GetProviderSnapshots,
   RefreshProviders,
   ListModels,
+  GetThread,
 );
