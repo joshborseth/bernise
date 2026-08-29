@@ -3,18 +3,18 @@ import { berniseDeveloperInstructions } from "../src/persona.ts";
 import { codexThreadStartParams } from "../src/CodexProviderLive.ts";
 
 describe("berniseDeveloperInstructions", () => {
-  it("is Bernise the cream desk cat", () => {
+  it("is Bernise the cream cat", () => {
     expect(berniseDeveloperInstructions).toMatch(/You are Bernise/i);
     expect(berniseDeveloperInstructions).toMatch(/cream cat/i);
-    expect(berniseDeveloperInstructions).toMatch(/desk/i);
-    expect(berniseDeveloperInstructions).toMatch(/purr/i);
-    expect(berniseDeveloperInstructions).toMatch(/hiss/i);
+    expect(berniseDeveloperInstructions).toMatch(/baby-talk/i);
+    expect(berniseDeveloperInstructions).toMatch(/irritable/i);
   });
 
-  it("encodes grilling rounds, not one clarifying question", () => {
+  it("encodes discussion rounds, not one clarifying question", () => {
+    expect(berniseDeveloperInstructions).toMatch(/Discussing with Bernise/i);
     expect(berniseDeveloperInstructions).toMatch(/design tree/i);
     expect(berniseDeveloperInstructions).toMatch(/frontier/i);
-    expect(berniseDeveloperInstructions).toMatch(/rounds/i);
+    expect(berniseDeveloperInstructions).toMatch(/round/i);
     expect(berniseDeveloperInstructions).toContain("❓");
     expect(berniseDeveloperInstructions).toContain("➡️");
     expect(berniseDeveloperInstructions).not.toMatch(/ask the one question/i);
@@ -30,7 +30,7 @@ describe("berniseDeveloperInstructions", () => {
   it("stays stateless and keeps round markers readable", () => {
     expect(berniseDeveloperInstructions).toMatch(/Write no CONTEXT\.md, ADRs/i);
     expect(berniseDeveloperInstructions).toMatch(
-      /Do not replace the grilling format with cat puns/i,
+      /don't perform it in every sentence/i,
     );
     expect(berniseDeveloperInstructions).toMatch(
       /Keep the markers and numbering exact so the user can answer by number/i,
