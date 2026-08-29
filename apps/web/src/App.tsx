@@ -132,7 +132,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     <aside
       className={
         wide
-          ? "grid h-full min-h-0 content-stretch justify-items-stretch"
+          ? "mascot-slot grid h-full min-h-0 content-center justify-items-center"
           : "grid content-center justify-items-center px-[1.15rem] pt-6 pb-2"
       }
     >
