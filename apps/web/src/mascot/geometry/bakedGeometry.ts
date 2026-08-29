@@ -1,6 +1,6 @@
 import { CatmullRomCurve3, TubeGeometry, Vector3 } from "three";
 import type { BufferGeometry } from "three";
-import type { Mass } from "./berniseModel.ts";
+import type { Mass } from "../model/types.ts";
 import { bakeMetaballs } from "./metaballs.ts";
 
 const massCache = new WeakMap<Mass, BufferGeometry>();

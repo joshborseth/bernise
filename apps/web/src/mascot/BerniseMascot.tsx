@@ -1,10 +1,12 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BerniseCat, type PointerGoal } from "./mascot/BerniseCat.tsx";
-import type { BerniseMood } from "./mascot/mood.ts";
-import { startPurr } from "./mascot/purr.ts";
+import { startPurr } from "./audio/purr.ts";
+import type { BerniseMood } from "./mood.ts";
+import { BerniseScene } from "./scene/BerniseScene.tsx";
+import type { PointerGoal } from "./scene/pointerGoal.ts";
 
 const idleUntilSleepMs = 14_000;
+const sleepUntilLitterMs = 8_000;
 
 export function BerniseMascot({
   mood,
@@ -20,10 +22,14 @@ export function BerniseMascot({
   const [biting, setBiting] = useState(false);
   const [hissing, setHissing] = useState(false);
   const [sleeping, setSleeping] = useState(false);
+  const [usingLitter, setUsingLitter] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
   const awake = mood !== "idle" || purring || biting || hissing;
   if (awake && sleeping) {
     setSleeping(false);
+  }
+  if (awake && usingLitter) {
+    setUsingLitter(false);
   }
 
   useLayoutEffect(() => {
@@ -88,7 +94,7 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
-    if (awake || sleeping) {
+    if (awake || sleeping || usingLitter) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -97,7 +103,20 @@ export function BerniseMascot({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [awake, sleeping]);
+  }, [awake, sleeping, usingLitter]);
+
+  useEffect(() => {
+    if (!sleeping || usingLitter) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setSleeping(false);
+      setUsingLitter(true);
+    }, sleepUntilLitterMs);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [sleeping, usingLitter]);
 
   useEffect(() => {
     if (!purring) {
@@ -112,9 +131,11 @@ export function BerniseMascot({
       ? `mascot mascot-${mood} mascot-hissing`
       : purring
         ? `mascot mascot-${mood} mascot-purring`
-        : sleeping
-          ? `mascot mascot-${mood} mascot-sleeping`
-          : `mascot mascot-${mood}`;
+        : usingLitter
+          ? `mascot mascot-${mood} mascot-litter`
+          : sleeping
+            ? `mascot mascot-${mood} mascot-sleeping`
+            : `mascot mascot-${mood}`;
 
   return (
     <div
@@ -127,9 +148,11 @@ export function BerniseMascot({
             ? "Bernise is hissing"
             : purring
               ? "Bernise is purring"
-              : sleeping
-                ? "Bernise is sleeping"
-                : "Bernise. Hold to pet."
+              : usingLitter
+                ? "Bernise is using the litter box"
+                : sleeping
+                  ? "Bernise is sleeping"
+                  : "Bernise. Hold to pet."
       }
       aria-pressed={purring}
     >
@@ -166,7 +189,7 @@ export function BerniseMascot({
               gl.setClearColor(0x000000, 0);
             }}
           >
-            <BerniseCat
+            <BerniseScene
               mood={mood}
               speakKey={speakKey}
               pointer={pointer}
@@ -174,10 +197,14 @@ export function BerniseMascot({
               biting={biting}
               hissing={hissing}
               sleeping={sleeping}
+              usingLitter={usingLitter}
               reducedMotion={reducedMotion}
               onPurringChange={setPurring}
               onBitingChange={setBiting}
               onHissingChange={setHissing}
+              onLitterDone={() => {
+                setUsingLitter(false);
+              }}
             />
           </Canvas>
         ) : null}
