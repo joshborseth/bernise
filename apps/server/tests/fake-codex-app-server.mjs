@@ -106,6 +106,7 @@ rl.on("line", (line) => {
     remember("last-thread-start.json", {
       model: message.params?.model ?? null,
       cwd: message.params?.cwd ?? null,
+      developerInstructions: message.params?.developerInstructions ?? null,
     });
     send({
       id: message.id,

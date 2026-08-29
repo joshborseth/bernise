@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clientRequestResult, readCodexModelPage } from "../src/CodexProviderLive.ts";
+import { berniseDeveloperInstructions } from "../src/persona.ts";
 import { Provider } from "../src/Provider.ts";
 import { codexDriverLayer } from "./testLayers.ts";
 
@@ -104,6 +105,22 @@ describe("CodexProviderLive", () => {
       };
       expect(thread.model).toBe("gpt-5.4-mini");
       expect(turn.model).toBe("gpt-5.4");
+    }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("sends Bernise developerInstructions on thread/start", () => {
+    const fake = makeFakeBin();
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      yield* provider.startSession("");
+      const thread = JSON.parse(
+        readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
+      ) as {
+        readonly cwd: string | null;
+        readonly developerInstructions: string | null;
+      };
+      expect(thread.cwd).toBe(fake.workspace);
+      expect(thread.developerInstructions).toBe(berniseDeveloperInstructions);
     }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
   });
 
