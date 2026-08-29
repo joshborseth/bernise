@@ -3,7 +3,7 @@ import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useState, type FormEvent } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
-import { BerniseMascot } from "./BerniseMascot.tsx";
+import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
 import {
   bootThreadAtom,
   formatError,
@@ -25,7 +25,6 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { cn } from "~/lib/utils";
-import { deriveBerniseMood } from "./mascot/mood.ts";
 import {
   bootSettingsAtom,
   composerModelView,

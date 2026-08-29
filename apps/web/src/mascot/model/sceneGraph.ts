@@ -1,115 +1,5 @@
-import type { BakeOptions, Metaball } from "./metaballs.ts";
-
-export type Vec3 = readonly [number, number, number];
-
-export type Surface =
-  | "snow"
-  | "snowShade"
-  | "silver"
-  | "tabby"
-  | "tabbyDark"
-  | "innerEar"
-  | "nose"
-  | "liner"
-  | "mouth"
-  | "eyeWhite"
-  | "irisRim"
-  | "iris"
-  | "irisGlow"
-  | "pupil"
-  | "shine"
-  | "fang"
-  | "whisker";
-
-export const palette: Record<Surface, string> = {
-  snow: "#fffcf7",
-  snowShade: "#f4ebe0",
-  silver: "#ded3c6",
-  tabby: "#b3a294",
-  tabbyDark: "#8a7768",
-  innerEar: "#eeb2ab",
-  nose: "#d98f88",
-  liner: "#3a2b25",
-  mouth: "#a76a63",
-  eyeWhite: "#ffffff",
-  irisRim: "#1f6ba8",
-  iris: "#4ea8e2",
-  irisGlow: "#9fd9f6",
-  pupil: "#141a20",
-  shine: "#ffffff",
-  fang: "#f3ece1",
-  whisker: "#c9bbae",
-};
-
-/** Groups the animation driver steers by name. */
-export type PartId =
-  | "root"
-  | "body"
-  | "head"
-  | "leftEar"
-  | "rightEar"
-  | "leftEye"
-  | "rightEye"
-  | "leftWhite"
-  | "rightWhite"
-  | "leftIris"
-  | "rightIris"
-  | "leftPupil"
-  | "rightPupil"
-  | "mouth"
-  | "fangs"
-  | "whiskers"
-  | "tail"
-  | "leftPaw"
-  | "rightPaw";
-
-export type Mass = {
-  readonly balls: ReadonlyArray<Metaball>;
-  readonly bake: BakeOptions;
-};
-
-export type Node =
-  | {
-      readonly kind: "group";
-      readonly id?: PartId | undefined;
-      readonly position?: Vec3 | undefined;
-      readonly rotation?: Vec3 | undefined;
-      readonly scale?: Vec3 | number | undefined;
-      readonly children: ReadonlyArray<Node>;
-    }
-  | {
-      readonly kind: "mass";
-      readonly surface: Surface;
-      readonly mass: Mass;
-      readonly outline?: boolean | undefined;
-    }
-  | {
-      readonly kind: "sphere";
-      readonly surface: Surface;
-      readonly radius: number;
-      readonly position?: Vec3 | undefined;
-      readonly rotation?: Vec3 | undefined;
-      readonly scale?: Vec3 | number | undefined;
-      readonly outline?: boolean | undefined;
-    }
-  | {
-      readonly kind: "cone";
-      readonly surface: Surface;
-      readonly radius: number;
-      readonly height: number;
-      readonly position?: Vec3 | undefined;
-      readonly rotation?: Vec3 | undefined;
-      readonly scale?: Vec3 | number | undefined;
-      readonly outline?: boolean | undefined;
-    }
-  | {
-      readonly kind: "whisker";
-      readonly length: number;
-      readonly droop: number;
-      readonly lift: number;
-      readonly position: Vec3;
-      readonly rotation: Vec3;
-    };
+import type { BakeOptions, Metaball } from "../geometry/metaballs.ts";
+import type { Mass, Node, PartId } from "./types.ts";
 
 /**
  * Model space: +y up, +z toward the viewer. Bernise stands roughly
@@ -176,20 +66,26 @@ const ruffMass: Mass = {
 
 const bodyMass: Mass = {
   balls: [
-    { position: [0, -0.5, -0.02], radius: 0.36 },
-    { position: [0, -0.72, 0.02], radius: 0.31 },
-    { position: [0, -0.88, 0.04], radius: 0.26 },
-    { position: [0, -0.45, -0.24], radius: 0.28 },
-    { position: [-0.3, -0.68, -0.04], radius: 0.24 },
-    { position: [0.3, -0.68, -0.04], radius: 0.24 },
-    { position: [-0.32, -0.38, 0], radius: 0.22 },
-    { position: [0.32, -0.38, 0], radius: 0.22 },
-    { position: [-0.4, -0.55, -0.06], radius: 0.15 },
-    { position: [0.4, -0.55, -0.06], radius: 0.15 },
-    { position: [-0.34, -0.85, 0], radius: 0.14 },
-    { position: [0.34, -0.85, 0], radius: 0.14 },
+    { position: [0, -0.52, 0.3], radius: 0.3 },
+    { position: [-0.22, -0.6, 0.22], radius: 0.18 },
+    { position: [0.22, -0.6, 0.22], radius: 0.18 },
+    { position: [0, -0.54, 0.06], radius: 0.32 },
+    { position: [0, -0.74, 0.08], radius: 0.24 },
+    { position: [0, -0.8, -0.06], radius: 0.2 },
+    { position: [-0.3, -0.64, 0.04], radius: 0.2 },
+    { position: [0.3, -0.64, 0.04], radius: 0.2 },
+    { position: [-0.36, -0.5, 0], radius: 0.15 },
+    { position: [0.36, -0.5, 0], radius: 0.15 },
+    { position: [0, -0.52, -0.28], radius: 0.3 },
+    { position: [0, -0.7, -0.24], radius: 0.22 },
+    { position: [-0.24, -0.62, -0.32], radius: 0.2 },
+    { position: [0.24, -0.62, -0.32], radius: 0.2 },
+    { position: [0, -0.48, -0.58], radius: 0.26 },
+    { position: [0, -0.7, -0.62], radius: 0.2 },
+    { position: [-0.2, -0.58, -0.6], radius: 0.16 },
+    { position: [0.2, -0.58, -0.6], radius: 0.16 },
   ],
-  bake: { center: [0, -0.62, -0.02], half: 0.82, resolution: 60 },
+  bake: { center: [0, -0.64, -0.14], half: 1.12, resolution: 60 },
 };
 
 /** Baked around its own pivot so the whole tail sways as one rigid piece. */
@@ -356,11 +252,15 @@ function ear(side: -1 | 1): Node {
   };
 }
 
-function paw(id?: PartId): Node {
+function paw(id: Extract<PartId, "leftPaw" | "rightPaw" | "leftHindPaw" | "rightHindPaw">): Node {
+  const hind = id === "leftHindPaw" || id === "rightHindPaw";
+  const left = id === "leftPaw" || id === "leftHindPaw";
   return {
     kind: "group",
     id,
-    position: [id === "leftPaw" ? -0.22 : 0.22, -0.98, 0.34],
+    position: [left ? -0.26 : 0.26, -0.98, hind ? -0.64 : 0.4],
+    rotation: hind ? [0, Math.PI, 0] : undefined,
+    scale: hind ? 0 : 1,
     children: [
       { kind: "sphere", surface: "snow", radius: 0.17, scale: [1.2, 0.72, 1.25], outline: true },
       {
@@ -519,13 +419,15 @@ export const bernise: Node = {
         {
           kind: "group",
           id: "tail",
-          position: [0.46, -0.78, -0.22],
+          position: [0.34, -0.62, -0.66],
           rotation: [0.18, 0.3, -0.3],
           children: [{ kind: "mass", surface: "silver", mass: tailMass, outline: true }],
         },
         { kind: "mass", surface: "silver", mass: bodyMass, outline: true },
         paw("leftPaw"),
         paw("rightPaw"),
+        paw("leftHindPaw"),
+        paw("rightHindPaw"),
         { kind: "mass", surface: "snow", mass: ruffMass, outline: true },
       ],
     },

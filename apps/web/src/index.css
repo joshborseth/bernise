@@ -246,6 +246,21 @@ body::after {
     );
 }
 
+.mascot-litter .mascot-halo {
+  animation-duration: 3.8s;
+  background:
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--peach) 58%, white) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      circle at 50% 50%,
+      color-mix(in srgb, var(--peach-deep) 28%, transparent),
+      transparent 72%
+    );
+}
+
 .mascot-zzz {
   position: absolute;
   left: 52%;
