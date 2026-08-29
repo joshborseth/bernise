@@ -4,6 +4,7 @@ import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } f
 import {
   CodexSettingsPatch,
   HarnessSettings,
+  ModelCatalog,
   ProviderSnapshots,
   SettingsError,
 } from "./Settings.ts";
@@ -19,6 +20,7 @@ export class Ping extends Rpc.make("Ping", {
 export class StartSession extends Rpc.make("StartSession", {
   payload: {
     workspace: Schema.optionalKey(Schema.String),
+    model: Schema.optionalKey(Schema.String),
   },
   success: SessionStarted,
   error: ProviderError,
@@ -32,6 +34,7 @@ export class SendTurn extends Rpc.make("SendTurn", {
   payload: {
     sessionId: SessionId,
     prompt: Schema.String,
+    model: Schema.optionalKey(Schema.String),
   },
   success: SendTurnResult,
   error: ProviderError,
@@ -66,6 +69,11 @@ export class RefreshProviders extends Rpc.make("RefreshProviders", {
   success: ProviderSnapshots,
 }) {}
 
+export class ListModels extends Rpc.make("ListModels", {
+  success: ModelCatalog,
+  error: ProviderError,
+}) {}
+
 export const BerniseRpcs = RpcGroup.make(
   Ping,
   StartSession,
@@ -75,4 +83,5 @@ export const BerniseRpcs = RpcGroup.make(
   UpdateSettings,
   GetProviderSnapshots,
   RefreshProviders,
+  ListModels,
 );

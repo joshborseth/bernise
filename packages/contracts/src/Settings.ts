@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 export const ProviderKind = Schema.Literal("codex");
 export type ProviderKind = typeof ProviderKind.Type;
@@ -13,6 +13,7 @@ export class CodexSettings extends Schema.Class<CodexSettings>("CodexSettings")(
   enabled: Schema.Boolean,
   binaryPath: Schema.String,
   homePath: Schema.String,
+  model: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 }) {}
 
 export class HarnessSettings extends Schema.Class<HarnessSettings>("HarnessSettings")({
@@ -23,6 +24,7 @@ export class CodexSettingsPatch extends Schema.Class<CodexSettingsPatch>("CodexS
   enabled: Schema.optionalKey(Schema.Boolean),
   binaryPath: Schema.optionalKey(Schema.String),
   homePath: Schema.optionalKey(Schema.String),
+  model: Schema.optionalKey(Schema.String),
 }) {}
 
 export class HarnessSettingsPatch extends Schema.Class<HarnessSettingsPatch>(
@@ -50,10 +52,21 @@ export class ProviderSnapshots extends Schema.Class<ProviderSnapshots>("Provider
   codex: ProviderSnapshot,
 }) {}
 
+export class CodexModel extends Schema.Class<CodexModel>("CodexModel")({
+  id: Schema.String,
+  displayName: Schema.String,
+  isDefault: Schema.Boolean,
+}) {}
+
+export class ModelCatalog extends Schema.Class<ModelCatalog>("ModelCatalog")({
+  models: Schema.Array(CodexModel),
+}) {}
+
 export const defaultCodexSettings = new CodexSettings({
   enabled: true,
   binaryPath: "",
   homePath: "",
+  model: "",
 });
 
 export const defaultHarnessSettings = new HarnessSettings({
@@ -76,5 +89,6 @@ export const mergeHarnessSettings = (
       enabled: patch.codex?.enabled ?? current.codex.enabled,
       binaryPath: trimPath(patch.codex?.binaryPath) ?? current.codex.binaryPath,
       homePath: trimPath(patch.codex?.homePath) ?? current.codex.homePath,
+      model: trimPath(patch.codex?.model) ?? current.codex.model,
     }),
   });

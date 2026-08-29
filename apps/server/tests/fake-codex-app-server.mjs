@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import * as Readline from "node:readline";
 
 const mode = process.env.FAKE_CODEX_MODE ?? "happy";
@@ -8,6 +10,14 @@ const rl = Readline.createInterface({ input: process.stdin, terminal: false });
 
 const send = (value) => {
   process.stdout.write(`${JSON.stringify(value)}\n`);
+};
+
+const remember = (name, value) => {
+  try {
+    writeFileSync(join(process.cwd(), name), `${JSON.stringify(value)}\n`);
+  } catch {
+    // Tests read these files from the fake workspace; ignore write failures.
+  }
 };
 
 let turnRequestId;
@@ -59,7 +69,44 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (message.method === "model/list") {
+    send({
+      id: message.id,
+      result: {
+        data: [
+          {
+            id: "gpt-5.4-mini",
+            model: "gpt-5.4-mini",
+            displayName: "GPT-5.4 Mini",
+            hidden: false,
+            isDefault: true,
+          },
+          {
+            id: "gpt-5.4",
+            model: "gpt-5.4",
+            displayName: "GPT-5.4",
+            hidden: false,
+            isDefault: false,
+          },
+          {
+            id: "hidden-model",
+            model: "hidden-model",
+            displayName: "Hidden",
+            hidden: true,
+            isDefault: false,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    return;
+  }
+
   if (message.method === "thread/start") {
+    remember("last-thread-start.json", {
+      model: message.params?.model ?? null,
+      cwd: message.params?.cwd ?? null,
+    });
     send({
       id: message.id,
       result: { thread: { id: "fake-codex-thread" } },
@@ -69,6 +116,9 @@ rl.on("line", (line) => {
 
   if (message.method === "turn/start") {
     turnRequestId = message.id;
+    remember("last-turn-start.json", {
+      model: message.params?.model ?? null,
+    });
 
     if (mode === "exit-on-prompt") {
       process.stderr.write("boom from fake codex\n");

@@ -20,9 +20,11 @@ codex login
 
 Bernise does not call OpenAI HTTP APIs. It talks to the local `codex app-server` the same way t3code does: `initialize` → `initialized` → `thread/start`, then `turn/start` with `item/agentMessage/delta` streaming.
 
+The server merges the login-shell `PATH` at boot so Electron's stripped GUI path still finds Homebrew `codex`. Leave Binary path blank to spawn the bare command `codex`. An explicit settings path or `BERNISE_CODEX_BIN` overrides that (env wins).
+
 ## Optional env
 
-- `BERNISE_CODEX_BIN` — default `codex` (wins over the settings binary path)
+- `BERNISE_CODEX_BIN` — optional absolute (or other) Codex binary; wins over the settings binary path. Default is `codex` on PATH
 - `BERNISE_WORKSPACE` — cwd for new sessions (default: server process cwd)
 - `BERNISE_STATE_DIR` — settings directory (default: `~/.bernise`)
 
@@ -30,9 +32,9 @@ Tool permissions are auto-approved for this first shot so the agent can write fi
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `GetSettings` / `UpdateSettings` persist the Codex binary and `CODEX_HOME` paths. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, and last-selected model. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
 
-The Speak composer starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. `SendTurn` waits until the provider turn finishes so the composer can stay pending.
+The Speak composer starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
 
 ## Later
 

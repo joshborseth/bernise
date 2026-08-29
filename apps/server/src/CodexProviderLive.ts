@@ -1,4 +1,6 @@
 import {
+  CodexModel,
+  ModelCatalog,
   ProviderError,
   ProviderEvent,
   ProviderTurnDelta,
@@ -29,6 +31,10 @@ import { ServerSettings } from "./ServerSettings.ts";
 const codexBinEnv = Config.string("BERNISE_CODEX_BIN").pipe(Config.option);
 const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 const handshakeTimeout = "20 seconds";
+const catalogTimeout = "10 seconds";
+const catalogKillAfter = "2 seconds";
+const catalogPageLimit = 50;
+const catalogMaxPages = 10;
 
 interface SessionState {
   readonly threadId: string;
@@ -85,6 +91,72 @@ export const clientRequestResult = (method: string): unknown => {
   return {};
 };
 
+export const readCodexModel = (value: unknown): CodexModel | undefined => {
+  if (!isRecord(value) || value.hidden === true) {
+    return undefined;
+  }
+  const id =
+    typeof value.id === "string" && value.id.length > 0
+      ? value.id
+      : typeof value.model === "string" && value.model.length > 0
+        ? value.model
+        : undefined;
+  if (id === undefined) {
+    return undefined;
+  }
+  const displayName =
+    typeof value.displayName === "string" && value.displayName.length > 0 ? value.displayName : id;
+  return new CodexModel({
+    id,
+    displayName,
+    isDefault: value.isDefault === true,
+  });
+};
+
+export const readCodexModelPage = (
+  value: unknown,
+): {
+  readonly models: ReadonlyArray<CodexModel>;
+  readonly nextCursor: string | undefined;
+} => {
+  if (!isRecord(value)) {
+    return { models: [], nextCursor: undefined };
+  }
+  const rows = Array.isArray(value.data)
+    ? value.data
+    : Array.isArray(value.models)
+      ? value.models
+      : Array.isArray(value.items)
+        ? value.items
+        : undefined;
+  if (rows === undefined) {
+    return { models: [], nextCursor: undefined };
+  }
+  const models: Array<CodexModel> = [];
+  for (const entry of rows) {
+    const model = readCodexModel(entry);
+    if (model !== undefined) {
+      models.push(model);
+    }
+  }
+  const nextCursor =
+    typeof value.nextCursor === "string" && value.nextCursor.length > 0
+      ? value.nextCursor
+      : undefined;
+  return { models, nextCursor };
+};
+
+const withOptionalModel = (
+  params: Record<string, unknown>,
+  model: string | undefined,
+): Record<string, unknown> => {
+  const trimmed = model?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return params;
+  }
+  return { ...params, model: trimmed };
+};
+
 const toProviderError = (error: unknown, fallback: string): ProviderError => {
   if (error instanceof ProviderError) {
     return error;
@@ -124,6 +196,14 @@ export const CodexProviderLive = Layer.effect(
     const configuredWorkspace = yield* workspaceConfig;
     const serverSettings = yield* ServerSettings;
     const sessions = yield* SynchronizedRef.make(new Map<SessionId, SessionState>());
+    const catalogCache = yield* SynchronizedRef.make<
+      | {
+          readonly command: string;
+          readonly homePath: string;
+          readonly catalog: ModelCatalog;
+        }
+      | undefined
+    >(undefined);
 
     const defaultWorkspace = () => Option.getOrElse(configuredWorkspace, () => process.cwd());
 
@@ -137,7 +217,10 @@ export const CodexProviderLive = Layer.effect(
         }),
       );
 
-    const startSession = Effect.fn("CodexProvider.startSession")(function* (workspace: string) {
+    const startSession = Effect.fn("CodexProvider.startSession")(function* (
+      workspace: string,
+      model?: string,
+    ) {
       const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
       const settings = yield* serverSettings.get;
       const command = resolveCodexBin(settings.codex.binaryPath, envBin);
@@ -189,7 +272,7 @@ export const CodexProviderLive = Layer.effect(
       yield* withHandshakeTimeout(connection.notify("initialized"), "Codex App Server initialized");
 
       const created = yield* withHandshakeTimeout(
-        connection.send("thread/start", { cwd }),
+        connection.send("thread/start", withOptionalModel({ cwd }, model)),
         "Codex App Server thread/start",
       );
       const threadId = readCodexThreadId(created);
@@ -220,15 +303,22 @@ export const CodexProviderLive = Layer.effect(
     const sendTurn = Effect.fn("CodexProvider.sendTurn")(function* (
       sessionId: SessionId,
       prompt: string,
+      model?: string,
     ) {
       const session = yield* getSession(sessionId);
       const turnDone = yield* Deferred.make<{ readonly stopReason: string }, CodexTransportError>();
       session.turnDone = turnDone;
       yield* session
-        .send("turn/start", {
-          threadId: session.threadId,
-          input: [{ type: "text", text: prompt }],
-        })
+        .send(
+          "turn/start",
+          withOptionalModel(
+            {
+              threadId: session.threadId,
+              input: [{ type: "text", text: prompt }],
+            },
+            model,
+          ),
+        )
         .pipe(
           Effect.mapError((error) => toProviderError(error, "Codex App Server turn/start failed")),
         );
@@ -245,10 +335,74 @@ export const CodexProviderLive = Layer.effect(
         getSession(sessionId).pipe(Effect.map((session) => Stream.fromQueue(session.events))),
       );
 
+    const fetchCatalog = Effect.fn("CodexProvider.fetchCatalog")(function* (
+      command: string,
+      homePath: string,
+    ) {
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const connection = yield* makeCodexConnection({
+            command,
+            args: ["app-server"],
+            cwd: process.cwd(),
+            ...(homePath.length > 0 ? { env: { CODEX_HOME: expandHomePath(homePath) } } : {}),
+            forceKillAfter: catalogKillAfter,
+            spawnHint: `Could not spawn ${command}. Install Codex CLI (\`codex\`) and run \`codex login\`.`,
+            onNotification: () => Effect.void,
+            onRequest: () => Effect.succeed({}),
+          }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+          yield* connection.send("initialize", {
+            clientInfo: { name: "bernise", title: "Bernise", version: "0.0.0" },
+            capabilities: { experimentalApi: true },
+          });
+          yield* connection.notify("initialized");
+          const models: Array<CodexModel> = [];
+          let cursor: string | undefined;
+          for (let page = 0; page < catalogMaxPages; page++) {
+            const listed = yield* connection.send("model/list", {
+              limit: catalogPageLimit,
+              includeHidden: false,
+              ...(cursor === undefined ? {} : { cursor }),
+            });
+            const nextPage = readCodexModelPage(listed);
+            models.push(...nextPage.models);
+            if (nextPage.nextCursor === undefined) {
+              break;
+            }
+            cursor = nextPage.nextCursor;
+          }
+          return new ModelCatalog({ models });
+        }),
+      ).pipe(
+        Effect.timeout(catalogTimeout),
+        Effect.mapError((error) => toProviderError(error, "Codex App Server model/list failed")),
+      );
+    });
+
+    const listModels = Effect.gen(function* () {
+      const settings = yield* serverSettings.get;
+      const command = resolveCodexBin(settings.codex.binaryPath, envBin);
+      const homePath = settings.codex.homePath.trim();
+      return yield* SynchronizedRef.modifyEffect(catalogCache, (cached) => {
+        if (cached !== undefined && cached.command === command && cached.homePath === homePath) {
+          return Effect.succeed([cached.catalog, cached] as const);
+        }
+        return fetchCatalog(command, homePath).pipe(
+          Effect.map((catalog) => {
+            if (catalog.models.length === 0) {
+              return [catalog, undefined] as const;
+            }
+            return [catalog, { command, homePath, catalog }] as const;
+          }),
+        );
+      });
+    });
+
     return Provider.of({
       startSession,
       sendTurn,
       subscribeEvents,
+      listModels,
     });
   }),
 ).pipe(Layer.provide(NodeServices.layer));

@@ -1,4 +1,10 @@
-import { BerniseRpcs, HealthStatus, ProviderError } from "@bernise/contracts";
+import {
+  BerniseRpcs,
+  CodexModel,
+  HealthStatus,
+  ModelCatalog,
+  ProviderError,
+} from "@bernise/contracts";
 import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer, Stream } from "effect";
@@ -31,6 +37,7 @@ const StubProviderLive = Layer.succeed(
     startSession: () => Effect.fail(new ProviderError({ message: "stub" })),
     sendTurn: () => Effect.fail(new ProviderError({ message: "stub" })),
     subscribeEvents: () => Stream.fail(new ProviderError({ message: "stub" })),
+    listModels: Effect.fail(new ProviderError({ message: "stub" })),
   }),
 );
 
@@ -87,10 +94,11 @@ describe("bernise server", () => {
       const initial = yield* client.GetSettings();
       expect(initial.codex.binaryPath).toBe("");
       const next = yield* client.UpdateSettings({
-        codex: { binaryPath: "/usr/local/bin/codex", homePath: "~/.codex" },
+        codex: { binaryPath: "/usr/local/bin/codex", homePath: "~/.codex", model: "gpt-5.4-mini" },
       });
       expect(next.codex.binaryPath).toBe("/usr/local/bin/codex");
       expect(next.codex.homePath).toBe("~/.codex");
+      expect(next.codex.model).toBe("gpt-5.4-mini");
       expect(yield* client.GetSettings()).toEqual(next);
       const snapshots = yield* client.GetProviderSnapshots();
       expect(snapshots.codex.kind).toBe("codex");
@@ -98,6 +106,49 @@ describe("bernise server", () => {
     }).pipe(
       Effect.provide(RpcHandlersLive),
       Effect.provide(StubProviderLive),
+      Effect.provide(serverSettingsMemory()),
+      Effect.provide(providerHealthMemory(pendingSnapshots())),
+    ),
+  );
+
+  it.effect("ListModels returns the provider catalog", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      const catalog = yield* client.ListModels();
+      expect(catalog).toEqual(
+        new ModelCatalog({
+          models: [
+            new CodexModel({
+              id: "gpt-5.4-mini",
+              displayName: "GPT-5.4 Mini",
+              isDefault: true,
+            }),
+          ],
+        }),
+      );
+    }).pipe(
+      Effect.provide(RpcHandlersLive),
+      Effect.provide(
+        Layer.succeed(
+          Provider,
+          Provider.of({
+            startSession: () => Effect.fail(new ProviderError({ message: "stub" })),
+            sendTurn: () => Effect.fail(new ProviderError({ message: "stub" })),
+            subscribeEvents: () => Stream.fail(new ProviderError({ message: "stub" })),
+            listModels: Effect.succeed(
+              new ModelCatalog({
+                models: [
+                  new CodexModel({
+                    id: "gpt-5.4-mini",
+                    displayName: "GPT-5.4 Mini",
+                    isDefault: true,
+                  }),
+                ],
+              }),
+            ),
+          }),
+        ),
+      ),
       Effect.provide(serverSettingsMemory()),
       Effect.provide(providerHealthMemory(pendingSnapshots())),
     ),

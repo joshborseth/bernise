@@ -1,11 +1,11 @@
-import { ProviderTurnDelta, TurnResult } from "@bernise/contracts";
+import { CodexModel, ModelCatalog, ProviderTurnDelta, TurnResult } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber, Stream } from "effect";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { clientRequestResult } from "../src/CodexProviderLive.ts";
+import { clientRequestResult, readCodexModelPage } from "../src/CodexProviderLive.ts";
 import { Provider } from "../src/Provider.ts";
 import { codexDriverLayer } from "./testLayers.ts";
 
@@ -87,4 +87,78 @@ describe("CodexProviderLive", () => {
       ),
     ),
   );
+
+  it.effect("passes a selected model into thread/start and turn/start", () => {
+    const fake = makeFakeBin();
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const sessionId = yield* provider.startSession("", "gpt-5.4-mini");
+      yield* provider.sendTurn(sessionId, "hello", "gpt-5.4");
+      const thread = JSON.parse(
+        readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
+      ) as { readonly model: string | null };
+      const turn = JSON.parse(
+        readFileSync(join(fake.workspace, "last-turn-start.json"), "utf8"),
+      ) as {
+        readonly model: string | null;
+      };
+      expect(thread.model).toBe("gpt-5.4-mini");
+      expect(turn.model).toBe("gpt-5.4");
+    }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("lists visible Codex models and skips hidden entries", () => {
+    const fake = makeFakeBin();
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      const catalog = yield* provider.listModels;
+      expect(catalog).toEqual(
+        new ModelCatalog({
+          models: [
+            new CodexModel({
+              id: "gpt-5.4-mini",
+              displayName: "GPT-5.4 Mini",
+              isDefault: true,
+            }),
+            new CodexModel({ id: "gpt-5.4", displayName: "GPT-5.4", isDefault: false }),
+          ],
+        }),
+      );
+    }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
+  });
+});
+
+describe("readCodexModelPage", () => {
+  it("reads ids, display names, defaults, and pagination", () => {
+    expect(
+      readCodexModelPage({
+        data: [
+          { id: "gpt-5.4", displayName: "GPT-5.4", isDefault: true },
+          { model: "fallback-id", hidden: false },
+          { id: "hidden-model", hidden: true },
+          { notAModel: true },
+        ],
+        nextCursor: "page-2",
+      }),
+    ).toEqual({
+      models: [
+        new CodexModel({ id: "gpt-5.4", displayName: "GPT-5.4", isDefault: true }),
+        new CodexModel({ id: "fallback-id", displayName: "fallback-id", isDefault: false }),
+      ],
+      nextCursor: "page-2",
+    });
+  });
+
+  it("reads models from a models or items array", () => {
+    expect(
+      readCodexModelPage({
+        models: [{ id: "gpt-5.6-terra", displayName: "GPT-5.6-Terra", isDefault: true }],
+      }),
+    ).toEqual({
+      models: [
+        new CodexModel({ id: "gpt-5.6-terra", displayName: "GPT-5.6-Terra", isDefault: true }),
+      ],
+      nextCursor: undefined,
+    });
+  });
 });
