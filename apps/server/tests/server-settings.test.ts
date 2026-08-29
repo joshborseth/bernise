@@ -32,6 +32,19 @@ describe("mergeHarnessSettings", () => {
     );
     expect(next.codex.model).toBe("gpt-5.4-mini");
   });
+
+  it("merges voice settings", () => {
+    const next = mergeHarnessSettings(
+      defaultHarnessSettings,
+      new HarnessSettingsPatch({
+        voice: { enabled: true, voiceId: " af_bella ", skipCode: false },
+      }),
+    );
+    expect(next.voice.enabled).toBe(true);
+    expect(next.voice.voiceId).toBe("af_bella");
+    expect(next.voice.skipCode).toBe(false);
+    expect(next.codex.binaryPath).toBe("");
+  });
 });
 
 describe("ServerSettingsLive", () => {
@@ -73,6 +86,9 @@ describe("ServerSettingsLive", () => {
       expect(loaded.codex.binaryPath).toBe("/opt/codex");
       expect(loaded.codex.homePath).toBe("~/.codex");
       expect(loaded.codex.model).toBe("");
+      expect(loaded.voice.enabled).toBe(false);
+      expect(loaded.voice.voiceId).toBe("af_heart");
+      expect(loaded.voice.skipCode).toBe(true);
     }).pipe(
       Effect.provide(ServerSettingsLive),
       Effect.provide(

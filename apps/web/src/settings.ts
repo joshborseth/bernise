@@ -4,6 +4,7 @@ import {
   ModelCatalog,
   ProviderSnapshot,
   ProviderSnapshots,
+  VoiceSettingsPatch,
 } from "@bernise/contracts";
 import { Cause, Effect } from "effect";
 import { Atom, AsyncResult } from "effect/unstable/reactivity";
@@ -125,6 +126,7 @@ export const refreshProvidersAtom = BerniseRpc.runtime.fn((_: void, get) =>
 
 export type SettingsPatch = {
   readonly codex?: CodexSettingsPatch;
+  readonly voice?: VoiceSettingsPatch;
 };
 
 export const updateSettingsAtom = BerniseRpc.runtime.fn((patch: SettingsPatch, get) =>

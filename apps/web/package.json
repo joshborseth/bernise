@@ -17,6 +17,7 @@
     "@react-three/fiber": "^9.7.0",
     "class-variance-authority": "^0.7.1",
     "effect": "rc",
+    "kokoro-js": "^1.2.1",
     "lucide-react": "^0.564.0",
     "react": "latest",
     "react-dom": "latest",

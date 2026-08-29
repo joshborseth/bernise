@@ -1,6 +1,7 @@
 import {
   CodexModel,
   CodexSettings,
+  defaultVoiceSettings,
   HarnessSettings,
   ModelCatalog,
   ProviderError,
@@ -370,6 +371,7 @@ describe("chat atoms", () => {
               homePath: "",
               model: "gpt-5.4-mini",
             }),
+            voice: defaultVoiceSettings,
           }),
         ),
       ],

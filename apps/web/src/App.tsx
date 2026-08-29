@@ -1,9 +1,10 @@
 import { type ProviderSnapshot } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
+import { Volume2, VolumeOff } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { BerniseMascot } from "./BerniseMascot.tsx";
-import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import { formatError, speakAtom, visibleMessagesAtom } from "./chat.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -18,6 +19,7 @@ import {
 } from "~/components/ui/select";
 import { cn } from "~/lib/utils";
 import { deriveBerniseMood } from "./mascot/mood.ts";
+import { getAudioContext } from "./mascot/purr.ts";
 import {
   bootSettingsAtom,
   composerModelView,
@@ -28,6 +30,9 @@ import {
   snapshotsAtom,
   updateSettingsAtom,
 } from "./settings.ts";
+import { speakingAtom, voiceStatusAtom } from "./voice/state.ts";
+import { useBerniseVoice } from "./voice/useVoice.ts";
+import { berniseVoices } from "./voice/voices.ts";
 
 const statusLabel = (snapshot: ProviderSnapshot): string => {
   if (!snapshot.enabled) {
@@ -47,23 +52,31 @@ const shellClass =
 
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
+  const { skip } = useBerniseVoice();
   useAtomValue(bootSettingsAtom);
   useAtomValue(modelsResultAtom);
 
   return view === "settings" ? (
     <SettingsView onBack={() => setView("chat")} />
   ) : (
-    <ChatView onOpenSettings={() => setView("settings")} />
+    <ChatView onOpenSettings={() => setView("settings")} onSkipVoice={skip} />
   );
 }
 
-function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
+function ChatView({
+  onOpenSettings,
+  onSkipVoice,
+}: {
+  readonly onOpenSettings: () => void;
+  readonly onSkipVoice: () => void;
+}) {
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
-  const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const settings = useAtomValue(settingsAtom);
+  const speaking = useAtomValue(speakingAtom);
+  const voiceStatus = useAtomValue(voiceStatusAtom);
   const modelsResult = useAtomValue(modelsResultAtom);
   const modelView = composerModelView(modelsResult, settings.codex.model);
   const [, updateSettings] = useAtom(updateSettingsAtom);
@@ -82,6 +95,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const mood = deriveBerniseMood({
     composerFocused,
     pending,
+    speaking,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
 
@@ -113,7 +127,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
       </header>
 
       <section className="grid flex-none justify-items-center content-center py-3 pb-[0.45rem]">
-        <BerniseMascot mood={mood} speakKey={speakKey} />
+        <BerniseMascot mood={mood} />
       </section>
 
       <section
@@ -175,7 +189,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             {pending ? "Thinking…" : "Speak"}
           </Button>
         </div>
-        <div className="flex items-center px-[0.2rem] pb-[0.1rem]">
+        <div className="flex items-center justify-between gap-2 px-[0.2rem] pb-[0.1rem]">
           {modelView.kind === "error" ? (
             <p
               className="m-0 px-[0.55rem] py-[0.15rem] pb-[0.2rem] text-[0.72rem] leading-[1.4] tracking-[0.02em] text-destructive"
@@ -209,7 +223,45 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
                 ))}
               </SelectContent>
             </Select>
-          ) : null}
+          ) : (
+            <span />
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            {voiceStatus === "loading" && settings.voice.enabled ? (
+              <p className="m-0 text-[0.72rem] tracking-[0.02em] text-muted-foreground">
+                warming up voice…
+              </p>
+            ) : voiceStatus === "error" && settings.voice.enabled ? (
+              <p className="m-0 text-[0.72rem] tracking-[0.02em] text-destructive">
+                voice failed to load
+              </p>
+            ) : null}
+            {speaking ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={onSkipVoice}
+              >
+                Skip
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="rounded-full"
+              aria-label={settings.voice.enabled ? "Mute Bernise" : "Give Bernise a voice"}
+              aria-pressed={settings.voice.enabled}
+              onClick={() => {
+                void getAudioContext().resume();
+                updateSettings({ voice: { enabled: !settings.voice.enabled } });
+              }}
+            >
+              {settings.voice.enabled ? <Volume2 /> : <VolumeOff />}
+            </Button>
+          </div>
         </div>
       </form>
     </main>
@@ -246,6 +298,21 @@ function SettingsView({ onBack }: { readonly onBack: () => void }) {
         }}
         onHomePath={(homePath) => {
           updateSettings({ codex: { homePath } });
+        }}
+      />
+      <VoiceCard
+        enabled={settings.voice.enabled}
+        voiceId={settings.voice.voiceId}
+        skipCode={settings.voice.skipCode}
+        onEnabled={(enabled) => {
+          void getAudioContext().resume();
+          updateSettings({ voice: { enabled } });
+        }}
+        onVoiceId={(voiceId) => {
+          updateSettings({ voice: { voiceId } });
+        }}
+        onSkipCode={(skipCode) => {
+          updateSettings({ voice: { skipCode } });
         }}
       />
       <Button
@@ -350,6 +417,101 @@ function ProviderCard({
         <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
           {snapshot.message}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function VoiceCard({
+  enabled,
+  voiceId,
+  skipCode,
+  onEnabled,
+  onVoiceId,
+  onSkipCode,
+}: {
+  readonly enabled: boolean;
+  readonly voiceId: string;
+  readonly skipCode: boolean;
+  readonly onEnabled: (value: boolean) => void;
+  readonly onVoiceId: (value: string) => void;
+  readonly onSkipCode: (value: boolean) => void;
+}) {
+  const selected = berniseVoices.some((voice) => voice.id === voiceId)
+    ? voiceId
+    : berniseVoices[0].id;
+
+  return (
+    <Card className="rounded-[1.2rem] shadow-[0_10px_22px_color-mix(in_srgb,var(--ink)_5%,transparent)] ring-border">
+      <CardHeader>
+        <CardTitle className="text-[0.95rem] font-medium">Voice</CardTitle>
+        <CardAction>
+          <Badge
+            variant={enabled ? "outline" : "secondary"}
+            className={
+              enabled
+                ? "border-transparent bg-[color-mix(in_srgb,var(--peach)_50%,white)] text-foreground uppercase tracking-[0.08em]"
+                : "uppercase tracking-[0.08em]"
+            }
+          >
+            {enabled ? "on" : "off"}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
+          Bernise reads grill prose out loud as it streams. The first unmute downloads a local voice
+          model; after that it stays on the machine.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="justify-self-start rounded-full"
+          aria-pressed={enabled}
+          onClick={() => {
+            onEnabled(!enabled);
+          }}
+        >
+          {enabled ? "Mute voice" : "Give Bernise a voice"}
+        </Button>
+        <div className="grid gap-1.5">
+          <Label htmlFor="bernise-voice" className="tracking-[0.04em] text-muted-foreground">
+            Voice
+          </Label>
+          <Select
+            value={selected}
+            disabled={!enabled}
+            items={berniseVoices.map((voice) => ({ value: voice.id, label: voice.label }))}
+            onValueChange={(value) => {
+              if (value === null) {
+                return;
+              }
+              onVoiceId(value);
+            }}
+          >
+            <SelectTrigger id="bernise-voice" size="sm" aria-label="Voice" className="rounded-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="start" alignItemWithTrigger={false}>
+              {berniseVoices.map((voice) => (
+                <SelectItem key={voice.id} value={voice.id}>
+                  {voice.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <label className="flex items-center gap-2 text-[0.82rem] leading-[1.45] text-foreground">
+          <input
+            type="checkbox"
+            checked={skipCode}
+            onChange={(event) => {
+              onSkipCode(event.target.checked);
+            }}
+          />
+          Skip code blocks
+        </label>
       </CardContent>
     </Card>
   );

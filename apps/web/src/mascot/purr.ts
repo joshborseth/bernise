@@ -3,10 +3,43 @@ const lookaheadSeconds = 2;
 const scheduleEveryMs = 180;
 
 let shared: AudioContext | undefined;
+let duck: GainNode | undefined;
+let speechAmp = 0;
 
-function audioContext(): AudioContext {
+export function getAudioContext(): AudioContext {
   shared ??= new AudioContext();
   return shared;
+}
+
+export function purrOutput(): GainNode {
+  const ctx = getAudioContext();
+  if (duck === undefined) {
+    duck = ctx.createGain();
+    duck.gain.value = 1;
+    duck.connect(ctx.destination);
+  }
+  return duck;
+}
+
+export function setPurrDucked(ducked: boolean): void {
+  const ctx = getAudioContext();
+  const node = purrOutput();
+  const now = ctx.currentTime;
+  node.gain.cancelScheduledValues(now);
+  node.gain.setValueAtTime(node.gain.value, now);
+  node.gain.linearRampToValueAtTime(ducked ? 0.06 : 1, now + 0.08);
+}
+
+export function setSpeechLevel(level: number): void {
+  speechAmp = level;
+}
+
+export function speechLevel(): number {
+  return speechAmp;
+}
+
+function audioContext(): AudioContext {
+  return getAudioContext();
 }
 
 function mix(min: number, max: number): number {
@@ -246,7 +279,7 @@ export function startPurr(): () => void {
   const master = ctx.createGain();
   master.gain.setValueAtTime(0, ctx.currentTime);
   master.gain.linearRampToValueAtTime(0.34, ctx.currentTime + fadeSeconds);
-  master.connect(ctx.destination);
+  master.connect(purrOutput());
 
   const burstGain = ctx.createGain();
   burstGain.gain.value = 0;

@@ -7,6 +7,7 @@ import {
   ModelCatalog,
   ProviderSnapshots,
   SettingsError,
+  VoiceSettingsPatch,
 } from "./Settings.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
@@ -56,6 +57,7 @@ export class GetSettings extends Rpc.make("GetSettings", {
 export class UpdateSettings extends Rpc.make("UpdateSettings", {
   payload: {
     codex: Schema.optionalKey(CodexSettingsPatch),
+    voice: Schema.optionalKey(VoiceSettingsPatch),
   },
   success: HarnessSettings,
   error: SettingsError,

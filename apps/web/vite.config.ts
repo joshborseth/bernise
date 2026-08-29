@@ -39,4 +39,7 @@ export default defineConfig({
         }
       : {}),
   },
+  optimizeDeps: {
+    exclude: ["kokoro-js"],
+  },
 });

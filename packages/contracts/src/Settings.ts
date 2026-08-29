@@ -16,8 +16,31 @@ export class CodexSettings extends Schema.Class<CodexSettings>("CodexSettings")(
   model: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 }) {}
 
+export class VoiceSettings extends Schema.Class<VoiceSettings>("VoiceSettings")({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(false))),
+  voiceId: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed("af_heart"))),
+  skipCode: Schema.Boolean.pipe(Schema.withDecodingDefaultKey(Effect.succeed(true))),
+}) {}
+
+export class VoiceSettingsPatch extends Schema.Class<VoiceSettingsPatch>("VoiceSettingsPatch")({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  voiceId: Schema.optionalKey(Schema.String),
+  skipCode: Schema.optionalKey(Schema.Boolean),
+}) {}
+
 export class HarnessSettings extends Schema.Class<HarnessSettings>("HarnessSettings")({
   codex: CodexSettings,
+  voice: VoiceSettings.pipe(
+    Schema.withDecodingDefaultKey(
+      Effect.succeed(
+        new VoiceSettings({
+          enabled: false,
+          voiceId: "af_heart",
+          skipCode: true,
+        }),
+      ),
+    ),
+  ),
 }) {}
 
 export class CodexSettingsPatch extends Schema.Class<CodexSettingsPatch>("CodexSettingsPatch")({
@@ -31,6 +54,7 @@ export class HarnessSettingsPatch extends Schema.Class<HarnessSettingsPatch>(
   "HarnessSettingsPatch",
 )({
   codex: Schema.optionalKey(CodexSettingsPatch),
+  voice: Schema.optionalKey(VoiceSettingsPatch),
 }) {}
 
 export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
@@ -69,8 +93,15 @@ export const defaultCodexSettings = new CodexSettings({
   model: "",
 });
 
+export const defaultVoiceSettings = new VoiceSettings({
+  enabled: false,
+  voiceId: "af_heart",
+  skipCode: true,
+});
+
 export const defaultHarnessSettings = new HarnessSettings({
   codex: defaultCodexSettings,
+  voice: defaultVoiceSettings,
 });
 
 const trimPath = (value: string | undefined): string | undefined => {
@@ -90,5 +121,10 @@ export const mergeHarnessSettings = (
       binaryPath: trimPath(patch.codex?.binaryPath) ?? current.codex.binaryPath,
       homePath: trimPath(patch.codex?.homePath) ?? current.codex.homePath,
       model: trimPath(patch.codex?.model) ?? current.codex.model,
+    }),
+    voice: new VoiceSettings({
+      enabled: patch.voice?.enabled ?? current.voice.enabled,
+      voiceId: trimPath(patch.voice?.voiceId) ?? current.voice.voiceId,
+      skipCode: patch.voice?.skipCode ?? current.voice.skipCode,
     }),
   });

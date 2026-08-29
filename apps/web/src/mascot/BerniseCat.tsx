@@ -6,7 +6,7 @@ import type { Group, Material, Object3D } from "three";
 import { massGeometry, whiskerGeometry } from "./berniseGeometry.ts";
 import { bernise, palette, type Node, type PartId, type Surface } from "./berniseModel.ts";
 import type { BerniseMood } from "./mood.ts";
-import { playChomp, playHiss, purrBurst } from "./purr.ts";
+import { playChomp, playHiss, purrBurst, speechLevel } from "./purr.ts";
 
 export type PointerGoal = { x: number; y: number };
 
@@ -129,7 +129,6 @@ function petRegionFrom(event: ThreeEvent<PointerEvent>): PetRegion {
 
 export function BerniseCat({
   mood,
-  speakKey,
   pointer,
   purring,
   biting,
@@ -140,8 +139,7 @@ export function BerniseCat({
   onBitingChange,
   onHissingChange,
 }: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
-  readonly speakKey: string;
+  readonly mood: BerniseMood;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
@@ -163,7 +161,6 @@ export function BerniseCat({
       <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.85} color="#ffe6cf" />
       <BerniseFigure
         mood={mood}
-        speakKey={speakKey}
         pointer={pointer}
         purring={purring}
         biting={biting}
@@ -203,7 +200,6 @@ const origin = [0, 0, 0] as const;
 
 function BerniseFigure({
   mood,
-  speakKey,
   pointer,
   purring,
   biting,
@@ -214,8 +210,7 @@ function BerniseFigure({
   onBitingChange,
   onHissingChange,
 }: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
-  readonly speakKey: string;
+  readonly mood: BerniseMood;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
   readonly biting: boolean;
@@ -237,7 +232,6 @@ function BerniseFigure({
   } | null>(null);
   const blink = useRef({ nextAt: 2.4, closeUntil: 0 });
   const twitch = useRef({ nextAt: 2.6, amount: 0 });
-  const speech = useRef({ key: "", until: 0 });
   const rumble = useRef({ amp: 0, y: 0 });
   const petRegion = useRef<PetRegion>("body");
   const overpet = useRef({
@@ -303,10 +297,6 @@ function BerniseFigure({
     const dt = Math.min(delta, 0.05);
     const t = clock.elapsedTime;
     head.rotation.order = "YXZ";
-    if (speakKey !== speech.current.key) {
-      speech.current.key = speakKey;
-      speech.current.until = t + 2.4;
-    }
 
     if (!purring && !biting && !hissing) {
       const escalateElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
@@ -373,8 +363,8 @@ function BerniseFigure({
     const asleep = sleeping && !happyPurr && !striking && !recoiling;
     const listening = mood === "listening";
     const thinking = mood === "thinking";
-    const speaking =
-      mood === "idle" && t < speech.current.until && !striking && !recoiling && !asleep;
+    const level = speechLevel();
+    const speaking = (mood === "speaking" || level > 0.035) && !striking && !recoiling && !asleep;
     const restOpenness = 0.9;
     const escalate = striking || recoiling;
 
@@ -540,7 +530,7 @@ function BerniseFigure({
       rumble.current.y,
       (asleep ? sleepDrop : 0) +
         Math.sin(t * (asleep ? 0.55 : 1.05)) * (asleep ? 0.01 : 0.02) +
-        (speaking && !happyPurr ? Math.abs(Math.sin(t * 9)) * 0.026 : 0),
+        (speaking && !happyPurr ? level * 0.05 : 0),
       asleep ? 3.2 : 6,
       dt,
     );
@@ -771,7 +761,7 @@ function BerniseFigure({
           : happyPurr || asleep
             ? 0.72
             : speaking
-              ? 1.6 + Math.abs(Math.sin(t * 11.5)) * 2.4
+              ? 1.15 + level * 4.8
               : 1,
       mouthOpen ? 28 : 12,
       dt,

@@ -6,13 +6,7 @@ import { startPurr } from "./mascot/purr.ts";
 
 const idleUntilSleepMs = 14_000;
 
-export function BerniseMascot({
-  mood,
-  speakKey,
-}: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
-  readonly speakKey: string;
-}) {
+export function BerniseMascot({ mood }: { readonly mood: BerniseMood }) {
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageReady, setStageReady] = useState(false);
@@ -168,7 +162,6 @@ export function BerniseMascot({
           >
             <BerniseCat
               mood={mood}
-              speakKey={speakKey}
               pointer={pointer}
               purring={purring}
               biting={biting}
