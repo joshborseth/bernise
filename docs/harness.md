@@ -18,7 +18,7 @@ Install [Codex CLI](https://developers.openai.com/codex/cli) and authenticate on
 codex login
 ```
 
-Bernise does not call OpenAI HTTP APIs. It talks to the local `codex app-server` the same way t3code does: `initialize` → `initialized` → `thread/start`, then `turn/start` with `item/agentMessage/delta` streaming.
+Bernise does not call OpenAI HTTP APIs. It talks to the local `codex app-server` the same way t3code does: `initialize` → `initialized` → `thread/start` (cwd, selected model, and Bernise `developerInstructions` for grilling + cat voice), then `turn/start` with `item/agentMessage/delta` streaming.
 
 The server merges the login-shell `PATH` at boot so Electron's stripped GUI path still finds Homebrew `codex`. Leave Binary path blank to spawn the bare command `codex`. An explicit settings path or `BERNISE_CODEX_BIN` overrides that (env wins).
 

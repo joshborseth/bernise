@@ -24,6 +24,7 @@ import {
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { CodexTransportError, makeCodexConnection } from "./codex/JsonRpcStdio.ts";
 import { expandHomePath } from "./pathExpand.ts";
+import { berniseDeveloperInstructions } from "./persona.ts";
 import { Provider } from "./Provider.ts";
 import { resolveCodexBin } from "./providerBins.ts";
 import { ServerSettings } from "./ServerSettings.ts";
@@ -145,6 +146,11 @@ export const readCodexModelPage = (
       : undefined;
   return { models, nextCursor };
 };
+
+export const codexThreadStartParams = (cwd: string) => ({
+  cwd,
+  developerInstructions: berniseDeveloperInstructions,
+});
 
 const withOptionalModel = (
   params: Record<string, unknown>,
@@ -272,7 +278,7 @@ export const CodexProviderLive = Layer.effect(
       yield* withHandshakeTimeout(connection.notify("initialized"), "Codex App Server initialized");
 
       const created = yield* withHandshakeTimeout(
-        connection.send("thread/start", withOptionalModel({ cwd }, model)),
+        connection.send("thread/start", withOptionalModel(codexThreadStartParams(cwd), model)),
         "Codex App Server thread/start",
       );
       const threadId = readCodexThreadId(created);
