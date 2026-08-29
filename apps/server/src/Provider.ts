@@ -22,6 +22,7 @@ export type ProviderApi = {
     model?: string,
   ) => Effect.Effect<TurnResult, ProviderError>;
   readonly subscribeEvents: (sessionId: SessionId) => Stream.Stream<ProviderEvent, ProviderError>;
+  readonly consumeAssistantText: (sessionId: SessionId) => Effect.Effect<string, ProviderError>;
   readonly listModels: Effect.Effect<ModelCatalog, ProviderError>;
 };
 

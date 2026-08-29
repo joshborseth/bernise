@@ -47,6 +47,7 @@ describe("CodexProviderLive", () => {
       ).pipe(Effect.forkDetach);
       const turn = yield* provider.sendTurn(sessionId, "hello");
       expect(turn).toEqual(new TurnResult({ stopReason: "completed" }));
+      expect(yield* provider.consumeAssistantText(sessionId)).toBe("Hello from Codex");
       const events = yield* Fiber.join(fiber);
       expect(events).toEqual([
         new ProviderTurnDelta({ text: "Hello" }),

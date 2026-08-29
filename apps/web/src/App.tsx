@@ -4,7 +4,13 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useState, type FormEvent } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { BerniseMascot } from "./BerniseMascot.tsx";
-import { formatError, speakAtom, speakKeyAtom, visibleMessagesAtom } from "./chat.ts";
+import {
+  bootThreadAtom,
+  formatError,
+  speakAtom,
+  speakKeyAtom,
+  visibleMessagesAtom,
+} from "./chat.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -74,6 +80,7 @@ function useMinWidth(px: number): boolean {
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
   useAtomValue(bootSettingsAtom);
+  useAtomValue(bootThreadAtom);
   useAtomValue(modelsResultAtom);
 
   return view === "settings" ? (

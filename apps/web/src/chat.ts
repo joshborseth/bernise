@@ -1,4 +1,9 @@
-import { ProviderError, type ProviderEvent, type SessionId } from "@bernise/contracts";
+import {
+  ProviderError,
+  type ProviderEvent,
+  type SessionId,
+  type ThreadMessage,
+} from "@bernise/contracts";
 import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
@@ -96,6 +101,22 @@ export const resetSession = (state: ChatState): ChatState => ({
 export const noReplyMessage = (stopReason: string): string =>
   `No reply from Codex (stopReason: ${stopReason}).`;
 
+export const hydrateFromThread = (messages: ReadonlyArray<ThreadMessage>): ChatState => ({
+  messages: [
+    opening,
+    ...messages.map((message) =>
+      message.role === "user"
+        ? { id: message.id, from: "user" as const, text: message.text }
+        : { id: message.id, from: "assistant" as const, text: message.text },
+    ),
+  ],
+  sessionId: undefined,
+  assistantId: undefined,
+});
+
+const hasTranscript = (state: ChatState): boolean =>
+  state.messages.some((message) => message.from === "user" || message.from === "assistant");
+
 export const chatAtom = Atom.make(initialChat).pipe(Atom.keepAlive);
 
 export const visibleMessagesAtom = Atom.make((get) =>
@@ -119,6 +140,39 @@ export const speakKeyAtom = Atom.make((get) => {
 export const sessionIdAtom = Atom.make((get) => get(chatAtom).sessionId);
 
 export const sessionEpochAtom = Atom.make(0).pipe(Atom.keepAlive);
+
+export const bootThreadAtom = BerniseRpc.runtime
+  .atom((get) =>
+    Effect.gen(function* () {
+      const client = yield* BerniseRpc;
+      const thread = yield* client("GetThread", undefined);
+      if (thread.messages.length === 0) {
+        return;
+      }
+      const chat = get.once(chatAtom);
+      if (hasTranscript(chat)) {
+        return;
+      }
+      get.set(chatAtom, hydrateFromThread(thread.messages));
+    }).pipe(
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) {
+          return Effect.void;
+        }
+        return Effect.sync(() => {
+          const chat = get.once(chatAtom);
+          if (hasTranscript(chat)) {
+            return;
+          }
+          get.set(
+            chatAtom,
+            appendError(chat, formatError(Cause.squash(cause)), crypto.randomUUID()),
+          );
+        });
+      }),
+    ),
+  )
+  .pipe(Atom.keepAlive);
 
 const sessionByEpochAtom = Atom.family((_epoch: number) =>
   BerniseRpc.runtime.atom((get) =>

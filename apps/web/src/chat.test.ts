@@ -2,11 +2,15 @@ import {
   CodexModel,
   CodexSettings,
   HarnessSettings,
+  MessageId,
   ModelCatalog,
   ProviderError,
   ProviderTurnDelta,
   SessionId,
   SessionStarted,
+  ThreadId,
+  ThreadMessage,
+  ThreadSnapshot,
   TurnResult,
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
@@ -16,8 +20,10 @@ import {
   appendError,
   appendUser,
   applyProviderEvent,
+  bootThreadAtom,
   chatAtom,
   formatError,
+  hydrateFromThread,
   initialChat,
   lastFromAtom,
   noReplyMessage,
@@ -159,6 +165,30 @@ describe("chat reducers", () => {
   it("names Codex in the empty-reply copy", () => {
     expect(noReplyMessage("end_turn")).toBe("No reply from Codex (stopReason: end_turn).");
     expect(noReplyMessage("completed")).toBe("No reply from Codex (stopReason: completed).");
+  });
+
+  it("hydrates the opening line plus persisted user and assistant bubbles", () => {
+    const next = hydrateFromThread([
+      new ThreadMessage({
+        id: MessageId.make("m1"),
+        role: "user",
+        text: "hello",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+      new ThreadMessage({
+        id: MessageId.make("m2"),
+        role: "assistant",
+        text: "yo",
+        createdAt: "2026-01-01T00:00:01.000Z",
+      }),
+    ]);
+    expect(next.sessionId).toBeUndefined();
+    expect(next.assistantId).toBeUndefined();
+    expect(next.messages).toEqual([
+      opening,
+      { id: "m1", from: "user", text: "hello" },
+      { id: "m2", from: "assistant", text: "yo" },
+    ]);
   });
 });
 
@@ -387,6 +417,49 @@ describe("chat atoms", () => {
         payload: { sessionId, prompt: "hello", model: "gpt-5.4-mini" },
       }),
     ]);
+  });
+
+  it("hydrates chatAtom from GetThread on boot", async () => {
+    const fakeClient = ((tag: string) => {
+      switch (tag) {
+        case "GetThread":
+          return Effect.succeed(
+            new ThreadSnapshot({
+              threadId: ThreadId.make("thread-1"),
+              messages: [
+                new ThreadMessage({
+                  id: MessageId.make("m1"),
+                  role: "user",
+                  text: "hello",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                }),
+                new ThreadMessage({
+                  id: MessageId.make("m2"),
+                  role: "assistant",
+                  text: "yo",
+                  createdAt: "2026-01-01T00:00:01.000Z",
+                }),
+              ],
+            }),
+          );
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(bootThreadAtom);
+    await waitForChat(
+      registry,
+      (chat) =>
+        chat.messages.some((message) => message.from === "user" && message.text === "hello") &&
+        chat.messages.some((message) => message.from === "assistant" && message.text === "yo"),
+    );
   });
 });
 

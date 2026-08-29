@@ -8,7 +8,7 @@ This is the same split as [t3code](https://github.com/pingdotgg/t3code): a serve
 
 - `apps/web` is the renderer: a real browser via `vp run dev:web`, or Electron via `vp run dev`. Both talk to `apps/server` over HTTP (`GET /health`) and Effect RPC over WebSocket (`/rpc`).
 - `apps/server` owns the provider process. `Provider` in `apps/server/src/Provider.ts` is implemented by `CodexProviderLive`, which spawns `codex app-server` (Codex App Server JSON-line RPC, no `jsonrpc: "2.0"` wrapper).
-- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). The config page probes the Codex CLI for install/auth health. `GET /health` is process liveness only.
+- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). The Speak transcript is stored in `~/.bernise/state.sqlite` so a reload restores the current conversation. Codex still starts a fresh provider thread on each server session (resume is not this slice). The config page probes the Codex CLI for install/auth health. `GET /health` is process liveness only.
 
 ## Codex CLI
 
@@ -26,15 +26,15 @@ The server merges the login-shell `PATH` at boot so Electron's stripped GUI path
 
 - `BERNISE_CODEX_BIN` — optional absolute (or other) Codex binary; wins over the settings binary path. Default is `codex` on PATH
 - `BERNISE_WORKSPACE` — cwd for new sessions (default: server process cwd)
-- `BERNISE_STATE_DIR` — settings directory (default: `~/.bernise`)
+- `BERNISE_STATE_DIR` — settings and `state.sqlite` directory (default: `~/.bernise`)
 
 Tool permissions are auto-approved for this first shot so the agent can write files. There is no interrupt or approval UI yet.
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, and last-selected model. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `GetThread` returns the projected Speak transcript from `state.sqlite`. `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, and last-selected model. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
 
-The Speak composer starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
+The Speak composer hydrates bubbles from `GetThread` on boot, then starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. Each `SendTurn` also persists the user prompt and the final assistant text on the server. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
 
 ## Later
 
