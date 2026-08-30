@@ -10,6 +10,8 @@ import { PersistenceLive } from "./persistence/Sqlite.ts";
 import { ProviderHealthLive } from "./ProviderHealth.ts";
 import { RpcHandlersLive } from "./RpcLive.ts";
 import { ServerSettingsLive } from "./ServerSettings.ts";
+import { TtsLive } from "./Tts.ts";
+import { VoiceLive } from "./VoiceLive.ts";
 
 export const portConfig = Config.port("BERNISE_PORT").pipe(Config.withDefault(13773));
 export const hostConfig = Config.string("BERNISE_HOST").pipe(Config.withDefault("127.0.0.1"));
@@ -26,7 +28,7 @@ const RpcLive = RpcServer.layerHttp({
   protocol: "websocket",
 }).pipe(Layer.provide(RpcHandlersLive), Layer.provide(HarnessLive));
 
-export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, HttpRouter.cors());
+export const HttpRoutesLive = Layer.mergeAll(HealthLive, RpcLive, VoiceLive, HttpRouter.cors());
 
 export const HttpLive = Layer.unwrap(
   Effect.gen(function* () {
@@ -34,6 +36,7 @@ export const HttpLive = Layer.unwrap(
     const host = yield* hostConfig;
     return HttpRouter.serve(HttpRoutesLive).pipe(
       Layer.provide(RpcSerialization.layerJson),
+      Layer.provide(TtsLive),
       Layer.provide(
         NodeHttpServer.layer(() => Http.createServer(), {
           port,
