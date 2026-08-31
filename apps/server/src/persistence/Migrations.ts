@@ -72,8 +72,20 @@ const createProjections = Effect.gen(function* () {
   `;
 });
 
+const createProviderSessionRuntime = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    CREATE TABLE IF NOT EXISTS provider_session_runtime (
+      thread_id TEXT PRIMARY KEY,
+      codex_thread_id TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `;
+});
+
 export const migrationLoader = Migrator.fromRecord({
   "1_OrchestrationEvents": createOrchestrationEvents,
   "2_OrchestrationCommandReceipts": createCommandReceipts,
   "3_Projections": createProjections,
+  "4_ProviderSessionRuntime": createProviderSessionRuntime,
 });

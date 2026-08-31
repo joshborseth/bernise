@@ -9,7 +9,9 @@ import {
   SessionId,
   SessionStarted,
   ThreadId,
+  ThreadList,
   ThreadMessage,
+  ThreadShell,
   ThreadSnapshot,
   TurnResult,
 } from "@bernise/contracts";
@@ -17,10 +19,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import {
+  activeThreadIdAtom,
   appendError,
   appendUser,
   applyProviderEvent,
-  bootThreadAtom,
   chatAtom,
   formatError,
   hydrateFromThread,
@@ -33,8 +35,10 @@ import {
   speakAtom,
   speakKeyAtom,
   stopReasonFromTurn,
+  threadsAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
+import { bootThreadsAtom, newThreadAtom, pickOrbitItems, switchThreadAtom } from "./threads.ts";
 import { BerniseRpc } from "./rpc.ts";
 import type { ChatState } from "./chat.ts";
 import {
@@ -263,6 +267,8 @@ describe("chat atoms", () => {
             new ProviderTurnDelta({ text: "Hello" }),
             new ProviderTurnDelta({ text: "!" }),
           );
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -298,6 +304,8 @@ describe("chat atoms", () => {
           return Effect.fail(new ProviderError({ message: "agent down" }));
         case "SubscribeEvents":
           return Stream.never;
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -333,6 +341,8 @@ describe("chat atoms", () => {
           return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
         case "SubscribeEvents":
           return Stream.never;
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -368,6 +378,8 @@ describe("chat atoms", () => {
           return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
         case "SubscribeEvents":
           return Stream.never;
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -404,6 +416,8 @@ describe("chat atoms", () => {
               Effect.delay("10 millis"),
             ),
           );
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -438,6 +452,8 @@ describe("chat atoms", () => {
           return Effect.succeed(new TurnResult({ stopReason: "end_turn" }));
         case "SubscribeEvents":
           return Stream.make(new ProviderTurnDelta({ text: "ok" }));
+        case "ListThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         default:
           return Effect.die(`unexpected ${tag}`);
       }
@@ -465,7 +481,9 @@ describe("chat atoms", () => {
     await waitWhileWaiting(registry);
 
     expect(calls.filter((call) => call.tag === "StartSession")).toEqual([
-      expect.objectContaining({ payload: { model: "gpt-5.4-mini" } }),
+      expect.objectContaining({
+        payload: expect.objectContaining({ model: "gpt-5.4-mini", threadId: expect.any(String) }),
+      }),
     ]);
     expect(calls.filter((call) => call.tag === "SendTurn")).toEqual([
       expect.objectContaining({
@@ -474,13 +492,27 @@ describe("chat atoms", () => {
     ]);
   });
 
-  it("hydrates chatAtom from GetThread on boot", async () => {
+  it("hydrates chatAtom from ListThreads and GetThread on boot", async () => {
+    const threadId = ThreadId.make("thread-1");
     const fakeClient = ((tag: string) => {
       switch (tag) {
+        case "ListThreads":
+          return Effect.succeed(
+            new ThreadList({
+              threads: [
+                new ThreadShell({
+                  id: threadId,
+                  title: "hello",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:01.000Z",
+                }),
+              ],
+            }),
+          );
         case "GetThread":
           return Effect.succeed(
             new ThreadSnapshot({
-              threadId: ThreadId.make("thread-1"),
+              threadId,
               messages: [
                 new ThreadMessage({
                   id: MessageId.make("m1"),
@@ -508,13 +540,76 @@ describe("chat atoms", () => {
       ],
     });
     registry.mount(chatAtom);
-    registry.mount(bootThreadAtom);
+    registry.mount(bootThreadsAtom);
     await waitForChat(
       registry,
       (chat) =>
         chat.messages.some((message) => message.from === "user" && message.text === "hello") &&
         chat.messages.some((message) => message.from === "assistant" && message.text === "yo"),
     );
+    expect(registry.get(activeThreadIdAtom)).toBe(threadId);
+    expect(registry.get(threadsAtom)).toHaveLength(1);
+  });
+
+  it("starts a draft thread without hydrating messages", async () => {
+    const fakeClient = (() => Effect.die("unused")) as never;
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(newThreadAtom);
+    registry.set(newThreadAtom, undefined);
+    expect(registry.get(chatAtom).messages).toEqual([opening]);
+    expect(registry.get(activeThreadIdAtom)).toBeDefined();
+    expect(registry.get(threadsAtom)).toEqual([]);
+  });
+
+  it("switches to a persisted thread and hydrates its transcript", async () => {
+    const threadId = ThreadId.make("thread-2");
+    const fakeClient = ((tag: string, payload: unknown) => {
+      switch (tag) {
+        case "GetThread":
+          expect(payload).toEqual({ threadId });
+          return Effect.succeed(
+            new ThreadSnapshot({
+              threadId,
+              messages: [
+                new ThreadMessage({
+                  id: MessageId.make("m1"),
+                  role: "user",
+                  text: "later",
+                  createdAt: "2026-01-01T00:00:00.000Z",
+                }),
+              ],
+            }),
+          );
+        default:
+          return Effect.die(`unexpected ${tag}`);
+      }
+    }) as never;
+
+    const registry = AtomRegistry.make({
+      initialValues: [
+        Atom.initialValue(BerniseRpc.runtime.layer, Layer.succeed(BerniseRpc, fakeClient)),
+        Atom.initialValue(threadsAtom, [
+          new ThreadShell({
+            id: threadId,
+            title: "later",
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          }),
+        ]),
+      ],
+    });
+    registry.mount(chatAtom);
+    registry.mount(switchThreadAtom);
+    registry.set(switchThreadAtom, threadId);
+    await waitForChat(registry, (chat) =>
+      chat.messages.some((message) => message.from === "user" && message.text === "later"),
+    );
+    expect(registry.get(activeThreadIdAtom)).toBe(threadId);
   });
 });
 
@@ -574,5 +669,38 @@ describe("composerModelView", () => {
       kind: "error",
       error: new Error("Codex did not return any models."),
     });
+  });
+});
+
+describe("pickOrbitItems", () => {
+  const shell = (id: string, updatedAt: string) =>
+    new ThreadShell({
+      id: ThreadId.make(id),
+      title: id,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt,
+    });
+
+  it("pins the active thread first and overflows the rest", () => {
+    const threads = [
+      shell("a", "2026-01-01T00:00:05.000Z"),
+      shell("b", "2026-01-01T00:00:04.000Z"),
+      shell("c", "2026-01-01T00:00:03.000Z"),
+      shell("d", "2026-01-01T00:00:02.000Z"),
+      shell("e", "2026-01-01T00:00:01.000Z"),
+      shell("f", "2026-01-01T00:00:00.000Z"),
+    ];
+    const picked = pickOrbitItems(threads, ThreadId.make("c"));
+    expect(picked.items[0]).toEqual({ kind: "thread", thread: threads[2] });
+    expect(picked.items).toHaveLength(5);
+    expect(picked.overflow).toBe(1);
+  });
+
+  it("shows a draft cloud when the active id is not in the list", () => {
+    const draftId = ThreadId.make("draft");
+    const picked = pickOrbitItems([shell("a", "2026-01-01T00:00:00.000Z")], draftId);
+    expect(picked.items[0]).toEqual({ kind: "draft", threadId: draftId });
+    expect(picked.items).toHaveLength(2);
+    expect(picked.overflow).toBe(0);
   });
 });

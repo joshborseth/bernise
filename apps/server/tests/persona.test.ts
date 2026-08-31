@@ -29,9 +29,7 @@ describe("berniseDeveloperInstructions", () => {
 
   it("stays stateless and keeps round markers readable", () => {
     expect(berniseDeveloperInstructions).toMatch(/Write no CONTEXT\.md, ADRs/i);
-    expect(berniseDeveloperInstructions).toMatch(
-      /don't perform it in every sentence/i,
-    );
+    expect(berniseDeveloperInstructions).toMatch(/don't perform it in every sentence/i);
     expect(berniseDeveloperInstructions).toMatch(
       /Keep the markers and numbering exact so the user can answer by number/i,
     );

@@ -1,7 +1,14 @@
 import { Schema } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import { ProviderError, ProviderEvent, SessionId, SessionStarted, TurnResult } from "./Provider.ts";
-import { PersistenceError, ThreadSnapshot } from "./Thread.ts";
+import {
+  PersistenceError,
+  ThreadDeleted,
+  ThreadId,
+  ThreadList,
+  ThreadShell,
+  ThreadSnapshot,
+} from "./Thread.ts";
 import {
   CodexSettingsPatch,
   HarnessSettings,
@@ -20,6 +27,7 @@ export class Ping extends Rpc.make("Ping", {
 
 export class StartSession extends Rpc.make("StartSession", {
   payload: {
+    threadId: ThreadId,
     workspace: Schema.optionalKey(Schema.String),
     model: Schema.optionalKey(Schema.String),
   },
@@ -75,8 +83,33 @@ export class ListModels extends Rpc.make("ListModels", {
   error: ProviderError,
 }) {}
 
+export class ListThreads extends Rpc.make("ListThreads", {
+  success: ThreadList,
+  error: PersistenceError,
+}) {}
+
 export class GetThread extends Rpc.make("GetThread", {
+  payload: {
+    threadId: ThreadId,
+  },
   success: ThreadSnapshot,
+  error: PersistenceError,
+}) {}
+
+export class RenameThread extends Rpc.make("RenameThread", {
+  payload: {
+    threadId: ThreadId,
+    title: Schema.String,
+  },
+  success: ThreadShell,
+  error: PersistenceError,
+}) {}
+
+export class DeleteThread extends Rpc.make("DeleteThread", {
+  payload: {
+    threadId: ThreadId,
+  },
+  success: ThreadDeleted,
   error: PersistenceError,
 }) {}
 
@@ -90,5 +123,8 @@ export const BerniseRpcs = RpcGroup.make(
   GetProviderSnapshots,
   RefreshProviders,
   ListModels,
+  ListThreads,
   GetThread,
+  RenameThread,
+  DeleteThread,
 );

@@ -1,6 +1,7 @@
 import { defaultHarnessSettings, HarnessSettings, ProviderSnapshots } from "@bernise/contracts";
 import { ConfigProvider, Effect, Layer, Stream } from "effect";
 import { CodexProviderLive } from "../src/CodexProviderLive.ts";
+import { persistenceMemory } from "../src/persistence/Sqlite.ts";
 import { pendingSnapshot } from "../src/ProviderHealth.ts";
 import { serverSettingsMemory } from "../src/ServerSettings.ts";
 import { ttsStub } from "../src/Tts.ts";
@@ -15,6 +16,7 @@ export const codexDriverLayer = (
 ) =>
   CodexProviderLive.pipe(
     Layer.provide(serverSettingsMemory(settings)),
+    Layer.provide(persistenceMemory),
     Layer.provide(testConfig({ BERNISE_CODEX_BIN: bin, BERNISE_WORKSPACE: workspace })),
   );
 

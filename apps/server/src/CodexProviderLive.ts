@@ -5,6 +5,7 @@ import {
   ProviderEvent,
   ProviderTurnDelta,
   SessionId,
+  type ThreadId,
   TurnResult,
 } from "@bernise/contracts";
 import { NodeServices } from "@effect/platform-node";
@@ -25,6 +26,7 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import { CodexTransportError, makeCodexConnection } from "./codex/JsonRpcStdio.ts";
 import { expandHomePath } from "./pathExpand.ts";
 import { berniseDeveloperInstructions } from "./persona.ts";
+import { ThreadPersistence } from "./persistence/ThreadPersistence.ts";
 import { Provider } from "./Provider.ts";
 import { resolveCodexBin } from "./providerBins.ts";
 import { ServerSettings } from "./ServerSettings.ts";
@@ -38,13 +40,30 @@ const catalogPageLimit = 50;
 const catalogMaxPages = 10;
 
 interface SessionState {
-  readonly threadId: string;
+  readonly berniseThreadId: ThreadId;
+  readonly codexThreadId: string;
   readonly send: (method: string, params?: unknown) => Effect.Effect<unknown, CodexTransportError>;
   readonly events: Queue.Queue<ProviderEvent>;
   turnDone: Deferred.Deferred<{ readonly stopReason: string }, CodexTransportError>;
   assistantText: string;
   readonly scope: Scope.Closeable;
 }
+
+const recoverableResumeSnippets = [
+  "not found",
+  "missing thread",
+  "no such thread",
+  "unknown thread",
+  "does not exist",
+];
+
+export const isRecoverableThreadResumeError = (error: unknown): boolean => {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+  if (!message.includes("thread")) {
+    return false;
+  }
+  return recoverableResumeSnippets.some((snippet) => message.includes(snippet));
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -202,6 +221,7 @@ export const CodexProviderLive = Layer.effect(
     const envBin = yield* codexBinEnv;
     const configuredWorkspace = yield* workspaceConfig;
     const serverSettings = yield* ServerSettings;
+    const threads = yield* ThreadPersistence;
     const sessions = yield* SynchronizedRef.make(new Map<SessionId, SessionState>());
     const catalogCache = yield* SynchronizedRef.make<
       | {
@@ -224,10 +244,60 @@ export const CodexProviderLive = Layer.effect(
         }),
       );
 
+    const closeAllSessions = Effect.fn("CodexProvider.closeAllSessions")(function* () {
+      const previous = yield* SynchronizedRef.getAndSet(sessions, new Map());
+      for (const session of previous.values()) {
+        yield* Scope.close(session.scope, Exit.void);
+      }
+    });
+
+    const persistResumeCursor = (threadId: ThreadId, codexThreadId: string) =>
+      threads
+        .setResumeCursor(threadId, codexThreadId)
+        .pipe(
+          Effect.catchTag("PersistenceError", (error) =>
+            Effect.logWarning(`setResumeCursor failed: ${error.message}`).pipe(Effect.asVoid),
+          ),
+        );
+
+    const openCodexThread = (
+      send: SessionState["send"],
+      cwd: string,
+      model: string | undefined,
+      resumeCodexThreadId: string | undefined,
+    ) => {
+      const startParams = withOptionalModel(codexThreadStartParams(cwd), model);
+      if (resumeCodexThreadId === undefined) {
+        return withHandshakeTimeout(
+          send("thread/start", startParams),
+          "Codex App Server thread/start",
+        );
+      }
+      return withHandshakeTimeout(
+        send("thread/resume", { threadId: resumeCodexThreadId, ...startParams }),
+        "Codex App Server thread/resume",
+      ).pipe(
+        Effect.catch((error: ProviderError) =>
+          isRecoverableThreadResumeError(error)
+            ? Effect.logWarning("codex app-server thread resume fell back to fresh start").pipe(
+                Effect.andThen(
+                  withHandshakeTimeout(
+                    send("thread/start", startParams),
+                    "Codex App Server thread/start",
+                  ),
+                ),
+              )
+            : Effect.fail(error),
+        ),
+      );
+    };
+
     const startSession = Effect.fn("CodexProvider.startSession")(function* (
       workspace: string,
+      berniseThreadId: ThreadId,
       model?: string,
     ) {
+      yield* closeAllSessions();
       const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
       const settings = yield* serverSettings.get;
       const command = resolveCodexBin(settings.codex.binaryPath, envBin);
@@ -282,21 +352,31 @@ export const CodexProviderLive = Layer.effect(
       );
       yield* withHandshakeTimeout(connection.notify("initialized"), "Codex App Server initialized");
 
-      const created = yield* withHandshakeTimeout(
-        connection.send("thread/start", withOptionalModel(codexThreadStartParams(cwd), model)),
-        "Codex App Server thread/start",
+      const resumeCodexThreadId = yield* threads
+        .getResumeCursor(berniseThreadId)
+        .pipe(
+          Effect.catchTag("PersistenceError", (error) =>
+            Effect.logWarning(`getResumeCursor failed: ${error.message}`).pipe(
+              Effect.as(undefined as string | undefined),
+            ),
+          ),
+        );
+      const opened = yield* openCodexThread(connection.send, cwd, model, resumeCodexThreadId).pipe(
+        Effect.tapError(() => Scope.close(sessionScope, Exit.void)),
       );
-      const threadId = readCodexThreadId(created);
-      if (threadId === undefined) {
+      const codexThreadId = readCodexThreadId(opened);
+      if (codexThreadId === undefined) {
         yield* Scope.close(sessionScope, Exit.void);
         return yield* new ProviderError({
           message: "Codex App Server thread/start did not return a thread id",
         });
       }
+      yield* persistResumeCursor(berniseThreadId, codexThreadId);
 
       const sessionId = SessionId.make(crypto.randomUUID());
       const session: SessionState = {
-        threadId,
+        berniseThreadId,
+        codexThreadId,
         send: connection.send,
         events,
         turnDone: initialTurn,
@@ -326,7 +406,7 @@ export const CodexProviderLive = Layer.effect(
           "turn/start",
           withOptionalModel(
             {
-              threadId: session.threadId,
+              threadId: session.codexThreadId,
               input: [{ type: "text", text: prompt }],
             },
             model,

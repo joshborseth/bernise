@@ -8,7 +8,7 @@ This is the same split as [t3code](https://github.com/pingdotgg/t3code): a serve
 
 - `apps/web` is the renderer: a real browser via `vp run dev:web`, or Electron via `vp run dev`. Both talk to `apps/server` over HTTP (`GET /health`) and Effect RPC over WebSocket (`/rpc`).
 - `apps/server` owns the provider process. `Provider` in `apps/server/src/Provider.ts` is implemented by `CodexProviderLive`, which spawns `codex app-server` (Codex App Server JSON-line RPC, no `jsonrpc: "2.0"` wrapper).
-- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). The Speak transcript is stored in `~/.bernise/state.sqlite` so a reload restores the current conversation. Codex still starts a fresh provider thread on each server session (resume is not this slice). The config page probes the Codex CLI for install/auth health. `GET /health` is process liveness only.
+- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). Speak threads live in `~/.bernise/state.sqlite`: a Bernise `ThreadId` owns the transcript and list, and a separate Codex `threadId` is stored as a resume cursor so later turns call `thread/resume` instead of starting a blank provider conversation. The config page probes the Codex CLI for install/auth health. `GET /health` is process liveness only.
 
 ## Codex CLI
 
@@ -18,7 +18,7 @@ Install [Codex CLI](https://developers.openai.com/codex/cli) and authenticate on
 codex login
 ```
 
-Bernise does not call OpenAI HTTP APIs. It talks to the local `codex app-server` the same way t3code does: `initialize` → `initialized` → `thread/start` (cwd, selected model, and Bernise `developerInstructions` for grilling + cat voice), then `turn/start` with `item/agentMessage/delta` streaming.
+Bernise does not call OpenAI HTTP APIs. It talks to the local `codex app-server` the same way t3code does: `initialize` → `initialized` → `thread/resume` when a resume cursor exists for that Bernise thread (falling back to `thread/start` if Codex no longer has it), then `turn/start` with `item/agentMessage/delta` streaming. `thread/start` still sends cwd, the selected model, and Bernise `developerInstructions` for grilling + cat voice.
 
 The server merges the login-shell `PATH` at boot so Electron's stripped GUI path still finds Homebrew `codex`. Leave Binary path blank to spawn the bare command `codex`. An explicit settings path or `BERNISE_CODEX_BIN` overrides that (env wins).
 
@@ -37,9 +37,9 @@ Tool permissions are auto-approved for this first shot so the agent can write fi
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `GetThread` returns the projected Speak transcript from `state.sqlite`. `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, and last-selected model. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `StartSession` takes a Bernise `threadId`. The server binds that id to the live `SessionId`, loads any stored Codex resume cursor, and keeps one Codex app-server process at a time. `ListThreads` returns thread shells (title, timestamps). `GetThread { threadId }` returns that thread's projected Speak transcript. `RenameThread` / `DeleteThread` update the SQLite projections. `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, and last-selected model. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
 
-The Speak composer hydrates bubbles from `GetThread` on boot, then starts one session, subscribes, and appends assistant text from `SubscribeEvents` as it streams. Each `SendTurn` also persists the user prompt and the final assistant text on the server. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
+The Speak composer hydrates from `ListThreads` then `GetThread` on boot. A new thought stays local until the first Speak, which creates the SQLite row and starts (or resumes) Codex. Each `SendTurn` persists the user prompt and the final assistant text on the session's Bernise thread. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` / `thread/resume` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
 
 ## Later
 
