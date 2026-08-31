@@ -35,6 +35,8 @@ import {
   snapshotsAtom,
   updateSettingsAtom,
 } from "./settings.ts";
+import { speakingAtom } from "./voice/state.ts";
+import { useBerniseVoice } from "./voice/useVoice.ts";
 
 const statusLabel = (snapshot: ProviderSnapshot): string => {
   if (!snapshot.enabled) {
@@ -95,6 +97,8 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
+  const voicing = useAtomValue(speakingAtom);
+  useBerniseVoice();
   const settings = useAtomValue(settingsAtom);
   const modelsResult = useAtomValue(modelsResultAtom);
   const modelView = composerModelView(modelsResult, settings.codex.model);
@@ -114,6 +118,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const mood = deriveBerniseMood({
     composerFocused,
     pending,
+    voicing,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
   const wide = useMinWidth(1024);

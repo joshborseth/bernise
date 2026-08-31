@@ -8,6 +8,7 @@ import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
 import { settingsAtom } from "./settings.ts";
+import { codexOfflineSpoken, voiceCueAtom } from "./voice/state.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -200,6 +201,7 @@ const sessionByEpochAtom = Atom.family((_epoch: number) =>
               chatAtom,
               appendError(chat, formatError(Cause.squash(cause)), crypto.randomUUID()),
             );
+            get.set(voiceCueAtom, { id: crypto.randomUUID(), text: codexOfflineSpoken });
           }
         }
         return Effect.failCause(cause);
@@ -215,6 +217,14 @@ export const sessionAtom = Atom.make((get) => {
 
 const readChat = (get: { readonly registry: AtomRegistry.AtomRegistry }): ChatState =>
   get.registry.get(chatAtom);
+
+const reportCodexOffline = (
+  get: { readonly registry: AtomRegistry.AtomRegistry },
+  detail: string,
+): void => {
+  get.registry.set(chatAtom, appendError(readChat(get), detail, crypto.randomUUID()));
+  get.registry.set(voiceCueAtom, { id: crypto.randomUUID(), text: codexOfflineSpoken });
+};
 
 const optionalModelPayload = (model: string): { readonly model?: string } => {
   const trimmed = model.trim();
@@ -286,10 +296,7 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
         return Effect.void;
       }
       return Effect.sync(() => {
-        get.set(
-          chatAtom,
-          appendError(readChat(get), formatError(Cause.squash(cause)), crypto.randomUUID()),
-        );
+        reportCodexOffline(get, formatError(Cause.squash(cause)));
       });
     }),
   ),

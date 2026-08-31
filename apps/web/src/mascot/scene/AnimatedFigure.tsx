@@ -117,7 +117,7 @@ export function AnimatedFigure({
   onHissingChange,
   onLitterDone,
 }: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
+  readonly mood: BerniseMood;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;
@@ -329,8 +329,7 @@ export function AnimatedFigure({
     const listening = mood === "listening";
     const thinking = mood === "thinking";
     const speaking =
-      mood === "idle" &&
-      t < speech.current.until &&
+      (mood === "speaking" || (mood === "idle" && t < speech.current.until)) &&
       !striking &&
       !recoiling &&
       !asleep &&

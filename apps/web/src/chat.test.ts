@@ -43,6 +43,7 @@ import {
   emptyModelCatalog,
   settingsAtom,
 } from "./settings.ts";
+import { codexOfflineSpoken, voiceCueAtom } from "./voice/state.ts";
 
 const sessionId = SessionId.make("sess-1");
 
@@ -273,9 +274,15 @@ describe("chat atoms", () => {
     registry.set(speakAtom, "hello");
     await waitWhileWaiting(registry);
 
+    expect(
+      registry.get(chatAtom).messages.filter((message) => message.from === "assistant"),
+    ).toEqual([]);
     expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
       expect.objectContaining({ from: "error", text: "agent down" }),
     ]);
+    expect(registry.get(voiceCueAtom)).toEqual(
+      expect.objectContaining({ text: codexOfflineSpoken }),
+    );
   });
 
   it("appends an error bubble when StartSession fails", async () => {
@@ -302,9 +309,15 @@ describe("chat atoms", () => {
     registry.set(speakAtom, "hello");
     await waitWhileWaiting(registry);
 
+    expect(
+      registry.get(chatAtom).messages.filter((message) => message.from === "assistant"),
+    ).toEqual([]);
     expect(registry.get(chatAtom).messages.filter((message) => message.from === "error")).toEqual([
       expect.objectContaining({ from: "error", text: "no agent" }),
     ]);
+    expect(registry.get(voiceCueAtom)).toEqual(
+      expect.objectContaining({ text: codexOfflineSpoken }),
+    );
   });
 
   it("appends an error bubble when SendTurn succeeds with no stream text", async () => {
@@ -369,6 +382,9 @@ describe("chat atoms", () => {
       chat.messages.some(
         (message) => message.from === "error" && message.text.includes("subscribe died"),
       ),
+    );
+    expect(registry.get(voiceCueAtom)).toEqual(
+      expect.objectContaining({ text: codexOfflineSpoken }),
     );
   });
 

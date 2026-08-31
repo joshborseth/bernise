@@ -19,7 +19,7 @@ export function BerniseScene({
   onHissingChange,
   onLitterDone,
 }: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
+  readonly mood: BerniseMood;
   readonly speakKey: string;
   readonly pointer: { readonly current: PointerGoal };
   readonly purring: boolean;

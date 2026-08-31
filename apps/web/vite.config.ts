@@ -22,6 +22,11 @@ export default defineConfig({
       "/health": {
         target: backendTarget,
       },
+      "/voice": {
+        target: backendTarget,
+        timeout: 120_000,
+        proxyTimeout: 120_000,
+      },
       "/rpc": {
         target: backendTarget,
         ws: true,

@@ -12,7 +12,7 @@ export function BerniseMascot({
   mood,
   speakKey,
 }: {
-  readonly mood: Exclude<BerniseMood, "speaking">;
+  readonly mood: BerniseMood;
   readonly speakKey: string;
 }) {
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });

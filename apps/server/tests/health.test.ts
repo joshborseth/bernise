@@ -8,7 +8,13 @@ import {
 import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer, Stream } from "effect";
-import { HttpClient, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http";
+import {
+  HttpBody,
+  HttpClient,
+  HttpClientResponse,
+  HttpRouter,
+  HttpServer,
+} from "effect/unstable/http";
 import { RpcClient, RpcSerialization, RpcTest } from "effect/unstable/rpc";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,7 +25,7 @@ import { Provider } from "../src/Provider.ts";
 import { providerHealthMemory } from "../src/ProviderHealth.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
 import { serverSettingsMemory } from "../src/ServerSettings.ts";
-import { pendingSnapshots } from "./testLayers.ts";
+import { pendingSnapshots, silentWav, ttsMemory } from "./testLayers.ts";
 
 const stateDir = mkdtempSync(join(tmpdir(), "bernise-health-"));
 
@@ -28,6 +34,7 @@ const TestHttpLive = HttpRouter.serve(HttpRoutesLive, {
   disableLogger: true,
 }).pipe(
   Layer.provide(RpcSerialization.layerJson),
+  Layer.provide(ttsMemory),
   Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ BERNISE_STATE_DIR: stateDir }))),
   Layer.provideMerge(NodeHttpServer.layerTest),
 );
@@ -158,5 +165,25 @@ describe("bernise server", () => {
       Effect.provide(serverSettingsMemory()),
       Effect.provide(providerHealthMemory(pendingSnapshots())),
     ),
+  );
+
+  it.effect("POST /voice/speak returns wav from TTS", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.post("/voice/speak", {
+        body: HttpBody.jsonUnsafe({ text: "Hello there." }),
+      });
+      expect(response.status).toBe(200);
+      const body = yield* response.arrayBuffer;
+      expect(new Uint8Array(body)).toEqual(silentWav);
+    }).pipe(Effect.provide(TestHttpLive)),
+  );
+
+  it.effect("POST /voice/speak rejects blank text", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClient.post("/voice/speak", {
+        body: HttpBody.jsonUnsafe({ text: "   " }),
+      });
+      expect(response.status).toBe(400);
+    }).pipe(Effect.provide(TestHttpLive)),
   );
 });
