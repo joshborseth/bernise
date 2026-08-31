@@ -339,7 +339,8 @@ body::after {
 
 @media (prefers-reduced-motion: reduce) {
   .mascot-halo,
-  .mascot-zzz span {
+  .mascot-zzz span,
+  .thought-cloud {
     animation: none;
   }
 
@@ -390,5 +391,180 @@ body::after {
   100% {
     opacity: 0;
     transform: translate(3.6rem, -7.2rem) rotate(16deg) scale(1.12);
+  }
+}
+
+.thought-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: visible;
+}
+
+.thought-orbit {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.thought-cloud {
+  pointer-events: auto;
+  position: absolute;
+  z-index: 3;
+  min-width: 4.8rem;
+  max-width: 7.6rem;
+  margin: 0;
+  padding: 0.48rem 0.72rem 0.58rem;
+  border: 1px solid color-mix(in srgb, var(--peach-deep) 38%, var(--line));
+  border-radius: 1.45rem 1.2rem 1.5rem 1.1rem / 1.3rem 1.55rem 1.05rem 1.4rem;
+  background:
+    radial-gradient(
+      circle at 22% 18%,
+      color-mix(in srgb, white 72%, var(--peach)) 0%,
+      transparent 46%
+    ),
+    color-mix(in srgb, var(--peach) 62%, white);
+  box-shadow:
+    0 0.35rem 0.9rem color-mix(in srgb, var(--peach-deep) 22%, transparent),
+    0.55rem 0.85rem 0 -0.35rem color-mix(in srgb, var(--peach) 55%, white),
+    1.05rem 1.15rem 0 -0.55rem color-mix(in srgb, var(--sky) 48%, white);
+  color: color-mix(in srgb, var(--ink) 88%, var(--peach-deep));
+  font-family: Fraunces, ui-serif, serif;
+  font-style: italic;
+  font-weight: 600;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  letter-spacing: 0.01em;
+  text-align: left;
+  cursor: pointer;
+  animation: thought-in 0.45s cubic-bezier(0.22, 1.1, 0.36, 1) both;
+  transform: rotate(var(--thought-tilt, 0deg));
+  transform-origin: 50% 120%;
+}
+
+.thought-cloud span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.thought-cloud::after {
+  content: "";
+  position: absolute;
+  right: 42%;
+  bottom: -0.42rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--peach) 58%, white);
+  box-shadow: 0.42rem 0.38rem 0 -0.08rem color-mix(in srgb, var(--peach) 50%, white);
+}
+
+.thought-cloud-active {
+  z-index: 4;
+  min-width: 5.6rem;
+  max-width: 8.4rem;
+  padding: 0.58rem 0.82rem 0.68rem;
+  border-color: color-mix(in srgb, var(--peach-deep) 62%, var(--line));
+  background:
+    radial-gradient(
+      circle at 22% 18%,
+      color-mix(in srgb, white 80%, var(--peach)) 0%,
+      transparent 48%
+    ),
+    color-mix(in srgb, var(--peach) 78%, white);
+  box-shadow:
+    0 0.45rem 1.1rem color-mix(in srgb, var(--peach-deep) 28%, transparent),
+    0.6rem 0.95rem 0 -0.32rem color-mix(in srgb, var(--peach) 62%, white),
+    1.15rem 1.25rem 0 -0.5rem color-mix(in srgb, var(--sky) 55%, white);
+  font-size: 0.86rem;
+}
+
+.thought-cloud-draft {
+  opacity: 0.62;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--bg-wash) 70%, white);
+  box-shadow: 0 0.25rem 0.7rem color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.thought-cloud-plus,
+.thought-cloud-more {
+  min-width: 2.4rem;
+  max-width: 2.6rem;
+  padding: 0.28rem 0.15rem 0.38rem;
+  text-align: center;
+  font-size: 1.15rem;
+  font-style: normal;
+  line-height: 1;
+}
+
+.thought-cloud-plus::after,
+.thought-cloud-more::after {
+  right: 38%;
+}
+
+.thought-cloud-rename {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.thought-menu {
+  pointer-events: auto;
+  position: fixed;
+  z-index: 20;
+  min-width: 9.5rem;
+  margin: 0;
+  padding: 0.28rem;
+  list-style: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--line));
+  border-radius: 0.9rem;
+  background: color-mix(in srgb, var(--bg-elev) 92%, white);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.thought-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.38rem 0.55rem;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.thought-menu-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--peach) 42%, transparent);
+}
+
+.thought-menu-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.thought-menu-item-danger {
+  color: color-mix(in srgb, var(--rose) 70%, var(--ink));
+}
+
+@keyframes thought-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.94) rotate(var(--thought-tilt, 0deg));
+  }
+  to {
+    opacity: 1;
+    transform: rotate(var(--thought-tilt, 0deg));
   }
 }

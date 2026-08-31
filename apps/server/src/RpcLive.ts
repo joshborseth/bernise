@@ -3,9 +3,14 @@ import {
   HarnessSettingsPatch,
   PersistenceError,
   Pong,
+  ProviderError,
+  SessionId,
   SessionStarted,
+  ThreadDeleted,
+  ThreadId,
+  ThreadList,
 } from "@bernise/contracts";
-import { Config, Effect, Option } from "effect";
+import { Config, Effect, Option, SynchronizedRef } from "effect";
 import { ThreadPersistence } from "./persistence/ThreadPersistence.ts";
 import { Provider } from "./Provider.ts";
 import { ProviderHealth } from "./ProviderHealth.ts";
@@ -20,6 +25,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
     const providerHealth = yield* ProviderHealth;
     const threads = yield* ThreadPersistence;
     const configuredWorkspace = yield* workspaceConfig;
+    const sessionThreads = yield* SynchronizedRef.make(new Map<SessionId, ThreadId>());
 
     const persistQuietly = (operation: string, effect: Effect.Effect<void, PersistenceError>) =>
       effect.pipe(
@@ -28,22 +34,45 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
         ),
       );
 
+    const threadForSession = (sessionId: SessionId) =>
+      SynchronizedRef.get(sessionThreads).pipe(
+        Effect.flatMap((map) => {
+          const threadId = map.get(sessionId);
+          return threadId === undefined
+            ? Effect.fail(new ProviderError({ message: `Unknown session ${sessionId}` }))
+            : Effect.succeed(threadId);
+        }),
+      );
+
     return {
       Ping: () => Effect.succeed(new Pong({ pong: true })),
       StartSession: (payload) =>
         Effect.gen(function* () {
           const workspace =
             payload.workspace?.trim() || Option.getOrElse(configuredWorkspace, () => process.cwd());
-          const sessionId = yield* provider.startSession(workspace, payload.model);
+          const sessionId = yield* provider.startSession(
+            workspace,
+            payload.threadId,
+            payload.model,
+          );
+          yield* SynchronizedRef.update(sessionThreads, (map) => {
+            const next = new Map(map);
+            next.set(sessionId, payload.threadId);
+            return next;
+          });
           return new SessionStarted({ sessionId });
         }),
       SendTurn: (payload) =>
         Effect.gen(function* () {
-          yield* persistQuietly("appendUser", threads.appendUser(payload.prompt));
+          const threadId = yield* threadForSession(payload.sessionId);
+          yield* persistQuietly("appendUser", threads.appendUser(threadId, payload.prompt));
           const result = yield* provider.sendTurn(payload.sessionId, payload.prompt, payload.model);
           const assistantText = yield* provider.consumeAssistantText(payload.sessionId);
           if (assistantText.length > 0) {
-            yield* persistQuietly("appendAssistant", threads.appendAssistant(assistantText));
+            yield* persistQuietly(
+              "appendAssistant",
+              threads.appendAssistant(threadId, assistantText),
+            );
           }
           return result;
         }),
@@ -53,7 +82,14 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       GetProviderSnapshots: () => providerHealth.snapshots,
       RefreshProviders: () => providerHealth.refresh,
       ListModels: () => provider.listModels,
-      GetThread: () => threads.getThread,
+      ListThreads: () =>
+        threads.listThreads.pipe(Effect.map((list) => new ThreadList({ threads: list }))),
+      GetThread: (payload) => threads.getThread(payload.threadId),
+      RenameThread: (payload) => threads.renameThread(payload.threadId, payload.title),
+      DeleteThread: (payload) =>
+        threads
+          .deleteThread(payload.threadId)
+          .pipe(Effect.map(() => new ThreadDeleted({ threadId: payload.threadId }))),
     };
   }),
 );

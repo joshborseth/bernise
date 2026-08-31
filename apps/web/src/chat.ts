@@ -1,5 +1,7 @@
 import {
   ProviderError,
+  ThreadId,
+  ThreadShell,
   type ProviderEvent,
   type SessionId,
   type ThreadMessage,
@@ -115,10 +117,13 @@ export const hydrateFromThread = (messages: ReadonlyArray<ThreadMessage>): ChatS
   assistantId: undefined,
 });
 
-const hasTranscript = (state: ChatState): boolean =>
-  state.messages.some((message) => message.from === "user" || message.from === "assistant");
+export const newThreadId = (): ThreadId => ThreadId.make(crypto.randomUUID());
 
 export const chatAtom = Atom.make(initialChat).pipe(Atom.keepAlive);
+
+export const activeThreadIdAtom = Atom.make<ThreadId | undefined>(undefined).pipe(Atom.keepAlive);
+
+export const threadsAtom = Atom.make<ReadonlyArray<ThreadShell>>([]).pipe(Atom.keepAlive);
 
 export const visibleMessagesAtom = Atom.make((get) => {
   const chat = get(chatAtom);
@@ -165,44 +170,16 @@ export const sessionIdAtom = Atom.make((get) => get(chatAtom).sessionId);
 
 export const sessionEpochAtom = Atom.make(0).pipe(Atom.keepAlive);
 
-export const bootThreadAtom = BerniseRpc.runtime
-  .atom((get) =>
-    Effect.gen(function* () {
-      const client = yield* BerniseRpc;
-      const thread = yield* client("GetThread", undefined);
-      if (thread.messages.length === 0) {
-        return;
-      }
-      const chat = get.once(chatAtom);
-      if (hasTranscript(chat)) {
-        return;
-      }
-      get.set(chatAtom, hydrateFromThread(thread.messages));
-    }).pipe(
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterruptsOnly(cause)) {
-          return Effect.void;
-        }
-        return Effect.sync(() => {
-          const chat = get.once(chatAtom);
-          if (hasTranscript(chat)) {
-            return;
-          }
-          get.set(
-            chatAtom,
-            appendError(chat, formatError(Cause.squash(cause)), crypto.randomUUID()),
-          );
-        });
-      }),
-    ),
-  )
-  .pipe(Atom.keepAlive);
-
 const sessionByEpochAtom = Atom.family((_epoch: number) =>
   BerniseRpc.runtime.atom((get) =>
     Effect.gen(function* () {
+      const threadId = get.once(activeThreadIdAtom);
+      if (threadId === undefined) {
+        return yield* new ProviderError({ message: "No active thread to start a session." });
+      }
       const client = yield* BerniseRpc;
       const started = yield* client("StartSession", {
+        threadId,
         ...optionalModelPayload(get.once(settingsAtom).codex.model),
       });
       const fiber = yield* Effect.forkChild(
@@ -260,6 +237,9 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
     if (text.length === 0) {
       return;
     }
+    if (get.registry.get(activeThreadIdAtom) === undefined) {
+      get.set(activeThreadIdAtom, newThreadId());
+    }
     get.set(chatAtom, appendUser(readChat(get), text, crypto.randomUUID()));
     get.mount(sessionAtom);
     const sessionId = yield* Effect.callback<SessionId, unknown>((resume) => {
@@ -306,6 +286,22 @@ export const speakAtom = BerniseRpc.runtime.fn((prompt: string, get) =>
       prompt: text,
       ...optionalModelPayload(get.registry.get(settingsAtom).codex.model),
     });
+    yield* client("ListThreads", undefined).pipe(
+      Effect.tap((listed) =>
+        Effect.sync(() => {
+          get.set(threadsAtom, listed.threads);
+          const activeId = get.registry.get(activeThreadIdAtom);
+          if (activeId !== undefined) {
+            try {
+              globalThis.localStorage?.setItem("bernise.activeThreadId", activeId);
+            } catch {
+              // Quota or private mode — selection still lives in memory.
+            }
+          }
+        }),
+      ),
+      Effect.ignore,
+    );
     const chat = readChat(get);
     if (chat.assistantId === undefined) {
       get.set(

@@ -3,6 +3,7 @@ import type {
   ProviderError,
   ProviderEvent,
   SessionId,
+  ThreadId,
   TurnResult,
 } from "@bernise/contracts";
 import { Effect, Stream } from "effect";
@@ -14,6 +15,7 @@ export { ProviderError, ProviderTurnDelta } from "@bernise/contracts";
 export type ProviderApi = {
   readonly startSession: (
     workspace: string,
+    threadId: ThreadId,
     model?: string,
   ) => Effect.Effect<SessionId, ProviderError>;
   readonly sendTurn: (

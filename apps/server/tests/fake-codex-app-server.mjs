@@ -115,6 +115,27 @@ rl.on("line", (line) => {
     return;
   }
 
+  if (message.method === "thread/resume") {
+    remember("last-thread-resume.json", {
+      threadId: message.params?.threadId ?? null,
+      model: message.params?.model ?? null,
+      cwd: message.params?.cwd ?? null,
+      developerInstructions: message.params?.developerInstructions ?? null,
+    });
+    if (mode === "resume-fail") {
+      send({
+        id: message.id,
+        error: { code: -32000, message: "thread not found" },
+      });
+      return;
+    }
+    send({
+      id: message.id,
+      result: { thread: { id: message.params?.threadId ?? "fake-codex-thread" } },
+    });
+    return;
+  }
+
   if (message.method === "turn/start") {
     turnRequestId = message.id;
     remember("last-turn-start.json", {

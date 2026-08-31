@@ -4,14 +4,15 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useState, type FormEvent } from "react";
 import { useDefaultLayout } from "react-resizable-panels";
 import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
+import { ThoughtOrbit } from "./ThoughtOrbit.tsx";
 import {
-  bootThreadAtom,
   formatError,
   holdingReplyAtom,
   speakAtom,
   speakKeyAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
+import { bootThreadsAtom, activeThreadTitleAtom } from "./threads.ts";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -82,7 +83,7 @@ function useMinWidth(px: number): boolean {
 export function App() {
   const [view, setView] = useState<"chat" | "settings">("chat");
   useAtomValue(bootSettingsAtom);
-  useAtomValue(bootThreadAtom);
+  useAtomValue(bootThreadsAtom);
   useAtomValue(modelsResultAtom);
 
   return view === "settings" ? (
@@ -97,6 +98,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
+  const threadTitle = useAtomValue(activeThreadTitleAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
   const holdingReply = useAtomValue(holdingReplyAtom);
@@ -146,11 +148,14 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     <aside
       className={
         wide
-          ? "mascot-slot grid h-full min-h-0 content-center justify-items-center"
+          ? "mascot-slot grid h-full min-h-0 content-center justify-items-center overflow-visible"
           : "grid content-center justify-items-center px-[1.15rem] pt-6 pb-2"
       }
     >
-      <BerniseMascot mood={mood} speakKey={speakKey} />
+      <div className="thought-stage">
+        <ThoughtOrbit />
+        <BerniseMascot mood={mood} speakKey={speakKey} />
+      </div>
     </aside>
   );
 
@@ -158,7 +163,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     <section className={cn(threadPaneClass, wide ? undefined : "min-h-0")}>
       <header className="mb-1.5 flex flex-none items-baseline justify-between gap-4">
         <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
-          station
+          {threadTitle}
         </p>
         <Button
           type="button"
@@ -297,7 +302,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
           defaultSize="42%"
           minSize="28%"
           maxSize="62%"
-          className="h-full min-h-0"
+          className="h-full min-h-0 overflow-visible"
         >
           {mascot}
         </ResizablePanel>
