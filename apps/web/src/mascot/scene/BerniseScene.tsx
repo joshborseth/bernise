@@ -1,4 +1,4 @@
-import { ContactShadows } from "@react-three/drei";
+import { ContactShadows, Stats } from "@react-three/drei";
 import type { BerniseMood } from "../mood.ts";
 import { AnimatedFigure } from "./AnimatedFigure.tsx";
 import { FitCamera } from "./FitCamera.tsx";
@@ -35,6 +35,7 @@ export function BerniseScene({
 }) {
   return (
     <>
+      {import.meta.env.DEV ? <Stats /> : null}
       <FitCamera />
       <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
       <ambientLight intensity={0.5} color="#fff6ea" />
