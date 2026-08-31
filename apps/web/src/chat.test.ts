@@ -25,6 +25,7 @@ import {
   formatError,
   hydrateFromThread,
   initialChat,
+  holdingReplyAtom,
   lastFromAtom,
   noReplyMessage,
   opening,
@@ -43,7 +44,7 @@ import {
   emptyModelCatalog,
   settingsAtom,
 } from "./settings.ts";
-import { codexOfflineSpoken, voiceCueAtom } from "./voice/state.ts";
+import { codexOfflineSpoken, voiceCueAtom, voiceRevealAtom } from "./voice/state.ts";
 
 const sessionId = SessionId.make("sess-1");
 
@@ -210,6 +211,44 @@ describe("chat atoms", () => {
     ]);
     expect(registry.get(lastFromAtom)).toBe("user");
     expect(registry.get(speakKeyAtom)).toBe("a1");
+  });
+
+  it("hides the live assistant until voice reveal, then clips to until", () => {
+    const registry = AtomRegistry.make();
+    registry.set(
+      chatAtom,
+      applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "hello world" }), "a1"),
+    );
+    expect(registry.get(visibleMessagesAtom)).toEqual([]);
+    expect(registry.get(holdingReplyAtom)).toBe(true);
+
+    registry.set(voiceRevealAtom, { id: "a1", until: 5 });
+    expect(registry.get(visibleMessagesAtom)).toEqual([
+      { id: "a1", from: "assistant", text: "hello" },
+    ]);
+    expect(registry.get(holdingReplyAtom)).toBe(false);
+
+    registry.set(voiceRevealAtom, { id: "a1", until: 11 });
+    expect(registry.get(visibleMessagesAtom)).toEqual([
+      { id: "a1", from: "assistant", text: "hello world" },
+    ]);
+  });
+
+  it("shows a finished assistant in full once assistantId is cleared", () => {
+    const registry = AtomRegistry.make();
+    registry.set(
+      chatAtom,
+      appendUser(
+        applyProviderEvent(initialChat, new ProviderTurnDelta({ text: "yo" }), "a1"),
+        "hey",
+        "u1",
+      ),
+    );
+    expect(registry.get(holdingReplyAtom)).toBe(false);
+    expect(registry.get(visibleMessagesAtom)).toEqual([
+      { id: "a1", from: "assistant", text: "yo" },
+      { id: "u1", from: "user", text: "hey" },
+    ]);
   });
 
   it("speaks through a fake RPC layer and folds stream deltas", async () => {

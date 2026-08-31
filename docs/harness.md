@@ -31,7 +31,7 @@ The server merges the login-shell `PATH` at boot so Electron's stripped GUI path
 - `BERNISE_TTS_VOICE` — speaker id (default: `benny2`)
 - `BERNISE_TTS_API_KEY` — TTS secret. If unset, the server reads `~/.bernise/tts.key`
 
-Assistant replies are spoken through `POST /voice/speak` on the Bernise server, which proxies streamed 16-bit PCM WAV from Chatterbox (`X-API-Key` only). The renderer never sees the TTS key. Grill markdown is stripped; sentences are queued locally and sent as one `/speak` at a time (the GPU cannot overlap Turbo requests). Playback starts when the first sentence's PCM arrives.
+Assistant replies are spoken through `POST /voice/speak` on the Bernise server, which proxies streamed 16-bit PCM WAV from Chatterbox (`X-API-Key` only). The renderer never sees the TTS key. Grill markdown is stripped; the finished turn is sent as one `/speak` at a time (the GPU cannot overlap Turbo requests). The live bubble stays hidden until that clip is fully buffered and playback has started.
 
 Tool permissions are auto-approved for this first shot so the agent can write files. There is no interrupt or approval UI yet.
 

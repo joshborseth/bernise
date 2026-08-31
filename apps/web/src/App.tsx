@@ -7,6 +7,7 @@ import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
 import {
   bootThreadAtom,
   formatError,
+  holdingReplyAtom,
   speakAtom,
   speakKeyAtom,
   visibleMessagesAtom,
@@ -98,12 +99,14 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
   const speakKey = useAtomValue(speakKeyAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
+  const holdingReply = useAtomValue(holdingReplyAtom);
   useBerniseVoice();
   const settings = useAtomValue(settingsAtom);
   const modelsResult = useAtomValue(modelsResultAtom);
   const modelView = composerModelView(modelsResult, settings.codex.model);
   const [, updateSettings] = useAtom(updateSettingsAtom);
   const pending = AsyncResult.isWaiting(speakResult);
+  const waitingOnVoice = pending || holdingReply;
   const modelsWaiting = AsyncResult.isWaiting(modelsResult);
 
   const resolvedModel = modelView.kind === "select" ? modelView.value : undefined;
@@ -117,7 +120,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
 
   const mood = deriveBerniseMood({
     composerFocused,
-    pending,
+    pending: waitingOnVoice,
     voicing,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
@@ -189,7 +192,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
             </article>
           ),
         )}
-        {pending ? (
+        {waitingOnVoice ? (
           <article className={statusBubbleClass} aria-live="polite">
             <p className="m-0 text-[0.82rem] leading-[1.45]">Bernise is thinking…</p>
           </article>

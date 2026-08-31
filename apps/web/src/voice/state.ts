@@ -11,3 +11,10 @@ export type VoiceCue = {
 };
 
 export const voiceCueAtom = Atom.make<VoiceCue | undefined>(undefined).pipe(Atom.keepAlive);
+
+export type VoiceReveal = {
+  readonly id: string;
+  readonly until: number;
+};
+
+export const voiceRevealAtom = Atom.make<VoiceReveal | undefined>(undefined).pipe(Atom.keepAlive);

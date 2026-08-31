@@ -40,8 +40,6 @@ export const litterBoxX = 0.08;
 export const litterBoxZ = 0;
 export const litterBoxRestY = -1.16;
 export const litterBoxHiddenY = -2.3;
-export const litterDropMin = 5;
-export const litterDropMax = 10;
 export const litterDropStaggerSpan = 0.72;
 export const litterDropFall = 0.2;
 export type LitterDrop = {
@@ -235,22 +233,6 @@ export function litterReducedMotion(elapsed: number): LitterMotion {
 
 export function litterDropStagger(count: number): number {
   return litterDropStaggerSpan / Math.max(1, count - 1);
-}
-
-export function rollLitterDrops(): ReadonlyArray<LitterDrop> {
-  const shuffled = litterDrops.slice();
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const current = shuffled[i];
-    const swap = shuffled[j];
-    if (current === undefined || swap === undefined) {
-      continue;
-    }
-    shuffled[i] = swap;
-    shuffled[j] = current;
-  }
-  const count = litterDropMin + Math.floor(Math.random() * (litterDropMax - litterDropMin + 1));
-  return shuffled.slice(0, count);
 }
 
 export function litterDropFallProgress(dropT: number, index: number, count: number): number {

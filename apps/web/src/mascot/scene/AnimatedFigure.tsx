@@ -31,6 +31,7 @@ import {
   litterBodyScaleY,
   litterBodyScaleZ,
   litterDropLanded,
+  litterDrops,
   litterHeadPitch,
   litterHeadRoll,
   litterHeadY,
@@ -53,7 +54,6 @@ import {
   litterTailOffset,
   litterYaw,
   poseLitterProps,
-  rollLitterDrops,
   setFrontPaw,
   setPlantedHindPaw,
   type LitterDrop,
@@ -342,7 +342,7 @@ export function AnimatedFigure({
         litterClock.current.lastScratchAt = -1;
         litterClock.current.dropHeard = 0;
         litterClock.current.done = false;
-        litterClock.current.drops = rollLitterDrops();
+        litterClock.current.drops = litterDrops;
       }
     } else {
       litterClock.current.startedAt = -1;
