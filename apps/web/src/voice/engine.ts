@@ -1,21 +1,40 @@
 import { audioContext } from "../mascot/audio/context.ts";
 import { splitForTts, ttsChunkLimit } from "./speakable.ts";
-import { concatBytes, pcmS16leToF32, tryParseWavHeader, type WavFormat } from "./wav.ts";
+import type { VoiceReveal } from "./state.ts";
+import {
+  concatBytes,
+  pcmS16leToF32,
+  trimLeadingSilence,
+  tryParseWavHeader,
+  type WavFormat,
+} from "./wav.ts";
+
+export const textLeadMs = 100;
+const scheduleLeadS = 0.03;
+
+type PendingClip = {
+  readonly text: string;
+  readonly reveal: VoiceReveal | undefined;
+};
 
 type VoiceListeners = {
   readonly onBusy?: (busy: boolean) => void;
+  readonly onPlaybackStart?: (reveal: VoiceReveal) => void;
 };
 
 let listeners: VoiceListeners = {};
 let generation = 0;
-let pending: Array<string> = [];
+let pending: Array<PendingClip> = [];
 let currentSources: Array<AudioBufferSourceNode> = [];
 let inflight: AbortController | undefined;
 let busy = false;
 let runner: Promise<void> | undefined;
 let playing = 0;
 let playAt = 0;
+let clipsScheduled = 0;
 let output: GainNode | undefined;
+let kickQueued = false;
+const leadTimers = new Set<ReturnType<typeof setTimeout>>();
 
 export const setVoiceListeners = (next: VoiceListeners): void => {
   listeners = next;
@@ -31,11 +50,22 @@ const setBusy = (next: boolean): void => {
   listeners.onBusy?.(next);
 };
 
+const syncBusy = (): void => {
+  setBusy(playing > 0);
+};
+
 const maybeIdle = (): void => {
   if (pending.length === 0 && playing === 0 && runner === undefined) {
     inflight = undefined;
-    setBusy(false);
   }
+  syncBusy();
+};
+
+const clearLeadTimers = (): void => {
+  for (const timer of leadTimers) {
+    clearTimeout(timer);
+  }
+  leadTimers.clear();
 };
 
 const stopCurrent = (): void => {
@@ -49,6 +79,7 @@ const stopCurrent = (): void => {
   currentSources = [];
   playing = 0;
   playAt = 0;
+  clipsScheduled = 0;
   if (output !== undefined) {
     try {
       output.disconnect();
@@ -64,8 +95,14 @@ export const cancelVoice = (): void => {
   inflight?.abort();
   inflight = undefined;
   pending = [];
+  kickQueued = false;
+  clearLeadTimers();
   stopCurrent();
   setBusy(false);
+};
+
+export const revealVoiceNow = (reveal: VoiceReveal): void => {
+  listeners.onPlaybackStart?.(reveal);
 };
 
 const fetchSpeak = async (text: string, signal: AbortSignal): Promise<Response> => {
@@ -96,9 +133,29 @@ const ensureOutput = (): GainNode => {
   return gain;
 };
 
-const schedulePcm = (pcm: Float32Array, format: WavFormat, gen: number): void => {
-  if (gen !== generation || pcm.length === 0) {
+const armReveal = (reveal: VoiceReveal | undefined, startAt: number, gen: number): void => {
+  if (reveal === undefined || reveal.until <= 0) {
     return;
+  }
+  const delayMs = Math.max(0, (startAt - audioContext().currentTime) * 1000) + textLeadMs;
+  const timer = setTimeout(() => {
+    leadTimers.delete(timer);
+    if (gen !== generation) {
+      return;
+    }
+    listeners.onPlaybackStart?.(reveal);
+  }, delayMs);
+  leadTimers.add(timer);
+};
+
+const schedulePcm = (
+  pcm: Float32Array,
+  format: WavFormat,
+  gen: number,
+  reveal: VoiceReveal | undefined,
+): boolean => {
+  if (gen !== generation || pcm.length === 0) {
+    return false;
   }
   const ctx = audioContext();
   const buffer = ctx.createBuffer(1, pcm.length, format.sampleRate);
@@ -107,11 +164,13 @@ const schedulePcm = (pcm: Float32Array, format: WavFormat, gen: number): void =>
   source.buffer = buffer;
   source.connect(ensureOutput());
   const now = ctx.currentTime;
-  if (playAt < now + 0.03) {
-    playAt = now + 0.03;
+  if (playAt < now + scheduleLeadS) {
+    playAt = now + scheduleLeadS;
   }
+  const startAt = playAt;
   currentSources.push(source);
   playing += 1;
+  syncBusy();
   source.addEventListener(
     "ended",
     () => {
@@ -121,116 +180,107 @@ const schedulePcm = (pcm: Float32Array, format: WavFormat, gen: number): void =>
     },
     { once: true },
   );
-  source.start(playAt);
+  source.start(startAt);
   playAt += buffer.duration;
+  armReveal(reveal, startAt, gen);
+  return true;
 };
 
-const chunkBytes = (format: WavFormat): number =>
-  Math.max(format.channels * 2, Math.round(format.sampleRate * 0.1) * format.channels * 2);
-
-const emitPcm = (bytes: Uint8Array, format: WavFormat, gen: number, flush: boolean): Uint8Array => {
-  const frame = Math.max(1, format.channels) * 2;
-  const usable = bytes.byteLength - (bytes.byteLength % frame);
-  if (usable < frame) {
-    return bytes;
-  }
-  const chunk = chunkBytes(format);
-  let offset = 0;
-  const limit = flush ? usable : usable - (usable % chunk);
-  while (offset < limit) {
-    const take = flush ? limit - offset : chunk;
-    if (take < frame) {
-      break;
-    }
-    if (!flush && take < chunk) {
-      break;
-    }
-    const slice = bytes.subarray(offset, offset + take);
-    if (format.bitsPerSample === 16 && format.channels === 1) {
-      schedulePcm(pcmS16leToF32(slice), format, gen);
-    }
-    offset += take;
-    if (flush) {
-      break;
-    }
-  }
-  return bytes.subarray(offset);
-};
-
-const playStream = async (response: Response, gen: number, signal: AbortSignal): Promise<void> => {
-  const ctx = audioContext();
-  await ctx.resume();
+const collectWav = async (
+  response: Response,
+  gen: number,
+  signal: AbortSignal,
+): Promise<Uint8Array | undefined> => {
   const reader = response.body?.getReader();
   if (reader === undefined) {
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    const format = tryParseWavHeader(bytes);
-    if (format === undefined || gen !== generation) {
-      return;
-    }
-    emitPcm(bytes.subarray(format.dataOffset), format, gen, true);
-    return;
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   let pendingBytes = new Uint8Array(0);
-  let format: WavFormat | undefined;
   try {
     for (;;) {
       if (signal.aborted || gen !== generation) {
         await reader.cancel().catch(() => undefined);
-        return;
+        return undefined;
       }
       const { done, value } = await reader.read();
       if (value !== undefined && value.byteLength > 0) {
         pendingBytes = concatBytes(pendingBytes, Uint8Array.from(value));
       }
-      if (format === undefined) {
-        const parsed = tryParseWavHeader(pendingBytes);
-        if (parsed !== undefined) {
-          format = parsed;
-          pendingBytes = new Uint8Array(pendingBytes.subarray(parsed.dataOffset));
-        } else if (!done) {
-          continue;
-        } else {
-          console.warn("Bernise voice clip failed", new Error("invalid WAV header"));
-          return;
-        }
-      }
-      pendingBytes = new Uint8Array(emitPcm(pendingBytes, format, gen, done));
       if (done) {
-        return;
+        return pendingBytes;
       }
     }
   } catch (error: unknown) {
     if (signal.aborted || gen !== generation) {
-      return;
+      return undefined;
     }
     throw error;
   }
 };
 
-const takeBatch = (): string | undefined => {
+const playBuffered = async (
+  response: Response,
+  gen: number,
+  signal: AbortSignal,
+  reveal: VoiceReveal | undefined,
+): Promise<boolean> => {
+  const ctx = audioContext();
+  await ctx.resume();
+  const bytes = await collectWav(response, gen, signal);
+  if (bytes === undefined || gen !== generation) {
+    return false;
+  }
+  const format = tryParseWavHeader(bytes);
+  if (format === undefined) {
+    console.warn("Bernise voice clip failed", new Error("invalid WAV header"));
+    return false;
+  }
+  if (format.bitsPerSample !== 16 || format.channels !== 1) {
+    return false;
+  }
+  const raw = pcmS16leToF32(bytes.subarray(format.dataOffset));
+  const pcm = clipsScheduled > 0 ? trimLeadingSilence(raw, format.sampleRate) : raw;
+  const scheduled = schedulePcm(pcm, format, gen, reveal);
+  if (scheduled) {
+    clipsScheduled += 1;
+  }
+  return scheduled;
+};
+
+const takeBatch = (): PendingClip | undefined => {
   if (pending.length === 0) {
     return undefined;
   }
   const parts: Array<string> = [];
   let length = 0;
+  let reveal: VoiceReveal | undefined;
   while (pending.length > 0) {
     const next = pending[0];
     if (next === undefined) {
       break;
     }
-    const extra = parts.length === 0 ? next.length : next.length + 1;
+    const extra = parts.length === 0 ? next.text.length : next.text.length + 1;
     if (parts.length > 0 && length + extra > ttsChunkLimit) {
       break;
     }
     pending.shift();
-    parts.push(next);
+    parts.push(next.text);
+    if (reveal === undefined && next.reveal !== undefined) {
+      reveal = next.reveal;
+    }
     length += extra;
   }
   if (parts.length === 0) {
     return undefined;
   }
-  return parts.join(" ");
+  return { text: parts.join(" "), reveal };
+};
+
+const failOpen = (reveal: VoiceReveal | undefined): void => {
+  if (reveal !== undefined) {
+    revealVoiceNow(reveal);
+  }
 };
 
 const runQueue = async (): Promise<void> => {
@@ -245,17 +295,20 @@ const runQueue = async (): Promise<void> => {
         maybeIdle();
         return;
       }
-      setBusy(true);
       try {
-        const response = await fetchSpeak(batch, inflight.signal);
+        const response = await fetchSpeak(batch.text, inflight.signal);
         if (gen !== generation) {
           continue;
         }
-        await playStream(response, gen, inflight.signal);
+        const started = await playBuffered(response, gen, inflight.signal, batch.reveal);
+        if (!started && gen === generation) {
+          failOpen(batch.reveal);
+        }
       } catch (error: unknown) {
         if (gen !== generation || inflight.signal.aborted) {
           continue;
         }
+        failOpen(batch.reveal);
         console.warn("Bernise voice clip failed", error);
       }
     }
@@ -273,12 +326,34 @@ const kick = (): void => {
   runner ??= runQueue();
 };
 
-export const enqueueVoice = (text: string): void => {
-  const pieces = splitForTts(text);
-  if (pieces.length === 0) {
+const scheduleKick = (): void => {
+  if (kickQueued) {
     return;
   }
-  pending.push(...pieces);
-  setBusy(true);
-  kick();
+  kickQueued = true;
+  queueMicrotask(() => {
+    kickQueued = false;
+    kick();
+  });
+};
+
+export type EnqueueVoiceOptions = {
+  readonly reveal?: VoiceReveal;
+};
+
+export const enqueueVoice = (text: string, options?: EnqueueVoiceOptions): void => {
+  const pieces = splitForTts(text);
+  if (pieces.length === 0) {
+    if (options?.reveal !== undefined) {
+      revealVoiceNow(options.reveal);
+    }
+    return;
+  }
+  for (const [index, piece] of pieces.entries()) {
+    pending.push({
+      text: piece,
+      reveal: index === 0 ? options?.reveal : undefined,
+    });
+  }
+  scheduleKick();
 };

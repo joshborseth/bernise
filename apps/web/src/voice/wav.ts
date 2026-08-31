@@ -56,6 +56,20 @@ export const tryParseWavHeader = (bytes: Uint8Array): WavFormat | undefined => {
   return undefined;
 };
 
+export const leadingSilenceGate = 0.02;
+export const leadingSilenceMaxSeconds = 0.35;
+
+/** Drop a short leading inhale so back-to-back clips do not breathe between them. */
+export const trimLeadingSilence = (pcm: Float32Array, sampleRate: number): Float32Array => {
+  const maxSamples = Math.max(0, Math.floor(leadingSilenceMaxSeconds * sampleRate));
+  const limit = Math.min(pcm.length, maxSamples);
+  let offset = 0;
+  while (offset < limit && Math.abs(pcm[offset] ?? 0) < leadingSilenceGate) {
+    offset += 1;
+  }
+  return offset === 0 ? pcm : pcm.subarray(offset);
+};
+
 export const pcmS16leToF32 = (bytes: Uint8Array): Float32Array => {
   const samples = Math.floor(bytes.byteLength / 2);
   const view = new DataView(bytes.buffer, bytes.byteOffset, samples * 2);

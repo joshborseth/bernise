@@ -1,4 +1,4 @@
-import { cancelVoice, enqueueVoice } from "./engine.ts";
+import { cancelVoice, enqueueVoice, revealVoiceNow } from "./engine.ts";
 import { emptySpeakable, flushSpeakable, pushSpeakable, type SpeakableState } from "./speakable.ts";
 import type { VoiceCue } from "./state.ts";
 
@@ -9,6 +9,7 @@ type Follow = {
   length: number;
   sanitizer: SpeakableState;
   flushed: string | undefined;
+  held: Array<string>;
 };
 
 let follow: Follow = {
@@ -16,22 +17,36 @@ let follow: Follow = {
   length: 0,
   sanitizer: emptySpeakable,
   flushed: undefined,
+  held: [],
 };
 
 let spokenCueId: string | undefined;
 let cueLocked = false;
 let cueSettled = false;
 
+const emptyFollow = (id: string | undefined): Follow => ({
+  id,
+  length: 0,
+  sanitizer: emptySpeakable,
+  flushed: undefined,
+  held: [],
+});
+
 export const resetVoiceFollow = (): void => {
   spokenCueId = undefined;
   cueLocked = false;
   cueSettled = false;
-  follow = {
-    id: undefined,
-    length: 0,
-    sanitizer: emptySpeakable,
-    flushed: undefined,
-  };
+  follow = emptyFollow(undefined);
+};
+
+const speakHeld = (id: string, until: number, extra: ReadonlyArray<string>): void => {
+  const sentences = [...follow.held, ...extra].filter((part) => part.length > 0);
+  follow = { ...follow, held: [] };
+  if (sentences.length === 0) {
+    revealVoiceNow({ id, until });
+    return;
+  }
+  enqueueVoice(sentences.join(" "), { reveal: { id, until } });
 };
 
 export const followAssistantSpeech = (input: {
@@ -50,22 +65,12 @@ export const followAssistantSpeech = (input: {
     cueLocked = false;
     cueSettled = false;
     cancelVoice();
-    follow = {
-      id: input.assistantId,
-      length: 0,
-      sanitizer: emptySpeakable,
-      flushed: undefined,
-    };
+    follow = emptyFollow(input.assistantId);
   }
 
   if (input.assistantId !== follow.id) {
     cancelVoice();
-    follow = {
-      id: input.assistantId,
-      length: 0,
-      sanitizer: emptySpeakable,
-      flushed: undefined,
-    };
+    follow = emptyFollow(input.assistantId);
   }
 
   if (input.assistantId === undefined || input.text === undefined) {
@@ -74,21 +79,20 @@ export const followAssistantSpeech = (input: {
 
   if (input.text.length > follow.length) {
     const suffix = input.text.slice(follow.length);
-    follow = { ...follow, length: input.text.length };
     const next = pushSpeakable(follow.sanitizer, suffix, skipCode);
-    follow = { ...follow, sanitizer: next.state };
-    for (const sentence of next.sentences) {
-      enqueueVoice(sentence);
-    }
+    follow = {
+      ...follow,
+      length: input.text.length,
+      sanitizer: next.state,
+      held: [...follow.held, ...next.sentences],
+    };
   }
 
   if (!input.pending && follow.flushed !== input.assistantId) {
     follow = { ...follow, flushed: input.assistantId };
     const flushed = flushSpeakable(follow.sanitizer, skipCode);
     follow = { ...follow, sanitizer: flushed.state };
-    for (const sentence of flushed.sentences) {
-      enqueueVoice(sentence);
-    }
+    speakHeld(input.assistantId, follow.length, flushed.sentences);
   }
 };
 
@@ -104,11 +108,14 @@ export const speakVoiceCue = (cue: VoiceCue | undefined): void => {
     length: Number.MAX_SAFE_INTEGER,
     sanitizer: emptySpeakable,
     flushed: undefined,
+    held: [],
   };
   cancelVoice();
   const pushed = pushSpeakable(emptySpeakable, cue.text, skipCode);
   const flushed = flushSpeakable(pushed.state, skipCode);
-  for (const sentence of [...pushed.sentences, ...flushed.sentences]) {
-    enqueueVoice(sentence);
+  const sentences = [...pushed.sentences, ...flushed.sentences];
+  if (sentences.length === 0) {
+    return;
   }
+  enqueueVoice(sentences.join(" "));
 };

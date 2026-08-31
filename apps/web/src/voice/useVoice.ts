@@ -5,7 +5,7 @@ import { chatAtom, speakAtom } from "../chat.ts";
 import { audioContext } from "../mascot/audio/context.ts";
 import { setVoiceListeners } from "./engine.ts";
 import { followAssistantSpeech, speakVoiceCue } from "./follow.ts";
-import { speakingAtom, voiceCueAtom } from "./state.ts";
+import { speakingAtom, voiceCueAtom, voiceRevealAtom } from "./state.ts";
 
 export const useBerniseVoice = (): void => {
   const chat = useAtomValue(chatAtom);
@@ -13,17 +13,21 @@ export const useBerniseVoice = (): void => {
   const pending = AsyncResult.isWaiting(speakResult);
   const voiceCue = useAtomValue(voiceCueAtom);
   const [, setSpeaking] = useAtom(speakingAtom);
+  const [, setReveal] = useAtom(voiceRevealAtom);
 
   useEffect(() => {
     setVoiceListeners({
       onBusy: (value) => {
         setSpeaking(value);
       },
+      onPlaybackStart: (reveal) => {
+        setReveal(reveal);
+      },
     });
     return () => {
       setVoiceListeners({});
     };
-  }, [setSpeaking]);
+  }, [setReveal, setSpeaking]);
 
   const assistant =
     chat.assistantId === undefined

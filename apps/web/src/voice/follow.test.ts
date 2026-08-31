@@ -8,8 +8,16 @@ const engine = vi.hoisted(() => {
     cancelVoice: () => {
       calls.push("cancel");
     },
-    enqueueVoice: (text: string) => {
-      calls.push(`enqueue:${text}`);
+    enqueueVoice: (text: string, options?: { readonly reveal?: { id: string; until: number } }) => {
+      const reveal = options?.reveal;
+      calls.push(
+        reveal === undefined
+          ? `enqueue:${text}`
+          : `enqueue:${text}:${reveal.id}:${String(reveal.until)}`,
+      );
+    },
+    revealVoiceNow: (reveal: { readonly id: string; readonly until: number }) => {
+      calls.push(`reveal:${reveal.id}:${String(reveal.until)}`);
     },
     isVoiceBusy: () => false,
   };
@@ -26,6 +34,30 @@ describe("followAssistantSpeech", () => {
   it("does not speak until a live assistant id exists", () => {
     followAssistantSpeech({ assistantId: undefined, text: "hello from history", pending: false });
     expect(engine.calls).toEqual([]);
+  });
+
+  it("does not enqueue while the turn is still pending", () => {
+    followAssistantSpeech({ assistantId: "a1", text: "Hello there.", pending: true });
+    expect(engine.calls.filter((call) => call !== "cancel")).toEqual([]);
+    followAssistantSpeech({ assistantId: "a1", text: "Hello there. More now.", pending: true });
+    expect(engine.calls.filter((call) => call !== "cancel")).toEqual([]);
+  });
+
+  it("speaks the finished turn as one utterance", () => {
+    const text = "Hello there. More now.";
+    followAssistantSpeech({ assistantId: "a1", text: "Hello there.", pending: true });
+    followAssistantSpeech({ assistantId: "a1", text, pending: false });
+    expect(engine.calls.filter((call) => call !== "cancel")).toEqual([
+      `enqueue:${text}:a1:${String(text.length)}`,
+    ]);
+  });
+
+  it("reveals immediately when there is nothing speakable", () => {
+    const text = "```\n```\n";
+    followAssistantSpeech({ assistantId: "a1", text, pending: false });
+    expect(engine.calls.filter((call) => call !== "cancel")).toEqual([
+      `reveal:a1:${String(text.length)}`,
+    ]);
   });
 
   it("does not cancel an offline cue when the failed turn later settles", () => {
@@ -50,5 +82,12 @@ describe("followAssistantSpeech", () => {
     engine.calls.length = 0;
     followAssistantSpeech({ assistantId: undefined, text: undefined, pending: true });
     expect(engine.calls[0]).toBe("cancel");
+  });
+
+  it("speaks an offline cue as one utterance", () => {
+    speakVoiceCue({ id: "cue-1", text: "Oh No! Try again later." });
+    expect(engine.calls.filter((call) => call.startsWith("enqueue:"))).toEqual([
+      "enqueue:Oh No! Try again later.",
+    ]);
   });
 });

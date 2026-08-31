@@ -8,7 +8,7 @@ import { Cause, Effect, Fiber, Schema, Stream } from "effect";
 import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
 import { settingsAtom } from "./settings.ts";
-import { codexOfflineSpoken, voiceCueAtom } from "./voice/state.ts";
+import { codexOfflineSpoken, voiceCueAtom, voiceRevealAtom } from "./voice/state.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -120,9 +120,32 @@ const hasTranscript = (state: ChatState): boolean =>
 
 export const chatAtom = Atom.make(initialChat).pipe(Atom.keepAlive);
 
-export const visibleMessagesAtom = Atom.make((get) =>
-  get(chatAtom).messages.filter((message) => message.from !== "bernise"),
-);
+export const visibleMessagesAtom = Atom.make((get) => {
+  const chat = get(chatAtom);
+  const reveal = get(voiceRevealAtom);
+  return chat.messages.flatMap((message) => {
+    if (message.from === "bernise") {
+      return [];
+    }
+    if (message.from !== "assistant" || message.id !== chat.assistantId) {
+      return [message];
+    }
+    const until = reveal?.id === message.id ? reveal.until : 0;
+    if (until <= 0) {
+      return [];
+    }
+    return [{ ...message, text: message.text.slice(0, Math.min(until, message.text.length)) }];
+  });
+});
+
+export const holdingReplyAtom = Atom.make((get) => {
+  const chat = get(chatAtom);
+  if (chat.assistantId === undefined) {
+    return false;
+  }
+  const reveal = get(voiceRevealAtom);
+  return reveal?.id !== chat.assistantId || reveal.until <= 0;
+});
 
 export const lastFromAtom = Atom.make((get) => {
   const messages = get(chatAtom).messages;
