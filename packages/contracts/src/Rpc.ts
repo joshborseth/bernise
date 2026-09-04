@@ -21,6 +21,11 @@ export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
 }) {}
 
+export class WorkspaceInfo extends Schema.Class<WorkspaceInfo>("WorkspaceInfo")({
+  path: Schema.String,
+  name: Schema.String,
+}) {}
+
 export class Ping extends Rpc.make("Ping", {
   success: Pong,
 }) {}
@@ -58,6 +63,10 @@ export class SubscribeEvents extends Rpc.make("SubscribeEvents", {
   stream: true,
 }) {}
 
+export class GetWorkspace extends Rpc.make("GetWorkspace", {
+  success: WorkspaceInfo,
+}) {}
+
 export class GetSettings extends Rpc.make("GetSettings", {
   success: HarnessSettings,
 }) {}
@@ -65,6 +74,7 @@ export class GetSettings extends Rpc.make("GetSettings", {
 export class UpdateSettings extends Rpc.make("UpdateSettings", {
   payload: {
     codex: Schema.optionalKey(CodexSettingsPatch),
+    persona: Schema.optionalKey(Schema.NullOr(Schema.String)),
   },
   success: HarnessSettings,
   error: SettingsError,
@@ -118,6 +128,7 @@ export const BerniseRpcs = RpcGroup.make(
   StartSession,
   SendTurn,
   SubscribeEvents,
+  GetWorkspace,
   GetSettings,
   UpdateSettings,
   GetProviderSnapshots,

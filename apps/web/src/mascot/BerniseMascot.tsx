@@ -1,7 +1,8 @@
 import { Canvas } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { startPurr } from "./audio/purr.ts";
 import type { BerniseMood } from "./mood.ts";
+import { mascotCameraFov, mascotCameraPosition } from "./scene/camera.ts";
 import { BerniseScene } from "./scene/BerniseScene.tsx";
 import type { PointerGoal } from "./scene/pointerGoal.ts";
 
@@ -11,9 +12,13 @@ const sleepUntilLitterMs = 8_000;
 export function BerniseMascot({
   mood,
   speakKey,
+  showFps = false,
+  fpsParentRef,
 }: {
   readonly mood: BerniseMood;
   readonly speakKey: string;
+  readonly showFps?: boolean;
+  readonly fpsParentRef?: RefObject<HTMLElement>;
 }) {
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -176,7 +181,7 @@ export function BerniseMascot({
               powerPreference: "high-performance",
               stencil: false,
             }}
-            camera={{ position: [0, 0.22, 5.6], fov: 30 }}
+            camera={{ position: [...mascotCameraPosition], fov: mascotCameraFov }}
             resize={{ debounce: 50, scroll: false }}
             style={{
               width: "100%",
@@ -199,6 +204,8 @@ export function BerniseMascot({
               sleeping={sleeping}
               usingLitter={usingLitter}
               reducedMotion={reducedMotion}
+              showFps={showFps}
+              {...(fpsParentRef === undefined ? {} : { fpsParentRef })}
               onPurringChange={setPurring}
               onBitingChange={setBiting}
               onHissingChange={setHissing}

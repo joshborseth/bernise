@@ -1,9 +1,11 @@
 import {
   CodexModel,
+  HarnessSettings,
   ModelCatalog,
   ProviderTurnDelta,
   ThreadId,
   TurnResult,
+  defaultCodexSettings,
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber, Stream } from "effect";
@@ -16,7 +18,7 @@ import {
   isRecoverableThreadResumeError,
   readCodexModelPage,
 } from "../src/CodexProviderLive.ts";
-import { berniseDeveloperInstructions } from "../src/persona.ts";
+import { defaultBernisePersona } from "../src/persona.ts";
 import { Provider } from "../src/Provider.ts";
 import { codexDriverLayer } from "./testLayers.ts";
 
@@ -132,8 +134,34 @@ describe("CodexProviderLive", () => {
         readonly developerInstructions: string | null;
       };
       expect(thread.cwd).toBe(fake.workspace);
-      expect(thread.developerInstructions).toBe(berniseDeveloperInstructions);
+      expect(thread.developerInstructions).toBe(defaultBernisePersona);
     }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
+  });
+
+  it.effect("sends a custom persona as developerInstructions", () => {
+    const fake = makeFakeBin();
+    const persona = "You are a test cat.\n";
+    return Effect.gen(function* () {
+      const provider = yield* Provider;
+      yield* provider.startSession("", testThread);
+      const thread = JSON.parse(
+        readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
+      ) as {
+        readonly developerInstructions: string | null;
+      };
+      expect(thread.developerInstructions).toBe(persona);
+    }).pipe(
+      Effect.provide(
+        codexDriverLayer(
+          fake.bin,
+          fake.workspace,
+          new HarnessSettings({
+            codex: defaultCodexSettings,
+            persona,
+          }),
+        ),
+      ),
+    );
   });
 
   it.effect("lists visible Codex models and skips hidden entries", () => {

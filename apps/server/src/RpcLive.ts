@@ -10,13 +10,12 @@ import {
   ThreadId,
   ThreadList,
 } from "@bernise/contracts";
-import { Config, Effect, Option, SynchronizedRef } from "effect";
+import { Effect, SynchronizedRef } from "effect";
 import { ThreadPersistence } from "./persistence/ThreadPersistence.ts";
 import { Provider } from "./Provider.ts";
 import { ProviderHealth } from "./ProviderHealth.ts";
 import { ServerSettings } from "./ServerSettings.ts";
-
-const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
+import { resolveWorkspacePath, workspaceConfig, workspaceInfoFromPath } from "./workspace.ts";
 
 export const RpcHandlersLive = BerniseRpcs.toLayer(
   Effect.gen(function* () {
@@ -48,8 +47,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       Ping: () => Effect.succeed(new Pong({ pong: true })),
       StartSession: (payload) =>
         Effect.gen(function* () {
-          const workspace =
-            payload.workspace?.trim() || Option.getOrElse(configuredWorkspace, () => process.cwd());
+          const workspace = resolveWorkspacePath(configuredWorkspace, payload.workspace);
           const sessionId = yield* provider.startSession(
             workspace,
             payload.threadId,
@@ -77,6 +75,8 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
           return result;
         }),
       SubscribeEvents: (payload) => provider.subscribeEvents(payload.sessionId),
+      GetWorkspace: () =>
+        Effect.succeed(workspaceInfoFromPath(resolveWorkspacePath(configuredWorkspace))),
       GetSettings: () => serverSettings.get,
       UpdateSettings: (payload) => serverSettings.update(new HarnessSettingsPatch(payload)),
       GetProviderSnapshots: () => providerHealth.snapshots,

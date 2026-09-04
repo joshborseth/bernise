@@ -15,8 +15,6 @@ import {
 import { BerniseRpc } from "./rpc.ts";
 import { voiceRevealAtom } from "./voice/state.ts";
 
-export const maxOrbitThreads = 5;
-
 export const activeThreadStorageKey = "bernise.activeThreadId";
 
 export const readStoredThreadId = (): ThreadId | undefined => {
@@ -42,34 +40,79 @@ export const writeStoredThreadId = (threadId: ThreadId | undefined): void => {
   }
 };
 
-export type OrbitItem =
+export type ThreadListItem =
   | { readonly kind: "thread"; readonly thread: ThreadShell }
   | { readonly kind: "draft"; readonly threadId: ThreadId };
 
-export const pickOrbitItems = (
+export const threadItemId = (item: ThreadListItem): ThreadId =>
+  item.kind === "draft" ? item.threadId : item.thread.id;
+
+export const threadItemTitle = (item: ThreadListItem): string =>
+  item.kind === "draft" ? "new thread" : item.thread.title;
+
+export const listThreadItems = (
   threads: ReadonlyArray<ThreadShell>,
   activeId: ThreadId | undefined,
-): { readonly items: ReadonlyArray<OrbitItem>; readonly overflow: number } => {
-  const activeShell = threads.find((thread) => thread.id === activeId);
-  const rest = threads.filter((thread) => thread.id !== activeId);
-  const items: Array<OrbitItem> = [];
-  if (activeId !== undefined && activeShell === undefined) {
+): ReadonlyArray<ThreadListItem> => {
+  const sorted = threads
+    .slice()
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  const isDraft = activeId !== undefined && !threads.some((thread) => thread.id === activeId);
+  const items: Array<ThreadListItem> = [];
+  if (isDraft && activeId !== undefined) {
     items.push({ kind: "draft", threadId: activeId });
-  } else if (activeShell !== undefined) {
-    items.push({ kind: "thread", thread: activeShell });
   }
-  for (const thread of rest) {
-    if (items.length >= maxOrbitThreads) {
-      break;
-    }
+  for (const thread of sorted) {
     items.push({ kind: "thread", thread });
   }
-  const shown = new Set(items.flatMap((item) => (item.kind === "thread" ? [item.thread.id] : [])));
-  return {
-    items,
-    overflow: threads.filter((thread) => !shown.has(thread.id)).length,
-  };
+  return items;
 };
+
+export const filterThreadItems = (
+  items: ReadonlyArray<ThreadListItem>,
+  query: string,
+): ReadonlyArray<ThreadListItem> => {
+  const needle = query.trim().toLowerCase();
+  if (needle.length === 0) {
+    return items;
+  }
+  return items.filter((item) => threadItemTitle(item).toLowerCase().includes(needle));
+};
+
+const minuteMs = 60_000;
+const hourMs = 60 * minuteMs;
+const dayMs = 24 * hourMs;
+const weekMs = 7 * dayMs;
+
+export const compactRelativeTime = (iso: string, now = Date.now()): string => {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) {
+    return "";
+  }
+  const delta = Math.max(0, now - then);
+  if (delta < minuteMs) {
+    return "now";
+  }
+  if (delta < hourMs) {
+    return `${String(Math.floor(delta / minuteMs))}m`;
+  }
+  if (delta < dayMs) {
+    return `${String(Math.floor(delta / hourMs))}h`;
+  }
+  if (delta < weekMs) {
+    return `${String(Math.floor(delta / dayMs))}d`;
+  }
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
+    new Date(then),
+  );
+};
+
+export const threadRenameAtom = Atom.make<
+  { readonly threadId: ThreadId; readonly draft: string } | undefined
+>(undefined);
+
+/** Incremented when the composer should receive focus (e.g. New thread). */
+export const composerFocusNonceAtom = Atom.make(0);
 
 export const activeThreadTitleAtom = Atom.make((get) => {
   const activeId = get(activeThreadIdAtom);
@@ -186,6 +229,7 @@ export const newThreadAtom = BerniseRpc.runtime.fn((_arg: void, get) =>
     get.set(chatAtom, initialChat);
     get.set(voiceRevealAtom, undefined);
     get.set(sessionEpochAtom, get.registry.get(sessionEpochAtom) + 1);
+    get.set(composerFocusNonceAtom, get.registry.get(composerFocusNonceAtom) + 1);
     writeStoredThreadId(undefined);
   }),
 );

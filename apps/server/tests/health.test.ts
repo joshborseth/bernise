@@ -4,6 +4,7 @@ import {
   HealthStatus,
   ModelCatalog,
   ProviderError,
+  WorkspaceInfo,
 } from "@bernise/contracts";
 import { NodeHttpServer, NodeSocket } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
@@ -25,7 +26,7 @@ import { Provider } from "../src/Provider.ts";
 import { providerHealthMemory } from "../src/ProviderHealth.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
 import { serverSettingsMemory } from "../src/ServerSettings.ts";
-import { pendingSnapshots, silentWav, ttsMemory } from "./testLayers.ts";
+import { pendingSnapshots, silentWav, testConfig, ttsMemory } from "./testLayers.ts";
 
 const stateDir = mkdtempSync(join(tmpdir(), "bernise-health-"));
 
@@ -98,18 +99,44 @@ describe("bernise server", () => {
     ).pipe(Effect.provide(WsRpcClientLive), Effect.provide(TestHttpLive)),
   );
 
+  it.effect("GetWorkspace returns BERNISE_WORKSPACE", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      expect(yield* client.GetWorkspace()).toEqual(
+        new WorkspaceInfo({
+          path: "/tmp/bernise-station",
+          name: "bernise-station",
+        }),
+      );
+    }).pipe(
+      Effect.provide(RpcHandlersLive),
+      Effect.provide(StubProviderLive),
+      Effect.provide(threadPersistenceMemory),
+      Effect.provide(serverSettingsMemory()),
+      Effect.provide(providerHealthMemory(pendingSnapshots())),
+      Effect.provide(testConfig({ BERNISE_WORKSPACE: "/tmp/bernise-station" })),
+    ),
+  );
+
   it.effect("GetSettings and UpdateSettings persist Codex paths", () =>
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(BerniseRpcs);
       const initial = yield* client.GetSettings();
       expect(initial.codex.binaryPath).toBe("");
+      expect(initial.persona).toMatch(/You are Bernise/i);
       const next = yield* client.UpdateSettings({
         codex: { binaryPath: "/usr/local/bin/codex", homePath: "~/.codex", model: "gpt-5.4-mini" },
+        persona: "Custom voice.\n",
       });
       expect(next.codex.binaryPath).toBe("/usr/local/bin/codex");
       expect(next.codex.homePath).toBe("~/.codex");
       expect(next.codex.model).toBe("gpt-5.4-mini");
+      expect(next.persona).toBe("Custom voice.\n");
       expect(yield* client.GetSettings()).toEqual(next);
+      const personaOnly = yield* client.UpdateSettings({ persona: "Voice only.\n" });
+      expect(personaOnly.persona).toBe("Voice only.\n");
+      expect(personaOnly.codex).toEqual(next.codex);
+      expect(yield* client.GetSettings()).toEqual(personaOnly);
       const snapshots = yield* client.GetProviderSnapshots();
       expect(snapshots.codex.kind).toBe("codex");
       expect(yield* client.RefreshProviders()).toEqual(snapshots);

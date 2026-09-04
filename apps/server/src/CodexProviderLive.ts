@@ -16,7 +16,6 @@ import {
   Effect,
   Exit,
   Layer,
-  Option,
   Queue,
   Scope,
   Stream,
@@ -25,14 +24,14 @@ import {
 import { ChildProcessSpawner } from "effect/unstable/process";
 import { CodexTransportError, makeCodexConnection } from "./codex/JsonRpcStdio.ts";
 import { expandHomePath } from "./pathExpand.ts";
-import { berniseDeveloperInstructions } from "./persona.ts";
+import { defaultBernisePersona, resolvePersona } from "./persona.ts";
 import { ThreadPersistence } from "./persistence/ThreadPersistence.ts";
 import { Provider } from "./Provider.ts";
 import { resolveCodexBin } from "./providerBins.ts";
 import { ServerSettings } from "./ServerSettings.ts";
+import { resolveWorkspacePath, workspaceConfig } from "./workspace.ts";
 
 const codexBinEnv = Config.string("BERNISE_CODEX_BIN").pipe(Config.option);
-const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 const handshakeTimeout = "20 seconds";
 const catalogTimeout = "10 seconds";
 const catalogKillAfter = "2 seconds";
@@ -167,9 +166,9 @@ export const readCodexModelPage = (
   return { models, nextCursor };
 };
 
-export const codexThreadStartParams = (cwd: string) => ({
+export const codexThreadStartParams = (cwd: string, persona: string = defaultBernisePersona) => ({
   cwd,
-  developerInstructions: berniseDeveloperInstructions,
+  developerInstructions: resolvePersona(persona),
 });
 
 const withOptionalModel = (
@@ -232,8 +231,6 @@ export const CodexProviderLive = Layer.effect(
       | undefined
     >(undefined);
 
-    const defaultWorkspace = () => Option.getOrElse(configuredWorkspace, () => process.cwd());
-
     const getSession = (sessionId: SessionId) =>
       SynchronizedRef.get(sessions).pipe(
         Effect.flatMap((map) => {
@@ -265,8 +262,9 @@ export const CodexProviderLive = Layer.effect(
       cwd: string,
       model: string | undefined,
       resumeCodexThreadId: string | undefined,
+      persona: string,
     ) => {
-      const startParams = withOptionalModel(codexThreadStartParams(cwd), model);
+      const startParams = withOptionalModel(codexThreadStartParams(cwd, persona), model);
       if (resumeCodexThreadId === undefined) {
         return withHandshakeTimeout(
           send("thread/start", startParams),
@@ -298,7 +296,7 @@ export const CodexProviderLive = Layer.effect(
       model?: string,
     ) {
       yield* closeAllSessions();
-      const cwd = workspace.trim().length > 0 ? workspace.trim() : defaultWorkspace();
+      const cwd = resolveWorkspacePath(configuredWorkspace, workspace);
       const settings = yield* serverSettings.get;
       const command = resolveCodexBin(settings.codex.binaryPath, envBin);
       const homePath = settings.codex.homePath.trim();
@@ -361,9 +359,13 @@ export const CodexProviderLive = Layer.effect(
             ),
           ),
         );
-      const opened = yield* openCodexThread(connection.send, cwd, model, resumeCodexThreadId).pipe(
-        Effect.tapError(() => Scope.close(sessionScope, Exit.void)),
-      );
+      const opened = yield* openCodexThread(
+        connection.send,
+        cwd,
+        model,
+        resumeCodexThreadId,
+        settings.persona,
+      ).pipe(Effect.tapError(() => Scope.close(sessionScope, Exit.void)));
       const codexThreadId = readCodexThreadId(opened);
       if (codexThreadId === undefined) {
         yield* Scope.close(sessionScope, Exit.void);

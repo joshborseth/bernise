@@ -38,7 +38,15 @@ import {
   threadsAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
-import { bootThreadsAtom, newThreadAtom, pickOrbitItems, switchThreadAtom } from "./threads.ts";
+import {
+  bootThreadsAtom,
+  compactRelativeTime,
+  filterThreadItems,
+  listThreadItems,
+  composerFocusNonceAtom,
+  newThreadAtom,
+  switchThreadAtom,
+} from "./threads.ts";
 import { BerniseRpc } from "./rpc.ts";
 import type { ChatState } from "./chat.ts";
 import {
@@ -471,6 +479,7 @@ describe("chat atoms", () => {
               homePath: "",
               model: "gpt-5.4-mini",
             }),
+            persona: "",
           }),
         ),
       ],
@@ -564,6 +573,7 @@ describe("chat atoms", () => {
     expect(registry.get(chatAtom).messages).toEqual([opening]);
     expect(registry.get(activeThreadIdAtom)).toBeDefined();
     expect(registry.get(threadsAtom)).toEqual([]);
+    expect(registry.get(composerFocusNonceAtom)).toBe(1);
   });
 
   it("switches to a persisted thread and hydrates its transcript", async () => {
@@ -672,7 +682,7 @@ describe("composerModelView", () => {
   });
 });
 
-describe("pickOrbitItems", () => {
+describe("listThreadItems", () => {
   const shell = (id: string, updatedAt: string) =>
     new ThreadShell({
       id: ThreadId.make(id),
@@ -681,26 +691,88 @@ describe("pickOrbitItems", () => {
       updatedAt,
     });
 
-  it("pins the active thread first and overflows the rest", () => {
-    const threads = [
-      shell("a", "2026-01-01T00:00:05.000Z"),
-      shell("b", "2026-01-01T00:00:04.000Z"),
-      shell("c", "2026-01-01T00:00:03.000Z"),
-      shell("d", "2026-01-01T00:00:02.000Z"),
-      shell("e", "2026-01-01T00:00:01.000Z"),
-      shell("f", "2026-01-01T00:00:00.000Z"),
-    ];
-    const picked = pickOrbitItems(threads, ThreadId.make("c"));
-    expect(picked.items[0]).toEqual({ kind: "thread", thread: threads[2] });
-    expect(picked.items).toHaveLength(5);
-    expect(picked.overflow).toBe(1);
+  it("orders threads newest first regardless of input order", () => {
+    const older = shell("older", "2026-01-01T00:00:01.000Z");
+    const newer = shell("newer", "2026-01-01T00:00:02.000Z");
+    const left = listThreadItems([older, newer], newer.id);
+    const right = listThreadItems([newer, older], newer.id);
+    expect(left).toEqual(right);
+    expect(left.map((item) => (item.kind === "thread" ? item.thread.id : item.threadId))).toEqual([
+      "newer",
+      "older",
+    ]);
   });
 
-  it("shows a draft cloud when the active id is not in the list", () => {
+  it("shows a draft when the active id is not in the list", () => {
     const draftId = ThreadId.make("draft");
-    const picked = pickOrbitItems([shell("a", "2026-01-01T00:00:00.000Z")], draftId);
-    expect(picked.items[0]).toEqual({ kind: "draft", threadId: draftId });
-    expect(picked.items).toHaveLength(2);
-    expect(picked.overflow).toBe(0);
+    const items = listThreadItems([shell("a", "2026-01-01T00:00:00.000Z")], draftId);
+    expect(items[0]).toEqual({ kind: "draft", threadId: draftId });
+    expect(items.some((item) => item.kind === "thread" && item.thread.id === "a")).toBe(true);
+  });
+
+  it("lists every thread with no cap", () => {
+    const threads = Array.from({ length: 17 }, (_, index) =>
+      shell(
+        String.fromCharCode(97 + index),
+        `2026-01-01T00:00:${String(17 - index).padStart(2, "0")}.000Z`,
+      ),
+    );
+    const newest = threads[0];
+    if (newest === undefined) {
+      throw new Error("expected threads");
+    }
+    const items = listThreadItems(threads, newest.id);
+    expect(items.filter((item) => item.kind === "thread")).toHaveLength(17);
+    expect(items.some((item) => item.kind === "draft")).toBe(false);
+  });
+});
+
+describe("filterThreadItems", () => {
+  const shell = (id: string, title: string) =>
+    new ThreadShell({
+      id: ThreadId.make(id),
+      title,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+  it("returns the list unchanged when the query is blank", () => {
+    const items = listThreadItems([shell("a", "Grill the cache")], ThreadId.make("a"));
+    expect(filterThreadItems(items, "   ")).toEqual(items);
+  });
+
+  it("filters by title without changing order", () => {
+    const items = listThreadItems(
+      [shell("a", "Grill the cache"), shell("b", "Persona voice"), shell("c", "Cache bust")],
+      ThreadId.make("a"),
+    );
+    expect(
+      filterThreadItems(items, "CACHE").map((item) =>
+        item.kind === "thread" ? item.thread.id : item.threadId,
+      ),
+    ).toEqual(["a", "c"]);
+  });
+
+  it("matches the draft label", () => {
+    const draftId = ThreadId.make("draft");
+    const items = listThreadItems([shell("a", "Grill")], draftId);
+    const filtered = filterThreadItems(items, "new thread");
+    expect(filtered).toEqual([{ kind: "draft", threadId: draftId }]);
+  });
+});
+
+describe("compactRelativeTime", () => {
+  const now = Date.parse("2026-09-03T22:00:00.000Z");
+
+  it("compacts recent stamps the way the sidebar rows do", () => {
+    expect(compactRelativeTime("2026-09-03T21:59:20.000Z", now)).toBe("now");
+    expect(compactRelativeTime("2026-09-03T21:55:00.000Z", now)).toBe("5m");
+    expect(compactRelativeTime("2026-09-03T19:00:00.000Z", now)).toBe("3h");
+    expect(compactRelativeTime("2026-09-01T22:00:00.000Z", now)).toBe("2d");
+    expect(compactRelativeTime("2026-08-20T22:00:00.000Z", now)).toBe("Aug 20");
+  });
+
+  it("returns empty for unparseable stamps", () => {
+    expect(compactRelativeTime("nope", now)).toBe("");
   });
 });

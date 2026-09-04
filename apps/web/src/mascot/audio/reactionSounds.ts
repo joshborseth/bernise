@@ -15,8 +15,8 @@ export function playHiss(): void {
 
   const master = ctx.createGain();
   master.gain.setValueAtTime(0.0001, now);
-  master.gain.exponentialRampToValueAtTime(0.24, now + 0.04);
-  master.gain.setValueAtTime(0.24, now + 0.28);
+  master.gain.exponentialRampToValueAtTime(0.08, now + 0.04);
+  master.gain.setValueAtTime(0.08, now + 0.28);
   master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
   master.connect(ctx.destination);
 
@@ -38,7 +38,7 @@ export function playHiss(): void {
   air.Q.value = 0.8;
 
   const airGain = ctx.createGain();
-  airGain.gain.value = 0.7;
+  airGain.gain.value = 0.45;
 
   noise.connect(highpass);
   highpass.connect(sibilant);
