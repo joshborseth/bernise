@@ -18,6 +18,7 @@ export class CodexSettings extends Schema.Class<CodexSettings>("CodexSettings")(
 
 export class HarnessSettings extends Schema.Class<HarnessSettings>("HarnessSettings")({
   codex: CodexSettings,
+  persona: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 }) {}
 
 export class CodexSettingsPatch extends Schema.Class<CodexSettingsPatch>("CodexSettingsPatch")({
@@ -31,6 +32,7 @@ export class HarnessSettingsPatch extends Schema.Class<HarnessSettingsPatch>(
   "HarnessSettingsPatch",
 )({
   codex: Schema.optionalKey(CodexSettingsPatch),
+  persona: Schema.optionalKey(Schema.NullOr(Schema.String)),
 }) {}
 
 export class SettingsError extends Schema.TaggedError<SettingsError>()("SettingsError", {
@@ -71,6 +73,7 @@ export const defaultCodexSettings = new CodexSettings({
 
 export const defaultHarnessSettings = new HarnessSettings({
   codex: defaultCodexSettings,
+  persona: "",
 });
 
 const trimPath = (value: string | undefined): string | undefined => {
@@ -91,4 +94,5 @@ export const mergeHarnessSettings = (
       homePath: trimPath(patch.codex?.homePath) ?? current.codex.homePath,
       model: trimPath(patch.codex?.model) ?? current.codex.model,
     }),
+    persona: patch.persona === undefined ? current.persona : (patch.persona ?? ""),
   });

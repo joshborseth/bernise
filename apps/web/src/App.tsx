@@ -1,10 +1,10 @@
-import { type ProviderSnapshot } from "@bernise/contracts";
+import { type WorkspaceInfo } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
-import { useEffect, useState, type FormEvent } from "react";
-import { useDefaultLayout } from "react-resizable-panels";
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
-import { ThoughtOrbit } from "./ThoughtOrbit.tsx";
+import { PersonaConfig } from "./components/PersonaConfig.tsx";
+import { ThreadSidebar } from "./components/ThreadSidebar.tsx";
 import {
   formatError,
   holdingReplyAtom,
@@ -12,13 +12,10 @@ import {
   speakKeyAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
-import { bootThreadsAtom, activeThreadTitleAtom } from "./threads.ts";
-import { Badge } from "~/components/ui/badge";
+import { activeThreadTitleAtom, bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
 import { Button } from "~/components/ui/button";
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
+import { ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -26,79 +23,63 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { cn } from "~/lib/utils";
 import {
   bootSettingsAtom,
   composerModelView,
   modelsResultAtom,
-  refreshProvidersAtom,
   settingsAtom,
-  settingsBusyAtom,
-  snapshotsAtom,
   updateSettingsAtom,
 } from "./settings.ts";
 import { speakingAtom } from "./voice/state.ts";
 import { useBerniseVoice } from "./voice/useVoice.ts";
+import { displayWorkspacePath, workspaceAtom } from "./workspace.ts";
 
-const statusLabel = (snapshot: ProviderSnapshot): string => {
-  if (!snapshot.enabled) {
-    return "off";
+const devFpsStorageKey = "bernise.devFps";
+
+const readDevFps = (): boolean => {
+  if (!import.meta.env.DEV) {
+    return false;
   }
-  if (snapshot.status === "ready") {
-    return "ready";
+  try {
+    return globalThis.localStorage?.getItem(devFpsStorageKey) !== "0";
+  } catch {
+    return true;
   }
-  if (snapshot.status === "warning") {
-    return "pending";
-  }
-  return "fault";
 };
 
-const shellClass =
-  "relative z-1 mx-auto flex min-h-dvh max-w-[52rem] flex-col px-[1.35rem] pt-7 pb-[1.15rem]";
+const writeDevFps = (on: boolean): void => {
+  try {
+    globalThis.localStorage?.setItem(devFpsStorageKey, on ? "1" : "0");
+  } catch {
+    // Quota or private mode — preference still lives in memory.
+  }
+};
 
-const stationHandleClass =
-  "w-2.5 border-x border-[color-mix(in_srgb,var(--ink)_10%,var(--line))] bg-[color-mix(in_srgb,var(--peach)_38%,var(--bg-wash))] hover:bg-[color-mix(in_srgb,var(--peach)_62%,var(--bg-wash))] focus-visible:ring-[color-mix(in_srgb,var(--peach-deep)_70%,var(--ring))]";
-
-const threadPaneClass =
-  "flex min-h-0 flex-col px-[1.35rem] pt-7 pb-[1.15rem] lg:h-full lg:bg-[color-mix(in_srgb,var(--bg-elev)_88%,transparent)] lg:shadow-[-20px_0_36px_color-mix(in_srgb,var(--ink)_7%,transparent)]";
-
-function useMinWidth(px: number): boolean {
-  const query = `(min-width: ${String(px)}px)`;
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const onChange = () => {
-      setMatches(media.matches);
-    };
-    media.addEventListener("change", onChange);
-    return () => {
-      media.removeEventListener("change", onChange);
-    };
-  }, [query]);
-
-  return matches;
-}
+const threadPaneClass = "thread-pane flex h-full min-h-0 flex-col px-4 pt-7 pb-[1.15rem]";
 
 export function App() {
-  const [view, setView] = useState<"chat" | "settings">("chat");
   useAtomValue(bootSettingsAtom);
   useAtomValue(bootThreadsAtom);
   useAtomValue(modelsResultAtom);
+  useAtomValue(updateSettingsAtom);
 
-  return view === "settings" ? (
-    <SettingsView onBack={() => setView("chat")} />
-  ) : (
-    <ChatView onOpenSettings={() => setView("settings")} />
+  return (
+    <SidebarProvider className="relative z-1 h-dvh min-h-0 overflow-hidden">
+      <ChatWorkspace />
+    </SidebarProvider>
   );
 }
 
-function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
+function ChatWorkspace() {
+  const [personaOpen, setPersonaOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const threadTitle = useAtomValue(activeThreadTitleAtom);
+  const workspace = useAtomValue(workspaceAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
   const holdingReply = useAtomValue(holdingReplyAtom);
@@ -126,13 +107,17 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     voicing,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
-  const wide = useMinWidth(1024);
-  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
-    id: "bernise-station",
-    onlySaveAfterUserInteractions: true,
-    panelIds: ["bernise", "thread"],
-    storage: window.localStorage,
-  });
+  const [showFps, setShowFps] = useState(readDevFps);
+  const fpsParentRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLInputElement>(null);
+  const composerFocusNonce = useAtomValue(composerFocusNonceAtom);
+
+  useEffect(() => {
+    if (composerFocusNonce === 0) {
+      return;
+    }
+    composerRef.current?.focus();
+  }, [composerFocusNonce]);
 
   const onSpeak = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -144,36 +129,47 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     speak(text);
   };
 
-  const mascot = (
-    <aside
-      className={
-        wide
-          ? "mascot-slot grid h-full min-h-0 content-center justify-items-center overflow-visible"
-          : "grid content-center justify-items-center px-[1.15rem] pt-6 pb-2"
-      }
+  const fpsButton = import.meta.env.DEV ? (
+    <Button
+      type="button"
+      variant={showFps ? "default" : "outline"}
+      size="lg"
+      className="rounded-full"
+      aria-pressed={showFps}
+      aria-label={showFps ? "Hide FPS counter" : "Show FPS counter"}
+      onClick={() => {
+        const next = !showFps;
+        setShowFps(next);
+        writeDevFps(next);
+      }}
     >
-      <div className="thought-stage">
-        <ThoughtOrbit />
-        <BerniseMascot mood={mood} speakKey={speakKey} />
-      </div>
+      FPS
+    </Button>
+  ) : null;
+
+  const mascot = (
+    <aside className="mascot-slot relative flex h-full min-h-0 flex-col items-center justify-end overflow-hidden pb-12">
+      {import.meta.env.DEV ? (
+        <div ref={fpsParentRef} className="dev-fps-counter" aria-hidden={!showFps} />
+      ) : null}
+      <BerniseMascot
+        mood={mood}
+        speakKey={speakKey}
+        showFps={showFps}
+        fpsParentRef={fpsParentRef as RefObject<HTMLElement>}
+      />
     </aside>
   );
 
   const thread = (
-    <section className={cn(threadPaneClass, wide ? undefined : "min-h-0")}>
-      <header className="mb-1.5 flex flex-none items-baseline justify-between gap-4">
-        <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
-          {threadTitle}
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="rounded-full"
-          onClick={onOpenSettings}
-        >
-          Config
-        </Button>
+    <section className={threadPaneClass}>
+      <header className="mb-1.5 flex flex-none items-start gap-4">
+        <div className="min-w-0">
+          <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
+            {threadTitle}
+          </p>
+          <StationPlaque workspace={workspace} />
+        </div>
       </header>
 
       <div
@@ -210,6 +206,7 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
       >
         <div className="grid grid-cols-[1fr_auto] gap-2.5">
           <Input
+            ref={composerRef}
             value={draft}
             onChange={(event) => {
               setDraft(event.target.value);
@@ -279,178 +276,97 @@ function ChatView({ onOpenSettings }: { readonly onOpenSettings: () => void }) {
     </section>
   );
 
-  if (!wide) {
-    return (
-      <main className="relative z-1 grid min-h-dvh grid-cols-1">
-        {mascot}
-        {thread}
-      </main>
-    );
-  }
-
-  return (
-    <main className="relative z-1 h-dvh overflow-hidden">
+  const station = (
+    <div className="relative h-full min-h-0">
       <ResizablePanelGroup
         id="bernise-station"
         orientation="horizontal"
         className="h-full"
-        defaultLayout={defaultLayout}
-        onLayoutChanged={onLayoutChanged}
+        disableCursor
+        disabled
+        resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
       >
         <ResizablePanel
           id="bernise"
           defaultSize="42%"
-          minSize="28%"
-          maxSize="62%"
-          className="h-full min-h-0 overflow-visible"
+          minSize="12rem"
+          className="h-full min-h-0 overflow-hidden"
         >
           {mascot}
         </ResizablePanel>
-        <ResizableHandle withHandle className={stationHandleClass} />
-        <ResizablePanel id="thread" defaultSize="58%" minSize="38%" className="h-full min-h-0">
+        <ResizablePanel
+          id="thread"
+          defaultSize="58%"
+          minSize="58%"
+          maxSize="58%"
+          className="h-full min-h-0 min-w-0 overflow-hidden"
+        >
           {thread}
         </ResizablePanel>
       </ResizablePanelGroup>
-    </main>
+    </div>
   );
-}
 
-function SettingsView({ onBack }: { readonly onBack: () => void }) {
-  const settings = useAtomValue(settingsAtom);
-  const snapshots = useAtomValue(snapshotsAtom);
-  const busy = useAtomValue(settingsBusyAtom);
-  const [refreshResult, refresh] = useAtom(refreshProvidersAtom);
-  const [, updateSettings] = useAtom(updateSettingsAtom);
-  const probing = busy || AsyncResult.isWaiting(refreshResult);
-
-  return (
-    <main className={cn(shellClass, "gap-4")}>
-      <header className="mb-1.5 flex items-baseline justify-between gap-4">
-        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={onBack}>
-          Back to grill
-        </Button>
-        <h1 className="m-0 text-[1.05rem] font-medium tracking-[0.04em]">Provider bay</h1>
-      </header>
-      <p className="m-0 text-[0.88rem] leading-normal text-muted-foreground">
-        Bernise finds the local Codex CLI on PATH. Leave Binary path blank unless PATH is not
-        enough, run <code className="text-foreground">codex login</code>, then Check connections.
-      </p>
-      <ProviderCard
-        snapshot={snapshots.codex}
-        binaryPath={settings.codex.binaryPath}
-        homePath={settings.codex.homePath}
-        probing={probing}
-        onBinaryPath={(binaryPath) => {
-          updateSettings({ codex: { binaryPath } });
-        }}
-        onHomePath={(homePath) => {
-          updateSettings({ codex: { homePath } });
-        }}
-      />
-      <Button
-        type="button"
-        size="lg"
-        className="justify-self-start tracking-[0.04em]"
-        disabled={probing}
-        onClick={() => {
-          refresh();
-        }}
+  const shell = (
+    <ResizablePanelGroup
+      id="bernise-shell"
+      orientation="horizontal"
+      className="h-full"
+      disableCursor
+      disabled
+      resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
+    >
+      <ResizablePanel
+        id="threads"
+        defaultSize="24%"
+        minSize="24%"
+        maxSize="24%"
+        className="h-full min-h-0 min-w-0 overflow-hidden"
       >
-        {probing ? "Checking…" : "Check connections"}
-      </Button>
-    </main>
+        <ThreadSidebar
+          onOpenPersona={() => setPersonaOpen(true)}
+          footerExtra={fpsButton}
+        />
+      </ResizablePanel>
+      <ResizablePanel
+        id="station"
+        defaultSize="76%"
+        minSize="64%"
+        className="h-full min-h-0 min-w-0"
+      >
+        {station}
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+
+  return (
+    <SidebarInset className="h-full min-h-0 overflow-hidden bg-transparent">
+      {shell}
+      <PersonaConfig open={personaOpen} onOpenChange={setPersonaOpen} />
+    </SidebarInset>
   );
 }
 
-function ProviderCard({
-  snapshot,
-  binaryPath,
-  homePath,
-  probing,
-  onBinaryPath,
-  onHomePath,
-}: {
-  readonly snapshot: ProviderSnapshot;
-  readonly binaryPath: string;
-  readonly homePath: string;
-  readonly probing: boolean;
-  readonly onBinaryPath: (value: string) => void;
-  readonly onHomePath: (value: string) => void;
-}) {
+function StationPlaque({ workspace }: { readonly workspace: WorkspaceInfo }) {
+  if (workspace.path.length === 0) {
+    return null;
+  }
+  const displayPath = displayWorkspacePath(workspace.path);
   return (
-    <Card className="rounded-[1.2rem] shadow-[0_10px_22px_color-mix(in_srgb,var(--ink)_5%,transparent)] ring-border">
-      <CardHeader>
-        <CardTitle className="text-[0.95rem] font-medium">Codex</CardTitle>
-        <CardAction>
-          <Badge variant={statusBadgeVariant(snapshot)} className={statusBadgeClass(snapshot)}>
-            {statusLabel(snapshot)}
-          </Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        <dl className="mb-1 grid grid-cols-2 gap-x-3 gap-y-[0.45rem]">
-          <div>
-            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
-              Auth
-            </dt>
-            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">{snapshot.auth}</dd>
-          </div>
-          <div>
-            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
-              Version
-            </dt>
-            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">{snapshot.version ?? "—"}</dd>
-          </div>
-          <div>
-            <dt className="text-[0.68rem] tracking-[0.08em] text-muted-foreground uppercase">
-              Last checked
-            </dt>
-            <dd className="mt-[0.15rem] ml-0 text-[0.82rem]">
-              {snapshot.checkedAt.length > 0 ? new Date(snapshot.checkedAt).toLocaleString() : "—"}
-            </dd>
-          </div>
-        </dl>
-        <div className="grid gap-1.5">
-          <Label htmlFor="codex-binary-path" className="tracking-[0.04em] text-muted-foreground">
-            Binary path
-          </Label>
-          <Input
-            id="codex-binary-path"
-            value={binaryPath}
-            placeholder="codex"
-            disabled={probing}
-            onChange={(event) => {
-              onBinaryPath(event.target.value);
-            }}
-          />
-          <p className="text-[0.72rem] leading-[1.45] tracking-normal text-muted-foreground">
-            Leave blank to use <code className="text-foreground">codex</code> on PATH. Set this only
-            when PATH cannot find the CLI.
-          </p>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="codex-home-path" className="tracking-[0.04em] text-muted-foreground">
-            CODEX_HOME path
-          </Label>
-          <Input
-            id="codex-home-path"
-            value={homePath}
-            placeholder="~/.codex"
-            disabled={probing}
-            onChange={(event) => {
-              onHomePath(event.target.value);
-            }}
-          />
-        </div>
-        <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
-          Login with <code className="text-foreground">codex login</code> on the machine running the
-          Bernise server.
-        </p>
-        <p className="m-0 text-[0.78rem] leading-[1.45] text-muted-foreground">
-          {snapshot.message}
-        </p>
-      </CardContent>
-    </Card>
+    <p
+      className="m-0 mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[0.72rem] leading-[1.35]"
+      title={workspace.path}
+    >
+      <span className="shrink-0 tracking-[0.02em]">
+        <span className="text-muted-foreground">in </span>
+        <span className="text-[color-mix(in_srgb,var(--peach-deep)_82%,var(--ink))]">
+          {workspace.name}
+        </span>
+      </span>
+      <span className="min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap text-muted-foreground [direction:rtl]">
+        <bdi>{displayPath}</bdi>
+      </span>
+    </p>
   );
 }
 
@@ -474,20 +390,3 @@ const errorBubbleClass = cn(
 const statusBubbleClass = cn(
   "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-dashed border-[color-mix(in_srgb,var(--muted)_45%,var(--line))] bg-[color-mix(in_srgb,var(--bg-wash)_70%,white)] px-[0.85rem] py-[0.55rem] text-muted-foreground",
 );
-
-const statusBadgeVariant = (snapshot: ProviderSnapshot) => {
-  if (snapshot.status === "error") {
-    return "destructive" as const;
-  }
-  if (snapshot.status === "ready") {
-    return "outline" as const;
-  }
-  return "secondary" as const;
-};
-
-const statusBadgeClass = (snapshot: ProviderSnapshot) => {
-  if (snapshot.status === "ready") {
-    return "border-transparent bg-[color-mix(in_srgb,var(--sky)_50%,white)] text-foreground uppercase tracking-[0.08em]";
-  }
-  return "uppercase tracking-[0.08em]";
-};

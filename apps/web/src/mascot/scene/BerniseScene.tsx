@@ -1,4 +1,5 @@
 import { ContactShadows, Stats } from "@react-three/drei";
+import type { RefObject } from "react";
 import type { BerniseMood } from "../mood.ts";
 import { AnimatedFigure } from "./AnimatedFigure.tsx";
 import { FitCamera } from "./FitCamera.tsx";
@@ -14,6 +15,8 @@ export function BerniseScene({
   sleeping,
   usingLitter,
   reducedMotion,
+  showFps,
+  fpsParentRef,
   onPurringChange,
   onBitingChange,
   onHissingChange,
@@ -28,6 +31,8 @@ export function BerniseScene({
   readonly sleeping: boolean;
   readonly usingLitter: boolean;
   readonly reducedMotion: boolean;
+  readonly showFps: boolean;
+  readonly fpsParentRef?: RefObject<HTMLElement>;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
   readonly onHissingChange: (hissing: boolean) => void;
@@ -35,8 +40,10 @@ export function BerniseScene({
 }) {
   return (
     <>
-      {import.meta.env.DEV ? <Stats /> : null}
-      <FitCamera />
+      {import.meta.env.DEV && showFps && fpsParentRef ? (
+        <Stats parent={fpsParentRef as RefObject<HTMLElement>} className="dev-fps-stats" />
+      ) : null}
+      <FitCamera usingLitter={usingLitter} />
       <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
       <ambientLight intensity={0.5} color="#fff6ea" />
       <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.15} color="#fff7ee" />

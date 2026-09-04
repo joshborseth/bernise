@@ -49,10 +49,10 @@ describe("ThreadPersistence", () => {
       const threads = yield* ThreadPersistence;
       yield* threads.appendUser(threadA, "grill the auth model");
       yield* threads.appendAssistant(threadA, "ok");
-      yield* threads.appendUser(threadB, "separate thought");
+      yield* threads.appendUser(threadB, "separate thread");
       const listed = yield* threads.listThreads;
       expect(listed.map((thread) => ({ id: thread.id, title: thread.title }))).toEqual([
-        { id: threadB, title: "separate thought" },
+        { id: threadB, title: "separate thread" },
         { id: threadA, title: "grill the auth model" },
       ]);
       expect((yield* threads.getThread(threadA)).messages.map((message) => message.text)).toEqual([
@@ -60,7 +60,7 @@ describe("ThreadPersistence", () => {
         "ok",
       ]);
       expect((yield* threads.getThread(threadB)).messages.map((message) => message.text)).toEqual([
-        "separate thought",
+        "separate thread",
       ]);
     }).pipe(Effect.provide(persistenceMemory)),
   );

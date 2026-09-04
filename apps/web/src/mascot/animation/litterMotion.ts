@@ -269,6 +269,7 @@ export function poseLitterProps(
   dropSpecs: ReadonlyArray<LitterDrop> = litterDrops,
 ): void {
   if (box !== null) {
+    box.frustumCulled = false;
     box.position.set(
       litterBoxX,
       litterBoxHiddenY + (litterBoxRestY - litterBoxHiddenY) * motion.box,
