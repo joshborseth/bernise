@@ -1,0 +1,15 @@
+{
+  "name": "Bernise",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "dev:web",
+      "description": "Vite renderer (apps/web) + Effect server (apps/server) for browser dev. Web: http://localhost:5733, server: http://localhost:13773 (GET /health, RPC WebSocket at /rpc).",
+      "command": "export PATH=\"$HOME/.bun/bin:$HOME/.local/share/vite-plus/bin:$PATH\"; vp run dev:web"
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 5733 },
+    { "name": "server", "port": 13773 }
+  ]
+}
