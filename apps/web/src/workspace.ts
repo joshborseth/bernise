@@ -29,6 +29,28 @@ export const activeWorkspaceEntryAtom = Atom.make<string | undefined>(undefined)
   Atom.keepAlive,
 );
 
+export const expandedWorkspaceDirectoriesAtom = Atom.make<ReadonlySet<string>>(
+  new Set<string>(),
+).pipe(Atom.keepAlive);
+
+export const isWorkspaceDirectoryExpanded = (
+  expanded: ReadonlySet<string>,
+  path: string,
+): boolean => expanded.has(path);
+
+export const toggleWorkspaceDirectoryExpanded = (
+  expanded: ReadonlySet<string>,
+  path: string,
+): ReadonlySet<string> => {
+  const next = new Set(expanded);
+  if (next.has(path)) {
+    next.delete(path);
+  } else {
+    next.add(path);
+  }
+  return next;
+};
+
 export const isSelectableWorkspaceEntry = (kind: WorkspaceEntryKind): boolean =>
   kind !== "directory";
 
