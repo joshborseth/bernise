@@ -9,7 +9,15 @@ import {
   Trash2Icon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { activeThreadIdAtom, threadsAtom } from "../chat.ts";
 import {
   compactRelativeTime,
@@ -24,6 +32,7 @@ import {
   threadRenameAtom,
   type ThreadListItem,
 } from "../threads.ts";
+import { WorkspaceExplorer } from "./WorkspaceExplorer.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +53,7 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "~/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -67,72 +77,76 @@ export function ThreadSidebar({
   return (
     <aside
       className="threads-pane flex h-full min-h-0 min-w-0 flex-col text-sidebar-foreground"
-      aria-label="Threads"
+      aria-label="Workspace and threads"
     >
-      <SidebarHeader className="gap-3 px-2 pt-3 pb-2">
-        <p className="font-display m-0 px-1 text-[0.95rem] leading-none font-semibold tracking-[-0.02em] italic">
-          Threads
-        </p>
-        <div className="flex items-center gap-1">
-          <div className="relative min-w-0 flex-1">
-            <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <SidebarInput
-              ref={searchRef}
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-              }}
-              onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setQuery("");
-                  searchRef.current?.blur();
-                }
-              }}
-              placeholder="Search threads…"
-              aria-label="Search threads"
-              autoComplete="off"
-              className="h-8 bg-background/70 pr-7 pl-7"
-            />
-            {query.length > 0 ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground"
-                aria-label="Clear search"
-                onClick={() => {
-                  setQuery("");
-                  searchRef.current?.focus();
+      <WorkspaceExplorer />
+      <SidebarSeparator />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Threads">
+        <SidebarHeader className="gap-3 px-2 pt-3 pb-2">
+          <p className="font-display m-0 px-1 text-[0.95rem] leading-none font-semibold tracking-[-0.02em] italic">
+            Threads
+          </p>
+          <div className="flex items-center gap-1">
+            <div className="relative min-w-0 flex-1">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <SidebarInput
+                ref={searchRef}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
                 }}
-              >
-                <XIcon />
-              </Button>
-            ) : null}
-          </div>
-          <Tooltip>
-            <TooltipTrigger
-              render={
+                onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    setQuery("");
+                    searchRef.current?.blur();
+                  }
+                }}
+                placeholder="Search threads…"
+                aria-label="Search threads"
+                autoComplete="off"
+                className="h-8 bg-background/70 pr-7 pl-7"
+              />
+              {query.length > 0 ? (
                 <Button
                   type="button"
                   variant="ghost"
-                  size="icon-sm"
-                  aria-label="New thread"
-                  className="text-muted-foreground hover:text-foreground"
-                  onClick={startThread}
-                />
-              }
-            >
-              <SquarePenIcon />
-            </TooltipTrigger>
-            <TooltipContent side="bottom">New thread</TooltipContent>
-          </Tooltip>
-        </div>
-      </SidebarHeader>
+                  size="icon-xs"
+                  className="absolute top-1/2 right-1 -translate-y-1/2 text-muted-foreground"
+                  aria-label="Clear search"
+                  onClick={() => {
+                    setQuery("");
+                    searchRef.current?.focus();
+                  }}
+                >
+                  <XIcon />
+                </Button>
+              ) : null}
+            </div>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="New thread"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={startThread}
+                  />
+                }
+              >
+                <SquarePenIcon />
+              </TooltipTrigger>
+              <TooltipContent side="bottom">New thread</TooltipContent>
+            </Tooltip>
+          </div>
+        </SidebarHeader>
 
-      <SidebarContent>
-        <ThreadsList query={query} />
-      </SidebarContent>
+        <SidebarContent>
+          <ThreadsList query={query} />
+        </SidebarContent>
+      </div>
 
       <SidebarFooter className="border-t border-sidebar-border/80">
         <div className="flex items-end gap-2">

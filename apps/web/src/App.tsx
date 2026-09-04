@@ -1,4 +1,3 @@
-import { type WorkspaceInfo } from "@bernise/contracts";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
@@ -34,7 +33,6 @@ import {
 } from "./settings.ts";
 import { speakingAtom } from "./voice/state.ts";
 import { useBerniseVoice } from "./voice/useVoice.ts";
-import { displayWorkspacePath, workspaceAtom } from "./workspace.ts";
 
 const devFpsStorageKey = "bernise.devFps";
 
@@ -79,7 +77,6 @@ function ChatWorkspace() {
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
   const threadTitle = useAtomValue(activeThreadTitleAtom);
-  const workspace = useAtomValue(workspaceAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
   const holdingReply = useAtomValue(holdingReplyAtom);
@@ -168,7 +165,6 @@ function ChatWorkspace() {
           <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
             {threadTitle}
           </p>
-          <StationPlaque workspace={workspace} />
         </div>
       </header>
 
@@ -323,10 +319,7 @@ function ChatWorkspace() {
         maxSize="24%"
         className="h-full min-h-0 min-w-0 overflow-hidden"
       >
-        <ThreadSidebar
-          onOpenPersona={() => setPersonaOpen(true)}
-          footerExtra={fpsButton}
-        />
+        <ThreadSidebar onOpenPersona={() => setPersonaOpen(true)} footerExtra={fpsButton} />
       </ResizablePanel>
       <ResizablePanel
         id="station"
@@ -344,29 +337,6 @@ function ChatWorkspace() {
       {shell}
       <PersonaConfig open={personaOpen} onOpenChange={setPersonaOpen} />
     </SidebarInset>
-  );
-}
-
-function StationPlaque({ workspace }: { readonly workspace: WorkspaceInfo }) {
-  if (workspace.path.length === 0) {
-    return null;
-  }
-  const displayPath = displayWorkspacePath(workspace.path);
-  return (
-    <p
-      className="m-0 mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[0.72rem] leading-[1.35]"
-      title={workspace.path}
-    >
-      <span className="shrink-0 tracking-[0.02em]">
-        <span className="text-muted-foreground">in </span>
-        <span className="text-[color-mix(in_srgb,var(--peach-deep)_82%,var(--ink))]">
-          {workspace.name}
-        </span>
-      </span>
-      <span className="min-w-0 flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap text-muted-foreground [direction:rtl]">
-        <bdi>{displayPath}</bdi>
-      </span>
-    </p>
   );
 }
 

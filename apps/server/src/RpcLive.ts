@@ -10,11 +10,12 @@ import {
   ThreadId,
   ThreadList,
 } from "@bernise/contracts";
-import { Effect, SynchronizedRef } from "effect";
+import { Effect, Layer, SynchronizedRef } from "effect";
 import { ThreadPersistence } from "./persistence/ThreadPersistence.ts";
 import { Provider } from "./Provider.ts";
 import { ProviderHealth } from "./ProviderHealth.ts";
 import { ServerSettings } from "./ServerSettings.ts";
+import { WorkspaceFs, WorkspaceFsLive } from "./WorkspaceFs.ts";
 import { resolveWorkspacePath, workspaceConfig, workspaceInfoFromPath } from "./workspace.ts";
 
 export const RpcHandlersLive = BerniseRpcs.toLayer(
@@ -23,6 +24,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
     const serverSettings = yield* ServerSettings;
     const providerHealth = yield* ProviderHealth;
     const threads = yield* ThreadPersistence;
+    const workspaceFs = yield* WorkspaceFs;
     const configuredWorkspace = yield* workspaceConfig;
     const sessionThreads = yield* SynchronizedRef.make(new Map<SessionId, ThreadId>());
 
@@ -77,6 +79,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       SubscribeEvents: (payload) => provider.subscribeEvents(payload.sessionId),
       GetWorkspace: () =>
         Effect.succeed(workspaceInfoFromPath(resolveWorkspacePath(configuredWorkspace))),
+      ListWorkspaceDirectory: (payload) => workspaceFs.listDirectory(payload.path),
       GetSettings: () => serverSettings.get,
       UpdateSettings: (payload) => serverSettings.update(new HarnessSettingsPatch(payload)),
       GetProviderSnapshots: () => providerHealth.snapshots,
@@ -92,7 +95,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
           .pipe(Effect.map(() => new ThreadDeleted({ threadId: payload.threadId }))),
     };
   }),
-);
+).pipe(Layer.provide(WorkspaceFsLive));
 
 export const PingLive = BerniseRpcs.toLayerHandler("Ping", () =>
   Effect.succeed(new Pong({ pong: true })),

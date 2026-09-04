@@ -16,6 +16,7 @@ import {
   ProviderSnapshots,
   SettingsError,
 } from "./Settings.ts";
+import { WorkspaceDirectoryListing, WorkspaceFsError } from "./Workspace.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
@@ -65,6 +66,14 @@ export class SubscribeEvents extends Rpc.make("SubscribeEvents", {
 
 export class GetWorkspace extends Rpc.make("GetWorkspace", {
   success: WorkspaceInfo,
+}) {}
+
+export class ListWorkspaceDirectory extends Rpc.make("ListWorkspaceDirectory", {
+  payload: {
+    path: Schema.String,
+  },
+  success: WorkspaceDirectoryListing,
+  error: WorkspaceFsError,
 }) {}
 
 export class GetSettings extends Rpc.make("GetSettings", {
@@ -129,6 +138,7 @@ export const BerniseRpcs = RpcGroup.make(
   SendTurn,
   SubscribeEvents,
   GetWorkspace,
+  ListWorkspaceDirectory,
   GetSettings,
   UpdateSettings,
   GetProviderSnapshots,
