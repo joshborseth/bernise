@@ -21,6 +21,8 @@ const makeWorkspace = (): { readonly root: string; readonly outside: string } =>
   writeFileSync(join(outside, "secret.txt"), "nope");
   symlinkSync(join(root, "README.md"), join(root, "readme-link"));
   symlinkSync(outside, join(root, "escape"));
+  symlinkSync(outside, join(root, "src", "escape"));
+  symlinkSync(join(root, "src"), join(root, "src-loop"));
   return { root, outside };
 };
 
@@ -70,6 +72,19 @@ describe("WorkspaceFs", () => {
       expect(yield* fs.listDirectory("escape").pipe(Effect.flip)).toEqual(
         new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
       );
+      expect(yield* fs.listDirectory("src/escape").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("does not follow a symbolic link that points back into the workspace", () => {
+    const { root } = makeWorkspace();
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.listDirectory("src-loop").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Not a directory." }),
+      );
     }).pipe(provideWorkspace(root));
   });
 
@@ -108,6 +123,7 @@ describe("WorkspaceFs", () => {
             new WorkspaceEntry({ path: "escape", name: "escape", kind: "symlink" }),
             new WorkspaceEntry({ path: "readme-link", name: "readme-link", kind: "symlink" }),
             new WorkspaceEntry({ path: "README.md", name: "README.md", kind: "file" }),
+            new WorkspaceEntry({ path: "src-loop", name: "src-loop", kind: "symlink" }),
             new WorkspaceEntry({ path: "Zebra.txt", name: "Zebra.txt", kind: "file" }),
           ],
         }),

@@ -33,13 +33,21 @@ const sessionIdStub = Layer.succeed(
 const makeRoot = (): string => {
   const root = mkdtempSync(join(tmpdir(), "bernise-rpc-ws-"));
   mkdirSync(join(root, "src"));
+  mkdirSync(join(root, "src", "lib"));
+  mkdirSync(join(root, "src", ".git"));
+  mkdirSync(join(root, "src", "node_modules"));
   mkdirSync(join(root, ".git"));
   mkdirSync(join(root, "node_modules"));
   writeFileSync(join(root, "README.md"), "readme");
   writeFileSync(join(root, ".env"), "secret=1");
   writeFileSync(join(root, "Apple.ts"), "");
   writeFileSync(join(root, "zebra.ts"), "");
+  writeFileSync(join(root, "src", "index.ts"), "export {}");
+  writeFileSync(join(root, "src", ".env.local"), "nested=1");
+  writeFileSync(join(root, "src", "lib", "util.ts"), "export {}");
+  writeFileSync(join(root, "src", "node_modules", "pkg.js"), "");
   symlinkSync(join(root, "README.md"), join(root, "readme-link"));
+  symlinkSync(join(root, "src", "index.ts"), join(root, "src", "index-link"));
   return root;
 };
 
@@ -71,6 +79,30 @@ describe("ListWorkspaceDirectory", () => {
             new WorkspaceEntry({ path: "README.md", name: "README.md", kind: "file" }),
             new WorkspaceEntry({ path: "zebra.ts", name: "zebra.ts", kind: "file" }),
           ],
+        }),
+      );
+    }).pipe(Effect.provide(rpcLayer(root)));
+  });
+
+  it.effect("lists a nested directory with relative paths, filters, and order", () => {
+    const root = makeRoot();
+    return Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      expect(yield* client.ListWorkspaceDirectory({ path: "src" })).toEqual(
+        new WorkspaceDirectoryListing({
+          path: "src",
+          entries: [
+            new WorkspaceEntry({ path: "src/lib", name: "lib", kind: "directory" }),
+            new WorkspaceEntry({ path: "src/.env.local", name: ".env.local", kind: "file" }),
+            new WorkspaceEntry({ path: "src/index-link", name: "index-link", kind: "symlink" }),
+            new WorkspaceEntry({ path: "src/index.ts", name: "index.ts", kind: "file" }),
+          ],
+        }),
+      );
+      expect(yield* client.ListWorkspaceDirectory({ path: "src/lib" })).toEqual(
+        new WorkspaceDirectoryListing({
+          path: "src/lib",
+          entries: [new WorkspaceEntry({ path: "src/lib/util.ts", name: "util.ts", kind: "file" })],
         }),
       );
     }).pipe(Effect.provide(rpcLayer(root)));
