@@ -2,6 +2,7 @@ import { useAtom, useAtomValue } from "@effect/atom-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useMemo } from "react";
 import { activeThreadIdAtom, threadsAtom } from "../chat.ts";
+import { archiveThreadHotkey, newThreadHotkey, threadSwitchHotkeys } from "../hotkeys.ts";
 import {
   archiveThreadAtom,
   closeActiveThread,
@@ -10,19 +11,6 @@ import {
   switchThreadAtom,
   threadIdAtHotkeyIndex,
 } from "../threads.ts";
-import { archiveThreadHotkey, newThreadHotkey } from "../hotkeys.ts";
-
-const threadDigitHotkeys = [
-  "Mod+1",
-  "Mod+2",
-  "Mod+3",
-  "Mod+4",
-  "Mod+5",
-  "Mod+6",
-  "Mod+7",
-  "Mod+8",
-  "Mod+9",
-] as const;
 
 export function useThreadHotkeys(): void {
   const threads = useAtomValue(threadsAtom);
@@ -59,15 +47,15 @@ export function useThreadHotkeys(): void {
       },
       options: { meta: { name: "Archive thread" } },
     },
-    ...threadDigitHotkeys.map((hotkey, index) => ({
+    ...threadSwitchHotkeys.map(({ hotkey, label, digit }) => ({
       hotkey,
       callback: () => {
-        const threadId = threadIdAtHotkeyIndex(items, index + 1);
+        const threadId = threadIdAtHotkeyIndex(items, digit);
         if (threadId !== undefined) {
           switchThread(threadId);
         }
       },
-      options: { meta: { name: `Switch to thread ${String(index + 1)}` } },
+      options: { meta: { name: label } },
     })),
   ]);
 }

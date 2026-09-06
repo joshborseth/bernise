@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { formatHotkeyCaption, labeledHotkeyRows } from "./hotkeys.ts";
+import { formatHotkeyCaption, labeledHotkeyRows, listedAppHotkeys } from "./hotkeys.ts";
 
 describe("formatHotkeyCaption", () => {
   it("formats Mod+T as ⌘T on Mac", () => {
@@ -46,6 +46,16 @@ describe("labeledHotkeyRows", () => {
       { label: "New thread", keys: "⌘T" },
       { label: "Archive thread", keys: "⌘W" },
       { label: "Switch to thread", keys: "⌘1–3" },
+      { label: "Keyboard shortcuts", keys: "⌘/" },
+      { label: "Speak", keys: "Enter" },
+    ]);
+  });
+
+  it("lists the app catalog without reading live hotkey registrations", () => {
+    expect(listedAppHotkeys("mac")).toEqual([
+      { label: "New thread", keys: "⌘T" },
+      { label: "Archive thread", keys: "⌘W" },
+      { label: "Switch to thread", keys: "⌘1–9" },
       { label: "Keyboard shortcuts", keys: "⌘/" },
       { label: "Speak", keys: "Enter" },
     ]);

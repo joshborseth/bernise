@@ -14,6 +14,31 @@ export type HotkeyRegistrationInput = {
   readonly label: string | undefined;
 };
 
+const threadSwitchDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+type ThreadSwitchDigit = (typeof threadSwitchDigits)[number];
+
+export const threadSwitchHotkeys: ReadonlyArray<{
+  readonly hotkey: `Mod+${ThreadSwitchDigit}`;
+  readonly label: string;
+  readonly digit: ThreadSwitchDigit;
+}> = threadSwitchDigits.map((digit) => ({
+  hotkey: `Mod+${digit}`,
+  label: `Switch to thread ${String(digit)}`,
+  digit,
+}));
+
+export const threadHotkeyCatalog: ReadonlyArray<HotkeyRegistrationInput> = [
+  { hotkey: newThreadHotkey, label: "New thread" },
+  { hotkey: archiveThreadHotkey, label: "Archive thread" },
+  ...threadSwitchHotkeys.map(({ hotkey, label }) => ({ hotkey, label })),
+  { hotkey: shortcutsHotkey, label: "Keyboard shortcuts" },
+];
+
+export const listedAppHotkeys = (
+  platform?: "mac" | "windows" | "linux",
+): ReadonlyArray<LabeledHotkey> => labeledHotkeyRows(threadHotkeyCatalog, platform);
+
 const switchThreadName = /^Switch to thread (\d+)$/;
 const switchThreadHotkey = /^Mod\+(\d)$/;
 

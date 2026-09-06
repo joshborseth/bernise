@@ -6,8 +6,7 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Kbd } from "~/components/ui/kbd";
-import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
-import { labeledHotkeyRows } from "../hotkeys.ts";
+import { listedAppHotkeys } from "../hotkeys.ts";
 
 export function ShortcutsDialog({
   open,
@@ -16,13 +15,7 @@ export function ShortcutsDialog({
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
-  const { hotkeys } = useHotkeyRegistrations();
-  const listed = labeledHotkeyRows(
-    hotkeys.map((registration) => ({
-      hotkey: registration.hotkey,
-      label: registration.options.meta?.name,
-    })),
-  );
+  const listed = listedAppHotkeys();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm gap-3 sm:max-w-sm">
