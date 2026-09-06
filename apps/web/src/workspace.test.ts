@@ -5,16 +5,21 @@ import { Atom, AtomRegistry, AsyncResult } from "effect/unstable/reactivity";
 import { BerniseRpc } from "./rpc.ts";
 import {
   activeWorkspaceEntryAtom,
+  closeWorkspaceFile,
   displayWorkspacePath,
+  emptyOpenWorkspaceFiles,
   expandedWorkspaceDirectoriesAtom,
   formatWorkspacePath,
   homePrefixFromPath,
   isOpenWorkspaceFilePath,
   isSelectableWorkspaceEntry,
   isWorkspaceDirectoryExpanded,
+  openWorkspaceFile,
+  openWorkspaceFilesAtom,
   toggleWorkspaceDirectoryExpanded,
   workspaceDirectoryAtom,
   workspaceDirectoryEpochAtom,
+  workspaceFileTabLabel,
   workspaceRootPath,
 } from "./workspace.ts";
 
@@ -194,7 +199,7 @@ describe("workspace directory atoms", () => {
     expect(attempts).toBe(2);
   });
 
-  it("replaces the single active entry without listing again", async () => {
+  it("opens a second file without replacing the first and without listing again", async () => {
     let attempts = 0;
     const fakeClient = ((tag: string) => {
       switch (tag) {
@@ -215,8 +220,15 @@ describe("workspace directory atoms", () => {
     expect(isSelectableWorkspaceEntry("file")).toBe(true);
     expect(isSelectableWorkspaceEntry("symlink")).toBe(true);
 
-    registry.set(activeWorkspaceEntryAtom, "README.md");
-    registry.set(activeWorkspaceEntryAtom, "link");
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "README.md"),
+    );
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "link"),
+    );
+    expect(registry.get(openWorkspaceFilesAtom).paths).toEqual(["README.md", "link"]);
     expect(registry.get(activeWorkspaceEntryAtom)).toBe("link");
     expect(isOpenWorkspaceFilePath("link")).toBe(true);
     expect(isOpenWorkspaceFilePath(undefined)).toBe(false);
@@ -338,7 +350,10 @@ describe("nested workspace directory atoms", () => {
     const registry = registryWithClient(recordingListingClient(requested));
     registry.mount(workspaceDirectoryAtom(workspaceRootPath));
     await waitUntilSettled(registry, workspaceDirectoryAtom(workspaceRootPath));
-    registry.set(activeWorkspaceEntryAtom, "README.md");
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "README.md"),
+    );
 
     registry.set(
       expandedWorkspaceDirectoriesAtom,
@@ -346,7 +361,10 @@ describe("nested workspace directory atoms", () => {
     );
     const unmountSrc = registry.mount(workspaceDirectoryAtom("src"));
     await waitUntilSettled(registry, workspaceDirectoryAtom("src"));
-    registry.set(activeWorkspaceEntryAtom, "src/index.ts");
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "src/index.ts"),
+    );
     expect(registry.get(activeWorkspaceEntryAtom)).toBe("src/index.ts");
 
     registry.set(
@@ -377,7 +395,10 @@ describe("nested workspace directory atoms", () => {
     );
     const unmountLib = registry.mount(workspaceDirectoryAtom("src/lib"));
     await waitUntilSettled(registry, workspaceDirectoryAtom("src/lib"));
-    registry.set(activeWorkspaceEntryAtom, "src/lib/util.ts");
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "src/lib/util.ts"),
+    );
     expect(requested).toEqual([workspaceRootPath, "src", "src/lib"]);
 
     registry.set(
@@ -389,5 +410,92 @@ describe("nested workspace directory atoms", () => {
     expect(registry.get(activeWorkspaceEntryAtom)).toBe("src/lib/util.ts");
     expect(AsyncResult.isSuccess(registry.get(workspaceDirectoryAtom("src/lib")))).toBe(true);
     expect(requested).toEqual([workspaceRootPath, "src", "src/lib"]);
+  });
+});
+
+describe("open workspace files", () => {
+  it("appends a missing file and activates it", () => {
+    const opened = openWorkspaceFile(emptyOpenWorkspaceFiles, "README.md");
+    expect(opened).toEqual({ paths: ["README.md"], active: "README.md" });
+    expect(openWorkspaceFile(opened, "src/index.ts")).toEqual({
+      paths: ["README.md", "src/index.ts"],
+      active: "src/index.ts",
+    });
+  });
+
+  it("activates an already-open file without duplicating it", () => {
+    const opened = openWorkspaceFile(
+      openWorkspaceFile(emptyOpenWorkspaceFiles, "README.md"),
+      "src/index.ts",
+    );
+    expect(openWorkspaceFile(opened, "README.md")).toEqual({
+      paths: ["README.md", "src/index.ts"],
+      active: "README.md",
+    });
+  });
+
+  it("closes the active file onto the right neighbor, then the left", () => {
+    const open = {
+      paths: ["a.ts", "b.ts", "c.ts"],
+      active: "b.ts",
+    };
+    expect(closeWorkspaceFile(open, "b.ts")).toEqual({
+      paths: ["a.ts", "c.ts"],
+      active: "c.ts",
+    });
+    expect(closeWorkspaceFile({ paths: ["a.ts", "b.ts", "c.ts"], active: "c.ts" }, "c.ts")).toEqual(
+      {
+        paths: ["a.ts", "b.ts"],
+        active: "b.ts",
+      },
+    );
+    expect(closeWorkspaceFile({ paths: ["a.ts", "b.ts", "c.ts"], active: "a.ts" }, "a.ts")).toEqual(
+      {
+        paths: ["b.ts", "c.ts"],
+        active: "b.ts",
+      },
+    );
+  });
+
+  it("keeps the active file when closing a different tab", () => {
+    expect(closeWorkspaceFile({ paths: ["a.ts", "b.ts", "c.ts"], active: "b.ts" }, "a.ts")).toEqual(
+      {
+        paths: ["b.ts", "c.ts"],
+        active: "b.ts",
+      },
+    );
+  });
+
+  it("clears the active file when the last tab closes", () => {
+    expect(closeWorkspaceFile({ paths: ["solo.ts"], active: "solo.ts" }, "solo.ts")).toEqual({
+      paths: [],
+      active: undefined,
+    });
+  });
+
+  it("uses the basename unless two open files share a name", () => {
+    expect(workspaceFileTabLabel("src/index.ts", ["src/index.ts"])).toBe("index.ts");
+    expect(workspaceFileTabLabel("README.md", ["README.md", "src/index.ts"])).toBe("README.md");
+    expect(workspaceFileTabLabel("src/index.ts", ["src/index.ts", "lib/index.ts"])).toBe(
+      "src/index.ts",
+    );
+    expect(workspaceFileTabLabel("lib/index.ts", ["src/index.ts", "lib/index.ts"])).toBe(
+      "lib/index.ts",
+    );
+  });
+
+  it("keeps the explorer highlight in sync with the open-file atom", () => {
+    const registry = AtomRegistry.make();
+    expect(registry.get(activeWorkspaceEntryAtom)).toBeUndefined();
+    registry.set(
+      openWorkspaceFilesAtom,
+      openWorkspaceFile(registry.get(openWorkspaceFilesAtom), "README.md"),
+    );
+    expect(registry.get(activeWorkspaceEntryAtom)).toBe("README.md");
+    registry.set(
+      openWorkspaceFilesAtom,
+      closeWorkspaceFile(registry.get(openWorkspaceFilesAtom), "README.md"),
+    );
+    expect(registry.get(activeWorkspaceEntryAtom)).toBeUndefined();
   });
 });

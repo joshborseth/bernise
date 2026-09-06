@@ -5,6 +5,7 @@ import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
 import { ChatMarkdown } from "./components/ChatMarkdown.tsx";
 import { PersonaConfig } from "./components/PersonaConfig.tsx";
 import { ProjectLauncher } from "./components/ProjectLauncher.tsx";
+import { FileTabStrip } from "./components/FileTabStrip.tsx";
 import { ThreadStrip } from "./components/ThreadStrip.tsx";
 import { WorkspacePane } from "./components/WorkspacePane.tsx";
 import { FilePreviewPanel } from "./files/FilePreviewPanel.tsx";
@@ -20,7 +21,6 @@ import { bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
 import { useStickToBottom } from "./hooks/use-stick-to-bottom.ts";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -49,7 +49,13 @@ import {
   type OpenProjectResult,
   type RecentProject,
 } from "./desktop.ts";
-import { activeWorkspaceEntryAtom, isOpenWorkspaceFilePath, workspaceAtom } from "./workspace.ts";
+import {
+  closeWorkspaceFile,
+  isOpenWorkspaceFilePath,
+  openWorkspaceFile,
+  openWorkspaceFilesAtom,
+  workspaceAtom,
+} from "./workspace.ts";
 
 const devFpsStorageKey = "bernise.devFps";
 
@@ -260,7 +266,8 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
   const transcriptRef = useRef<HTMLDivElement>(null);
   const composerFocusNonce = useAtomValue(composerFocusNonceAtom);
   const workspace = useAtomValue(workspaceAtom);
-  const [openFilePath, setOpenFilePath] = useAtom(activeWorkspaceEntryAtom);
+  const [openFiles, setOpenFiles] = useAtom(openWorkspaceFilesAtom);
+  const openFilePath = openFiles.active;
   const fileOpen = isOpenWorkspaceFilePath(openFilePath);
   const lastVisible = visibleMessages.at(-1);
   useStickToBottom(transcriptRef, {
@@ -348,7 +355,7 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
                 text={message.text}
                 workspaceRoot={workspace.path}
                 onOpenFile={(relativePath) => {
-                  setOpenFilePath(relativePath);
+                  setOpenFiles(openWorkspaceFile(openFiles, relativePath));
                 }}
               />
             </article>
@@ -441,90 +448,49 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
     </section>
   );
 
-  const station = (
-    <div className="relative h-full min-h-0">
-      <ResizablePanelGroup
-        key={fileOpen ? "station-file" : "station-idle"}
-        id="bernise-station"
-        orientation="horizontal"
-        className="h-full"
-        disableCursor
-        disabled
-        resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
-      >
-        <ResizablePanel
-          id="bernise"
-          defaultSize={fileOpen ? "12%" : "42%"}
-          minSize={fileOpen ? "8rem" : "12rem"}
-          maxSize={fileOpen ? "12%" : undefined}
-          className="h-full min-h-0 overflow-hidden"
-        >
-          {mascot}
-        </ResizablePanel>
-        {fileOpen && openFilePath !== undefined ? (
-          <ResizablePanel
-            id="file"
-            defaultSize="55%"
-            minSize="24%"
-            className="h-full min-h-0 min-w-0 overflow-hidden"
-          >
-            <FilePreviewPanel
-              relativePath={openFilePath}
-              onClose={() => {
-                setOpenFilePath(undefined);
-              }}
-            />
-          </ResizablePanel>
-        ) : null}
-        <ResizablePanel
-          id="thread"
-          defaultSize={fileOpen ? "33%" : "58%"}
-          minSize={fileOpen ? "22%" : "58%"}
-          maxSize={fileOpen ? "40%" : "58%"}
-          className="h-full min-h-0 min-w-0 overflow-hidden"
-        >
-          {thread}
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
+  const stationBody = (
+    <>
+      <div className="min-h-0 min-w-0 overflow-hidden">{mascot}</div>
+      {fileOpen && openFilePath !== undefined ? (
+        <div className="min-h-0 min-w-0 overflow-hidden">
+          <FilePreviewPanel
+            relativePath={openFilePath}
+            onClose={() => {
+              setOpenFiles(closeWorkspaceFile(openFiles, openFilePath));
+            }}
+          />
+        </div>
+      ) : null}
+      <div className="min-h-0 min-w-0 overflow-hidden">{thread}</div>
+    </>
   );
 
   const shell = (
-    <ResizablePanelGroup
-      key={fileOpen ? "shell-file" : "shell-idle"}
-      id="bernise-shell"
-      orientation="horizontal"
-      className="h-full"
-      disableCursor
-      disabled
-      resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
+    <div
+      className="grid h-full min-h-0 overflow-hidden"
+      style={{
+        gridTemplateColumns: fileOpen
+          ? "16% calc(84% * 0.12) minmax(0, 1fr) calc(84% * 0.33)"
+          : "24% minmax(0, 1fr) calc(76% * 0.58)",
+        gridTemplateRows: "auto minmax(0, 1fr)",
+      }}
     >
-      <ResizablePanel
-        id="workspace"
-        defaultSize={fileOpen ? "16%" : "24%"}
-        minSize={fileOpen ? "16%" : "24%"}
-        maxSize={fileOpen ? "16%" : "24%"}
-        className="h-full min-h-0 min-w-0 overflow-hidden"
-      >
+      <div className={cn("min-w-0", fileOpen ? "col-span-3" : "col-span-2")}>
+        <FileTabStrip />
+      </div>
+      <div className="min-w-0">
+        <ThreadStrip />
+      </div>
+      <div className="min-h-0 min-w-0 overflow-hidden">
         <WorkspacePane
           onOpenPersona={() => setPersonaOpen(true)}
           onOpenProject={onOpenProject}
           projectSwitchDisabled={pending}
           footerExtra={fpsButton}
         />
-      </ResizablePanel>
-      <ResizablePanel
-        id="station"
-        defaultSize={fileOpen ? "84%" : "76%"}
-        minSize={fileOpen ? "70%" : "64%"}
-        className="h-full min-h-0 min-w-0"
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <ThreadStrip />
-          <div className="min-h-0 flex-1">{station}</div>
-        </div>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+      </div>
+      {stationBody}
+    </div>
   );
 
   return (
