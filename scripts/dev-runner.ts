@@ -358,6 +358,7 @@ export function createDevRunnerEnv({
     const output: NodeJS.ProcessEnv = {
       ...baseEnv,
       BERNISE_ROOT: REPO_ROOT,
+      BERNISE_WORKSPACE: baseEnv.BERNISE_WORKSPACE ?? REPO_ROOT,
       PORT: String(webPort),
       BERNISE_WEB_URL: devUrl?.toString() ?? `http://${webHost}:${webPort}`,
       VITE_DEV_SERVER_URL: devUrl?.toString() ?? `http://${webHost}:${webPort}`,

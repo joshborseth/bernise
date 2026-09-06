@@ -9,6 +9,7 @@ import {
   expandedWorkspaceDirectoriesAtom,
   formatWorkspacePath,
   homePrefixFromPath,
+  isOpenWorkspaceFilePath,
   isSelectableWorkspaceEntry,
   isWorkspaceDirectoryExpanded,
   toggleWorkspaceDirectoryExpanded,
@@ -217,6 +218,8 @@ describe("workspace directory atoms", () => {
     registry.set(activeWorkspaceEntryAtom, "README.md");
     registry.set(activeWorkspaceEntryAtom, "link");
     expect(registry.get(activeWorkspaceEntryAtom)).toBe("link");
+    expect(isOpenWorkspaceFilePath("link")).toBe(true);
+    expect(isOpenWorkspaceFilePath(undefined)).toBe(false);
     expect(attempts).toBe(1);
   });
 });

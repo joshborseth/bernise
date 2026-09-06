@@ -55,10 +55,7 @@ function PersonaEditor({
       onOpenChange(false);
       return;
     }
-    if (
-      AsyncResult.isFailure(updateResult) &&
-      !Cause.hasInterruptsOnly(updateResult.cause)
-    ) {
+    if (AsyncResult.isFailure(updateResult) && !Cause.hasInterruptsOnly(updateResult.cause)) {
       closeAfterSaveRef.current = false;
     }
   }, [open, onOpenChange, updateResult]);

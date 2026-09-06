@@ -4,16 +4,6 @@ import { Option } from "effect";
 import { resolveWorkspacePath, workspaceInfoFromPath } from "../src/workspace.ts";
 
 describe("resolveWorkspacePath", () => {
-  it("prefers a non-empty override", () => {
-    expect(resolveWorkspacePath(Option.some("/env/workspace"), "/override")).toBe("/override");
-  });
-
-  it("uses configured workspace when override is blank", () => {
-    expect(resolveWorkspacePath(Option.some("/tmp/bernise-station"), "  ")).toBe(
-      "/tmp/bernise-station",
-    );
-  });
-
   it("trims configured workspace", () => {
     expect(resolveWorkspacePath(Option.some(" /tmp/bernise-station "))).toBe(
       "/tmp/bernise-station",

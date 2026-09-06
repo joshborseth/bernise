@@ -8,7 +8,7 @@ This is the same split as [t3code](https://github.com/pingdotgg/t3code): a serve
 
 - `apps/web` is the renderer: a real browser via `vp run dev:web`, or Electron via `vp run dev`. Both talk to `apps/server` over HTTP (`GET /health`) and Effect RPC over WebSocket (`/rpc`).
 - `apps/server` owns the provider process. `Provider` in `apps/server/src/Provider.ts` is implemented by `CodexProviderLive`, which spawns `codex app-server` (Codex App Server JSON-line RPC, no `jsonrpc: "2.0"` wrapper).
-- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). Persona markdown lives in `~/.bernise/persona.md` (factory default is `apps/server/src/persona.md`). Speak threads live in `~/.bernise/state.sqlite`: a Bernise `ThreadId` owns the transcript and list, and a separate Codex `threadId` is stored as a resume cursor so later turns call `thread/resume` instead of starting a blank provider conversation. Config edits persona markdown. `GET /health` is process liveness only.
+- Settings live in `~/.bernise/settings.json` (override directory with `BERNISE_STATE_DIR`). Persona markdown lives in `~/.bernise/persona.md` (factory default is `apps/server/src/persona.md`). Speak threads live in `~/.bernise/state.sqlite`: a Bernise `ThreadId` owns the transcript and list within one canonical workspace, and a separate Codex `threadId` is stored as a workspace-scoped resume cursor so later turns call `thread/resume` instead of starting a blank provider conversation. Config edits persona markdown. `GET /health` is process liveness only.
 
 ## Codex CLI
 
@@ -25,7 +25,7 @@ The server merges the login-shell `PATH` at boot so Electron's stripped GUI path
 ## Optional env
 
 - `BERNISE_CODEX_BIN` — optional absolute (or other) Codex binary; wins over the settings binary path. Default is `codex` on PATH
-- `BERNISE_WORKSPACE` — cwd for new sessions (default: server process cwd)
+- `BERNISE_WORKSPACE` — canonical cwd for the server's sessions and workspace filesystem. Desktop sets this from the project launcher. `vp run dev:web` and `vp run dev:server` default it to the current repository/worktree root; a directly launched server falls back to its process cwd.
 - `BERNISE_STATE_DIR` — settings and `state.sqlite` directory (default: `~/.bernise`)
 - `BERNISE_TTS_URL` — Chatterbox TTS origin (default: `http://borseth.ddns.net:7040`)
 - `BERNISE_TTS_VOICE` — speaker id (default: `benny2`)
@@ -37,9 +37,13 @@ Tool permissions are auto-approved for this first shot so the agent can write fi
 
 ## RPC
 
-`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `StartSession` takes a Bernise `threadId`. The server binds that id to the live `SessionId`, loads any stored Codex resume cursor, and keeps one Codex app-server process at a time. `GetWorkspace` returns the resolved Codex cwd (`BERNISE_WORKSPACE` or the server process cwd) so the station can show which project is being grilled. `ListThreads` returns thread shells (title, timestamps). `GetThread { threadId }` returns that thread's projected Speak transcript. `RenameThread` / `DeleteThread` update the SQLite projections. `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, last-selected model, and persona markdown (`persona: null` restores the shipped default). `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
+`StartSession`, `SendTurn`, and `SubscribeEvents` (stream) sit beside `Ping` on `/rpc` over a WebSocket (`protocol: "websocket"`, JSON frames). `StartSession` takes a Bernise `threadId`; its cwd is always the server process's configured workspace. The server binds that id to the live `SessionId`, loads any stored resume cursor for the same workspace, and keeps one Codex app-server process at a time. `GetWorkspace` returns that canonical cwd so the station can show which project is being grilled. `ListThreads` and all thread mutations are filtered to that workspace. `GetThread { threadId }` returns that thread's projected Speak transcript. `RenameThread` / `DeleteThread` update the SQLite projections. `GetSettings` / `UpdateSettings` persist the optional Codex binary override, `CODEX_HOME`, last-selected model, and persona markdown (`persona: null` restores the shipped default); these settings remain global across projects. `ListModels` asks Codex App Server for `model/list` so the Speak composer can render a picker. `GetProviderSnapshots` / `RefreshProviders` run the Codex app-server health probe.
 
 The Speak composer hydrates from `ListThreads` then `GetThread` on boot. A new thread stays local until the first Speak, which creates the SQLite row and starts (or resumes) Codex. Each `SendTurn` persists the user prompt and the final assistant text on the session's Bernise thread. `StartSession` and `SendTurn` pass the selected model through to Codex `thread/start` / `thread/resume` and `turn/start`. The composer picker shows that model’s display name, or a ListModels error if the catalog cannot load. Changing the model does not reset the thread; the next turn uses the new id.
+
+## Desktop project launcher
+
+Electron shows the project launcher before starting the Effect server. Selecting a recent directory or browsing with the native directory picker starts one server with that canonical path as `BERNISE_WORKSPACE`. “Open Project” returns to the launcher; choosing another directory stops the owned server, starts a replacement, and reloads the renderer after `/health` succeeds. Recent-project metadata is stored in Electron's user-data directory. Only one project workspace is active per desktop window, and conversations plus active-thread restoration are isolated by workspace.
 
 ## Later
 

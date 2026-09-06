@@ -139,12 +139,30 @@ it.layer(NodeServices.layer)("dev-runner", (it) => {
 
         assert.equal(env.BERNISE_PORT, String(BASE_SERVER_PORT));
         assert.equal(env.PORT, String(BASE_WEB_PORT));
+        assert.equal(env.BERNISE_WORKSPACE, env.BERNISE_ROOT);
         assert.equal(env.HOST, "127.0.0.1");
         assert.equal(env.BERNISE_WEB_URL, `http://127.0.0.1:${BASE_WEB_PORT}`);
         assert.equal(env.VITE_HTTP_URL, `http://127.0.0.1:${BASE_SERVER_PORT}`);
         assert.equal(env.VITE_WS_URL, `ws://127.0.0.1:${BASE_SERVER_PORT}`);
         assert.equal(env.BERNISE_NO_BROWSER, undefined);
         assert.equal(env.BERNISE_SINGLE_ORIGIN_DEV, undefined);
+      }),
+    );
+
+    it.effect("preserves an explicit workspace override", () =>
+      Effect.gen(function* () {
+        const env = yield* createDevRunnerEnv({
+          mode: "dev:web",
+          baseEnv: { BERNISE_WORKSPACE: "/tmp/selected-project" },
+          serverOffset: 0,
+          webOffset: 0,
+          browser: undefined,
+          host: undefined,
+          port: undefined,
+          devUrl: undefined,
+        });
+
+        assert.equal(env.BERNISE_WORKSPACE, "/tmp/selected-project");
       }),
     );
 

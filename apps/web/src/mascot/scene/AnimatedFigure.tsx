@@ -2,7 +2,7 @@ import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { Euler, MathUtils, Vector3 } from "three";
 import type { Group, Object3D } from "three";
-import { playChomp, playHiss, playPlink, playScratch } from "../audio/reactionSounds.ts";
+import { playChomp, playHiss, playScratch, schedulePlinks } from "../audio/reactionSounds.ts";
 import { purrBurst } from "../audio/purr.ts";
 import { escalateDamp } from "../animation/easing.ts";
 import {
@@ -30,7 +30,7 @@ import {
   litterBodyScaleX,
   litterBodyScaleY,
   litterBodyScaleZ,
-  litterDropLanded,
+  litterDropLandElapsed,
   litterDrops,
   litterHeadPitch,
   litterHeadRoll,
@@ -160,9 +160,9 @@ export function AnimatedFigure({
   const litterClock = useRef({
     startedAt: -1,
     lastScratchAt: -1,
-    dropHeard: 0,
     done: false,
     drops: [] as ReadonlyArray<LitterDrop>,
+    stopPlinks: undefined as undefined | (() => void),
   });
   const boxRef = useRef<Group>(null);
   const dropsRef = useRef<Group>(null);
@@ -182,6 +182,12 @@ export function AnimatedFigure({
       gl.domElement.style.cursor = "";
     };
   }, [gl]);
+
+  useEffect(() => {
+    return () => {
+      litterClock.current.stopPlinks?.();
+    };
+  }, []);
 
   const onPetOver = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
@@ -340,14 +346,25 @@ export function AnimatedFigure({
       if (litterClock.current.startedAt < 0) {
         litterClock.current.startedAt = t;
         litterClock.current.lastScratchAt = -1;
-        litterClock.current.dropHeard = 0;
         litterClock.current.done = false;
         litterClock.current.drops = litterDrops;
+        if (!reducedMotion) {
+          const count = litterDrops.length;
+          litterClock.current.stopPlinks = schedulePlinks(
+            litterDrops.map((spec, i) => ({
+              delay: litterDropLandElapsed(i, count),
+              index: i,
+              count,
+              radius: spec.radius,
+            })),
+          );
+        }
       }
     } else {
+      litterClock.current.stopPlinks?.();
+      litterClock.current.stopPlinks = undefined;
       litterClock.current.startedAt = -1;
       litterClock.current.lastScratchAt = -1;
-      litterClock.current.dropHeard = 0;
       litterClock.current.done = false;
       litterClock.current.drops = [];
     }
@@ -359,23 +376,6 @@ export function AnimatedFigure({
         : litterMotion(litterElapsed)
       : litterIdle;
     const activeDrops = litterClock.current.drops;
-    if (!reducedMotion && litter.dropT > 0) {
-      for (let i = 0; i < activeDrops.length; i++) {
-        const bit = 1 << i;
-        if ((litterClock.current.dropHeard & bit) !== 0) {
-          continue;
-        }
-        if (!litterDropLanded(litter.dropT, i, activeDrops.length)) {
-          continue;
-        }
-        const spec = activeDrops[i];
-        if (spec === undefined) {
-          continue;
-        }
-        litterClock.current.dropHeard |= bit;
-        playPlink(i, activeDrops.length, spec.radius);
-      }
-    }
     if (litter.scratch > 0.5 && !reducedMotion) {
       if (
         litterClock.current.lastScratchAt < 0 ||

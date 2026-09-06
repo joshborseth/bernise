@@ -19,3 +19,18 @@ export class WorkspaceDirectoryListing extends Schema.Class<WorkspaceDirectoryLi
 export class WorkspaceFsError extends Schema.TaggedError<WorkspaceFsError>()("WorkspaceFsError", {
   message: Schema.String,
 }) {}
+
+export class WorkspaceFileContents extends Schema.Class<WorkspaceFileContents>(
+  "WorkspaceFileContents",
+)({
+  path: Schema.String,
+  contents: Schema.String,
+  byteLength: Schema.Finite,
+  truncated: Schema.Boolean,
+}) {}
+
+export class WorkspaceFileWritten extends Schema.Class<WorkspaceFileWritten>(
+  "WorkspaceFileWritten",
+)({
+  path: Schema.String,
+}) {}

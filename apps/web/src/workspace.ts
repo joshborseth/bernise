@@ -29,6 +29,27 @@ export const activeWorkspaceEntryAtom = Atom.make<string | undefined>(undefined)
   Atom.keepAlive,
 );
 
+export const workspaceFileEpochAtom = Atom.family((_path: string) =>
+  Atom.make(0).pipe(Atom.keepAlive),
+);
+
+export const workspaceFileAtom = Atom.family((path: string) =>
+  BerniseRpc.runtime
+    .atom((get) =>
+      Effect.gen(function* () {
+        get(workspaceFileEpochAtom(path));
+        const client = yield* BerniseRpc;
+        return yield* client("ReadFile", { path });
+      }),
+    )
+    .pipe(Atom.keepAlive),
+);
+
+export const writeWorkspaceFileAtom = BerniseRpc.mutation("WriteFile");
+
+export const isOpenWorkspaceFilePath = (path: string | undefined): path is string =>
+  path !== undefined && path.length > 0;
+
 export const expandedWorkspaceDirectoriesAtom = Atom.make<ReadonlySet<string>>(
   new Set<string>(),
 ).pipe(Atom.keepAlive);

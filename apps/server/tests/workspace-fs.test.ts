@@ -1,10 +1,16 @@
-import { WorkspaceDirectoryListing, WorkspaceEntry, WorkspaceFsError } from "@bernise/contracts";
+import {
+  WorkspaceDirectoryListing,
+  WorkspaceEntry,
+  WorkspaceFileContents,
+  WorkspaceFileWritten,
+  WorkspaceFsError,
+} from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { WorkspaceFs, WorkspaceFsLive } from "../src/WorkspaceFs.ts";
+import { WorkspaceFs, WorkspaceFsLive, workspaceFileMaxBytes } from "../src/WorkspaceFs.ts";
 import { testConfig } from "./testLayers.ts";
 
 const makeWorkspace = (): { readonly root: string; readonly outside: string } => {
@@ -127,6 +133,109 @@ describe("WorkspaceFs", () => {
             new WorkspaceEntry({ path: "Zebra.txt", name: "Zebra.txt", kind: "file" }),
           ],
         }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("reads a text file relative to the workspace", () => {
+    const { root } = makeWorkspace();
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.readFile("README.md")).toEqual(
+        new WorkspaceFileContents({
+          path: "README.md",
+          contents: "readme",
+          byteLength: 6,
+          truncated: false,
+        }),
+      );
+      expect(yield* fs.readFile("src/index.ts")).toEqual(
+        new WorkspaceFileContents({
+          path: "src/index.ts",
+          contents: "export {}",
+          byteLength: 9,
+          truncated: false,
+        }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("writes a text file and reads the new contents", () => {
+    const { root } = makeWorkspace();
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.writeFile("README.md", "updated")).toEqual(
+        new WorkspaceFileWritten({ path: "README.md" }),
+      );
+      expect(yield* fs.readFile("README.md")).toEqual(
+        new WorkspaceFileContents({
+          path: "README.md",
+          contents: "updated",
+          byteLength: 7,
+          truncated: false,
+        }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("rejects file reads that escape the workspace", () => {
+    const { root } = makeWorkspace();
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.readFile("..").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
+      );
+      expect(yield* fs.readFile("escape/secret.txt").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
+      );
+      expect(yield* fs.readFile("/etc/passwd").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({
+          message: "Workspace paths must be relative to the workspace root.",
+        }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("rejects missing, directory, and binary reads", () => {
+    const { root } = makeWorkspace();
+    writeFileSync(join(root, "blob.bin"), Buffer.from([0x00, 0x01, 0x02]));
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.readFile("missing.ts").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "File not found." }),
+      );
+      expect(yield* fs.readFile("src").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Not a file." }),
+      );
+      expect(yield* fs.readFile("blob.bin").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Binary files cannot be previewed as text." }),
+      );
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("truncates reads above the preview cap", () => {
+    const { root } = makeWorkspace();
+    const oversized = `${"a".repeat(workspaceFileMaxBytes + 24)}`;
+    writeFileSync(join(root, "big.txt"), oversized);
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      const result = yield* fs.readFile("big.txt");
+      expect(result.truncated).toBe(true);
+      expect(result.byteLength).toBe(workspaceFileMaxBytes + 24);
+      expect(result.contents.length).toBe(workspaceFileMaxBytes);
+      expect(result.contents.startsWith("aaa")).toBe(true);
+    }).pipe(provideWorkspace(root));
+  });
+
+  it.effect("rejects writes that escape or target a directory", () => {
+    const { root } = makeWorkspace();
+    return Effect.gen(function* () {
+      const fs = yield* WorkspaceFs;
+      expect(yield* fs.writeFile("src", "nope").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Not a file." }),
+      );
+      expect(yield* fs.writeFile("../outside.txt", "nope").pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
       );
     }).pipe(provideWorkspace(root));
   });

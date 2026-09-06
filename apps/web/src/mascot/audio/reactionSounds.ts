@@ -159,59 +159,107 @@ export function playScratch(): void {
   );
 }
 
-/** Dry pellet tap that climbs about an octave across the drop sequence. */
-export function playPlink(index: number, count: number, radius: number): void {
-  const ctx = audioContext();
-  void ctx.resume();
-  const now = ctx.currentTime;
-  const dur = 0.06;
-  const size = Math.max(0, Math.min(1, (radius - 0.055) / 0.017));
-  const steps = Math.max(1, count - 1);
-  const hz = 880 * 2 ** (index / steps);
-  const peak = 0.08 + size * 0.04;
+export type PlinkHit = {
+  readonly delay: number;
+  readonly index: number;
+  readonly count: number;
+  readonly radius: number;
+};
 
-  const master = ctx.createGain();
-  master.gain.setValueAtTime(peak, now);
-  master.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-  master.connect(ctx.destination);
+const plinkDur = 0.06;
+let gritBuffer: AudioBuffer | undefined;
+let gritSampleRate = 0;
 
-  const tap = ctx.createOscillator();
-  tap.type = "triangle";
-  tap.frequency.setValueAtTime(hz, now);
-  tap.frequency.exponentialRampToValueAtTime(hz * 0.55, now + dur);
-  tap.connect(master);
-
-  const length = Math.ceil(ctx.sampleRate * dur);
+function plinkGrit(ctx: AudioContext): AudioBuffer {
+  if (gritBuffer !== undefined && gritSampleRate === ctx.sampleRate) {
+    return gritBuffer;
+  }
+  const length = Math.ceil(ctx.sampleRate * plinkDur);
   const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
   const samples = buffer.getChannelData(0);
   for (let i = 0; i < samples.length; i++) {
     samples[i] = Math.random() * 2 - 1;
   }
+  gritBuffer = buffer;
+  gritSampleRate = ctx.sampleRate;
+  return buffer;
+}
+
+type ArmedPlink = {
+  readonly nodes: ReadonlyArray<AudioNode>;
+  readonly timer: ReturnType<typeof setTimeout>;
+};
+
+function armPlink(ctx: AudioContext, when: number, hit: PlinkHit): ArmedPlink {
+  const size = Math.max(0, Math.min(1, (hit.radius - 0.055) / 0.017));
+  const steps = Math.max(1, hit.count - 1);
+  const hz = 880 * 2 ** (hit.index / steps);
+  const peak = 0.08 + size * 0.04;
+
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(peak, when);
+  master.gain.exponentialRampToValueAtTime(0.0001, when + plinkDur);
+  master.connect(ctx.destination);
+
+  const tap = ctx.createOscillator();
+  tap.type = "triangle";
+  tap.frequency.setValueAtTime(hz, when);
+  tap.frequency.exponentialRampToValueAtTime(hz * 0.55, when + plinkDur);
+  tap.connect(master);
+
   const grit = ctx.createBufferSource();
-  grit.buffer = buffer;
+  grit.buffer = plinkGrit(ctx);
   const highpass = ctx.createBiquadFilter();
   highpass.type = "highpass";
   highpass.frequency.value = 1800;
   const gritGain = ctx.createGain();
-  gritGain.gain.setValueAtTime(0.35, now);
-  gritGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.028);
+  gritGain.gain.setValueAtTime(0.35, when);
+  gritGain.gain.exponentialRampToValueAtTime(0.0001, when + 0.028);
   grit.connect(highpass);
   highpass.connect(gritGain);
   gritGain.connect(master);
 
-  tap.start(now);
-  grit.start(now);
-  tap.stop(now + dur);
-  grit.stop(now + dur);
+  tap.start(when);
+  grit.start(when);
+  tap.stop(when + plinkDur);
+  grit.stop(when + plinkDur);
 
-  window.setTimeout(
-    () => {
-      tap.disconnect();
-      grit.disconnect();
-      highpass.disconnect();
-      gritGain.disconnect();
-      master.disconnect();
-    },
-    dur * 1000 + 24,
-  );
+  const nodes: Array<AudioNode> = [tap, grit, highpass, gritGain, master];
+  const waitMs = Math.max(0, (when - ctx.currentTime + plinkDur) * 1000) + 24;
+  const timer = globalThis.setTimeout(() => {
+    for (const node of nodes) {
+      try {
+        node.disconnect();
+      } catch {
+        // already disconnected
+      }
+    }
+  }, waitMs);
+  return { nodes, timer };
+}
+
+/** Arm every pellet tap on the audio clock so a hitch cannot fire them as a chord. */
+export function schedulePlinks(hits: ReadonlyArray<PlinkHit>): () => void {
+  const ctx = audioContext();
+  void ctx.resume();
+  const origin = ctx.currentTime;
+  const armed = hits.map((hit) => armPlink(ctx, origin + hit.delay, hit));
+  let stopped = false;
+
+  return () => {
+    if (stopped) {
+      return;
+    }
+    stopped = true;
+    for (const plink of armed) {
+      globalThis.clearTimeout(plink.timer);
+      for (const node of plink.nodes) {
+        try {
+          node.disconnect();
+        } catch {
+          // already finished
+        }
+      }
+    }
+  };
 }

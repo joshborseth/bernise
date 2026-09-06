@@ -83,9 +83,63 @@ const createProviderSessionRuntime = Effect.gen(function* () {
   `;
 });
 
+const scopeThreadsToWorkspace = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const threadColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(projection_threads)
+  `;
+  if (!threadColumns.some((column) => column.name === "workspace_path")) {
+    yield* sql`
+      ALTER TABLE projection_threads
+      ADD COLUMN workspace_path TEXT
+    `;
+  }
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS idx_projection_threads_workspace_updated
+    ON projection_threads (workspace_path, updated_at DESC)
+  `;
+});
+
+const scopeProviderSessionsToWorkspace = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const providerColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(provider_session_runtime)
+  `;
+  if (!providerColumns.some((column) => column.name === "workspace_path")) {
+    yield* sql`
+      ALTER TABLE provider_session_runtime
+      ADD COLUMN workspace_path TEXT
+    `;
+  }
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS idx_provider_session_workspace
+    ON provider_session_runtime (workspace_path, thread_id)
+  `;
+});
+
+const archiveThreads = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
+  const threadColumns = yield* sql<{ readonly name: string }>`
+    PRAGMA table_info(projection_threads)
+  `;
+  if (!threadColumns.some((column) => column.name === "archived_at")) {
+    yield* sql`
+      ALTER TABLE projection_threads
+      ADD COLUMN archived_at TEXT
+    `;
+  }
+  yield* sql`
+    CREATE INDEX IF NOT EXISTS idx_projection_threads_workspace_archived
+    ON projection_threads (workspace_path, archived_at)
+  `;
+});
+
 export const migrationLoader = Migrator.fromRecord({
   "1_OrchestrationEvents": createOrchestrationEvents,
   "2_OrchestrationCommandReceipts": createCommandReceipts,
   "3_Projections": createProjections,
   "4_ProviderSessionRuntime": createProviderSessionRuntime,
+  "5_ScopeThreadsToWorkspace": scopeThreadsToWorkspace,
+  "6_ScopeProviderSessionsToWorkspace": scopeProviderSessionsToWorkspace,
+  "7_ArchiveThreads": archiveThreads,
 });

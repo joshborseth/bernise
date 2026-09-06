@@ -49,12 +49,7 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       Ping: () => Effect.succeed(new Pong({ pong: true })),
       StartSession: (payload) =>
         Effect.gen(function* () {
-          const workspace = resolveWorkspacePath(configuredWorkspace, payload.workspace);
-          const sessionId = yield* provider.startSession(
-            workspace,
-            payload.threadId,
-            payload.model,
-          );
+          const sessionId = yield* provider.startSession(payload.threadId, payload.model);
           yield* SynchronizedRef.update(sessionThreads, (map) => {
             const next = new Map(map);
             next.set(sessionId, payload.threadId);
@@ -80,6 +75,8 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       GetWorkspace: () =>
         Effect.succeed(workspaceInfoFromPath(resolveWorkspacePath(configuredWorkspace))),
       ListWorkspaceDirectory: (payload) => workspaceFs.listDirectory(payload.path),
+      ReadFile: (payload) => workspaceFs.readFile(payload.path),
+      WriteFile: (payload) => workspaceFs.writeFile(payload.path, payload.contents),
       GetSettings: () => serverSettings.get,
       UpdateSettings: (payload) => serverSettings.update(new HarnessSettingsPatch(payload)),
       GetProviderSnapshots: () => providerHealth.snapshots,
@@ -87,8 +84,12 @@ export const RpcHandlersLive = BerniseRpcs.toLayer(
       ListModels: () => provider.listModels,
       ListThreads: () =>
         threads.listThreads.pipe(Effect.map((list) => new ThreadList({ threads: list }))),
+      ListArchivedThreads: () =>
+        threads.listArchivedThreads.pipe(Effect.map((list) => new ThreadList({ threads: list }))),
       GetThread: (payload) => threads.getThread(payload.threadId),
       RenameThread: (payload) => threads.renameThread(payload.threadId, payload.title),
+      ArchiveThread: (payload) => threads.archiveThread(payload.threadId),
+      RestoreThread: (payload) => threads.restoreThread(payload.threadId),
       DeleteThread: (payload) =>
         threads
           .deleteThread(payload.threadId)

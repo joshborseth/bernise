@@ -7,6 +7,7 @@ import {
   FileIcon,
   FileSymlinkIcon,
   FolderIcon,
+  FolderInputIcon,
   FolderOpenIcon,
 } from "lucide-react";
 import { formatError } from "../chat.ts";
@@ -33,7 +34,13 @@ import {
   workspaceRootPath,
 } from "../workspace.ts";
 
-export function WorkspaceExplorer() {
+export function WorkspaceExplorer({
+  onOpenProject,
+  switchDisabled = false,
+}: {
+  readonly onOpenProject?: (() => void) | undefined;
+  readonly switchDisabled?: boolean | undefined;
+}) {
   const workspace = useAtomValue(workspaceAtom);
   const listing = useAtomValue(workspaceDirectoryAtom(workspaceRootPath));
   const [epoch, setEpoch] = useAtom(workspaceDirectoryEpochAtom(workspaceRootPath));
@@ -43,9 +50,24 @@ export function WorkspaceExplorer() {
   return (
     <section className="flex min-h-0 flex-1 flex-col overflow-hidden" aria-label="Workspace">
       <SidebarHeader className="gap-1 px-2 pt-3 pb-2">
-        <p className="font-display m-0 px-1 text-[0.95rem] leading-none font-semibold tracking-[-0.02em] italic">
-          Workspace
-        </p>
+        <div className="flex items-center justify-between gap-2 px-1">
+          <p className="font-display m-0 text-[0.95rem] leading-none font-semibold tracking-[-0.02em] italic">
+            Workspace
+          </p>
+          {onOpenProject === undefined ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              title="Open another project"
+              aria-label="Open another project"
+              disabled={switchDisabled}
+              onClick={onOpenProject}
+            >
+              <FolderInputIcon aria-hidden />
+            </Button>
+          )}
+        </div>
         <WorkspacePlaque workspace={workspace} />
       </SidebarHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -270,7 +292,7 @@ function WorkspaceTreeEntry({
         className={cn(
           "h-8",
           selected &&
-            "shadow-[inset_3px_0_0_var(--peach-deep)] data-active:bg-[color-mix(in_srgb,var(--peach)_62%,white)]",
+            "shadow-[inset_3px_0_0_var(--peach-deep)] data-active:bg-[color-mix(in_srgb,var(--peach)_18%,var(--bg))]",
         )}
         style={{ paddingLeft: rowPadding(depth) }}
         onClick={() => {

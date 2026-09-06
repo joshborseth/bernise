@@ -5,7 +5,7 @@ import { palette, type Surface } from "../model/types.ts";
 
 export function useCatMaterials(): Record<Surface, Material> {
   const materials = useMemo(() => {
-    const fur = (surface: Surface, roughness = 0.92, emissiveIntensity = 0.06) =>
+    const fur = (surface: Surface, roughness = 0.92, emissiveIntensity = 0.03) =>
       new MeshStandardMaterial({
         color: palette[surface],
         roughness,
@@ -39,14 +39,14 @@ export function useCatMaterials(): Record<Surface, Material> {
         metalness: 0,
         clearcoat: 0.7,
         clearcoatRoughness: 0.18,
-        emissive: "#2f8ecb",
-        emissiveIntensity: 0.16,
+        emissive: "#6a9ec4",
+        emissiveIntensity: 0.08,
       }),
       irisGlow: new MeshStandardMaterial({
         color: palette.irisGlow,
         roughness: 0.3,
         emissive: palette.irisGlow,
-        emissiveIntensity: 0.3,
+        emissiveIntensity: 0.14,
       }),
       pupil: glass("pupil", 0.15, 0.8),
       shine: new MeshStandardMaterial({
@@ -59,14 +59,14 @@ export function useCatMaterials(): Record<Surface, Material> {
         color: palette.fang,
         roughness: 0.32,
         metalness: 0,
-        emissive: "#fff6ea",
-        emissiveIntensity: 0.08,
+        emissive: "#f0ece6",
+        emissiveIntensity: 0.05,
       }),
       whisker: new MeshStandardMaterial({
         color: palette.whisker,
         roughness: 0.45,
-        emissive: "#fffaf2",
-        emissiveIntensity: 0.12,
+        emissive: "#d5d0c8",
+        emissiveIntensity: 0.06,
       }),
     } satisfies Record<Surface, Material>;
   }, []);

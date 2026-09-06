@@ -24,8 +24,8 @@ export function LitterBox({
 }) {
   const materials = useMemo(
     () => ({
-      rim: new MeshStandardMaterial({ color: "#e8c4a8", roughness: 0.84, metalness: 0 }),
-      well: new MeshStandardMaterial({ color: "#fff6ea", roughness: 0.9, metalness: 0 }),
+      rim: new MeshStandardMaterial({ color: "#a89880", roughness: 0.84, metalness: 0 }),
+      well: new MeshStandardMaterial({ color: "#efe6d4", roughness: 0.9, metalness: 0 }),
       litter: new MeshStandardMaterial({ color: "#d4c4a8", roughness: 0.96, metalness: 0 }),
       drops: litterDrops.map(
         (spec) => new MeshStandardMaterial({ color: spec.color, roughness: 0.88, metalness: 0 }),

@@ -44,12 +44,12 @@ export function BerniseScene({
         <Stats parent={fpsParentRef as RefObject<HTMLElement>} className="dev-fps-stats" />
       ) : null}
       <FitCamera usingLitter={usingLitter} />
-      <hemisphereLight args={["#fffaf3", "#e6d7c8", 0.85]} />
-      <ambientLight intensity={0.5} color="#fff6ea" />
-      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.15} color="#fff7ee" />
-      <directionalLight position={[-2.6, 1.2, 3.0]} intensity={0.45} color="#dcecf7" />
-      <directionalLight position={[0, 0.6, 5.4]} intensity={0.6} color="#ffffff" />
-      <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.85} color="#ffe6cf" />
+      <hemisphereLight args={["#eef1f6", "#506477", 0.72]} />
+      <ambientLight intensity={0.42} color="#e8eaef" />
+      <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.05} color="#f2f4f8" />
+      <directionalLight position={[-2.6, 1.2, 3.0]} intensity={0.22} color="#91b4d5" />
+      <directionalLight position={[0, 0.6, 5.4]} intensity={0.5} color="#ffffff" />
+      <directionalLight position={[0.4, 3.2, -3.4]} intensity={0.48} color="#a6accd" />
       <AnimatedFigure
         mood={mood}
         speakKey={speakKey}
@@ -73,7 +73,7 @@ export function BerniseScene({
         far={2.2}
         resolution={256}
         frames={reducedMotion ? 1 : Number.POSITIVE_INFINITY}
-        color="#6a5346"
+        color="#1b1e28"
       />
     </>
   );

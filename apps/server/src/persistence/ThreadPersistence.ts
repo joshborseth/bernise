@@ -14,6 +14,7 @@ import { Effect, Layer, Option, Schema } from "effect";
 import * as Context from "effect/Context";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import { resolveWorkspacePath, workspaceConfig } from "../workspace.ts";
 
 export type ThreadPersistenceApi = {
   readonly listThreads: Effect.Effect<ReadonlyArray<ThreadShell>, PersistenceError>;
@@ -26,6 +27,9 @@ export type ThreadPersistenceApi = {
     threadId: ThreadId,
     title: string,
   ) => Effect.Effect<ThreadShell, PersistenceError>;
+  readonly archiveThread: (threadId: ThreadId) => Effect.Effect<ThreadShell, PersistenceError>;
+  readonly restoreThread: (threadId: ThreadId) => Effect.Effect<ThreadShell, PersistenceError>;
+  readonly listArchivedThreads: Effect.Effect<ReadonlyArray<ThreadShell>, PersistenceError>;
   readonly deleteThread: (threadId: ThreadId) => Effect.Effect<void, PersistenceError>;
   readonly appendUser: (threadId: ThreadId, text: string) => Effect.Effect<void, PersistenceError>;
   readonly appendAssistant: (
@@ -54,6 +58,7 @@ const ThreadShellRow = Schema.Struct({
   title: Schema.String,
   createdAt: Schema.String,
   updatedAt: Schema.String,
+  archivedAt: Schema.NullOr(Schema.String),
 });
 
 const MessageRow = Schema.Struct({
@@ -111,6 +116,19 @@ const trimmedTitle = (title: string): string => {
 
 export const makeThreadPersistence = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  const configuredWorkspace = yield* workspaceConfig;
+  const workspacePath = resolveWorkspacePath(configuredWorkspace);
+
+  yield* sql`
+    UPDATE projection_threads
+    SET workspace_path = ${workspacePath}
+    WHERE workspace_path IS NULL OR workspace_path = ''
+  `;
+  yield* sql`
+    UPDATE provider_session_runtime
+    SET workspace_path = ${workspacePath}
+    WHERE workspace_path IS NULL OR workspace_path = ''
+  `;
 
   const listThreadRows = SqlSchema.findAll({
     Request: Schema.Void,
@@ -121,9 +139,30 @@ export const makeThreadPersistence = Effect.gen(function* () {
           thread_id AS "threadId",
           title,
           created_at AS "createdAt",
-          updated_at AS "updatedAt"
+          updated_at AS "updatedAt",
+          archived_at AS "archivedAt"
         FROM projection_threads
+        WHERE workspace_path = ${workspacePath}
+          AND archived_at IS NULL
         ORDER BY updated_at DESC, thread_id DESC
+      `,
+  });
+
+  const listArchivedThreadRows = SqlSchema.findAll({
+    Request: Schema.Void,
+    Result: ThreadShellRow,
+    execute: () =>
+      sql`
+        SELECT
+          thread_id AS "threadId",
+          title,
+          created_at AS "createdAt",
+          updated_at AS "updatedAt",
+          archived_at AS "archivedAt"
+        FROM projection_threads
+        WHERE workspace_path = ${workspacePath}
+          AND archived_at IS NOT NULL
+        ORDER BY archived_at DESC, thread_id DESC
       `,
   });
 
@@ -136,9 +175,11 @@ export const makeThreadPersistence = Effect.gen(function* () {
           thread_id AS "threadId",
           title,
           created_at AS "createdAt",
-          updated_at AS "updatedAt"
+          updated_at AS "updatedAt",
+          archived_at AS "archivedAt"
         FROM projection_threads
         WHERE thread_id = ${threadId}
+          AND workspace_path = ${workspacePath}
       `,
   });
 
@@ -148,13 +189,16 @@ export const makeThreadPersistence = Effect.gen(function* () {
     execute: ({ threadId }) =>
       sql`
         SELECT
-          message_id AS "messageId",
-          role,
-          text,
-          created_at AS "createdAt"
-        FROM projection_thread_messages
-        WHERE thread_id = ${threadId}
-        ORDER BY position ASC, message_id ASC
+          messages.message_id AS "messageId",
+          messages.role,
+          messages.text,
+          messages.created_at AS "createdAt"
+        FROM projection_thread_messages AS messages
+        INNER JOIN projection_threads AS threads
+          ON threads.thread_id = messages.thread_id
+        WHERE messages.thread_id = ${threadId}
+          AND threads.workspace_path = ${workspacePath}
+        ORDER BY messages.position ASC, messages.message_id ASC
       `,
   });
 
@@ -277,11 +321,24 @@ export const makeThreadPersistence = Effect.gen(function* () {
       threadId: ThreadId,
       title: Schema.String,
       createdAt: Schema.String,
+      workspacePath: Schema.String,
     }),
     execute: (thread) =>
       sql`
-        INSERT INTO projection_threads (thread_id, title, created_at, updated_at)
-        VALUES (${thread.threadId}, ${thread.title}, ${thread.createdAt}, ${thread.createdAt})
+        INSERT INTO projection_threads (
+          thread_id,
+          title,
+          created_at,
+          updated_at,
+          workspace_path
+        )
+        VALUES (
+          ${thread.threadId},
+          ${thread.title},
+          ${thread.createdAt},
+          ${thread.createdAt},
+          ${thread.workspacePath}
+        )
       `,
   });
 
@@ -344,6 +401,26 @@ export const makeThreadPersistence = Effect.gen(function* () {
           `,
   });
 
+  const setArchivedAt = SqlSchema.void({
+    Request: Schema.Struct({
+      threadId: ThreadId,
+      archivedAt: Schema.NullOr(Schema.String),
+      updatedAt: Schema.optionalKey(Schema.String),
+    }),
+    execute: ({ threadId, archivedAt, updatedAt }) =>
+      updatedAt === undefined
+        ? sql`
+            UPDATE projection_threads
+            SET archived_at = ${archivedAt}
+            WHERE thread_id = ${threadId}
+          `
+        : sql`
+            UPDATE projection_threads
+            SET archived_at = ${archivedAt}, updated_at = ${updatedAt}
+            WHERE thread_id = ${threadId}
+          `,
+  });
+
   const deleteMessages = SqlSchema.void({
     Request: ThreadIdRow,
     execute: ({ threadId }) =>
@@ -387,6 +464,7 @@ export const makeThreadPersistence = Effect.gen(function* () {
         SELECT codex_thread_id AS "codexThreadId"
         FROM provider_session_runtime
         WHERE thread_id = ${threadId}
+          AND workspace_path = ${workspacePath}
       `,
   });
 
@@ -395,14 +473,21 @@ export const makeThreadPersistence = Effect.gen(function* () {
       threadId: ThreadId,
       codexThreadId: Schema.String,
       updatedAt: Schema.String,
+      workspacePath: Schema.String,
     }),
-    execute: ({ threadId, codexThreadId, updatedAt }) =>
+    execute: ({ threadId, codexThreadId, updatedAt, workspacePath }) =>
       sql`
-        INSERT INTO provider_session_runtime (thread_id, codex_thread_id, updated_at)
-        VALUES (${threadId}, ${codexThreadId}, ${updatedAt})
+        INSERT INTO provider_session_runtime (
+          thread_id,
+          codex_thread_id,
+          updated_at,
+          workspace_path
+        )
+        VALUES (${threadId}, ${codexThreadId}, ${updatedAt}, ${workspacePath})
         ON CONFLICT (thread_id) DO UPDATE SET
           codex_thread_id = excluded.codex_thread_id,
-          updated_at = excluded.updated_at
+          updated_at = excluded.updated_at,
+          workspace_path = excluded.workspace_path
       `,
   });
 
@@ -483,6 +568,7 @@ export const makeThreadPersistence = Effect.gen(function* () {
       threadId,
       title,
       createdAt: occurredAt,
+      workspacePath,
     });
     return new ThreadShell({
       id: threadId,
@@ -613,6 +699,15 @@ export const makeThreadPersistence = Effect.gen(function* () {
     return shells;
   });
 
+  const listArchivedThreads = Effect.gen(function* () {
+    const rows = yield* listArchivedThreadRows(undefined);
+    const shells: Array<ThreadShell> = [];
+    for (const row of rows) {
+      shells.push(yield* backfillTitle(row));
+    }
+    return shells;
+  });
+
   const getThread = Effect.fn("ThreadPersistence.getThread")(function* (threadId: ThreadId) {
     const rows = yield* listMessages({ threadId });
     return new ThreadSnapshot({
@@ -666,7 +761,65 @@ export const makeThreadPersistence = Effect.gen(function* () {
     });
   });
 
+  const archiveThread = Effect.fn("ThreadPersistence.archiveThread")(function* (
+    threadId: ThreadId,
+  ) {
+    const existing = yield* findThread({ threadId });
+    const row = yield* Option.match(existing, {
+      onNone: () => Effect.fail(new PersistenceError({ message: `Unknown thread ${threadId}` })),
+      onSome: (value) => Effect.succeed(value),
+    });
+    if (row.archivedAt !== null) {
+      return toShell(row);
+    }
+    const commandId = CommandId.make(crypto.randomUUID());
+    const occurredAt = new Date().toISOString();
+    yield* appendDomainEvent({
+      aggregateKind: "thread",
+      streamId: threadId,
+      eventType: "thread.archived",
+      actorKind: "user",
+      commandId,
+      payload: { threadId },
+      occurredAt,
+    });
+    yield* setArchivedAt({ threadId, archivedAt: occurredAt });
+    return toShell(row);
+  });
+
+  const restoreThread = Effect.fn("ThreadPersistence.restoreThread")(function* (
+    threadId: ThreadId,
+  ) {
+    const existing = yield* findThread({ threadId });
+    const row = yield* Option.match(existing, {
+      onNone: () => Effect.fail(new PersistenceError({ message: `Unknown thread ${threadId}` })),
+      onSome: (value) => Effect.succeed(value),
+    });
+    if (row.archivedAt === null) {
+      return toShell(row);
+    }
+    const commandId = CommandId.make(crypto.randomUUID());
+    const occurredAt = new Date().toISOString();
+    yield* appendDomainEvent({
+      aggregateKind: "thread",
+      streamId: threadId,
+      eventType: "thread.unarchived",
+      actorKind: "user",
+      commandId,
+      payload: { threadId },
+      occurredAt,
+    });
+    yield* setArchivedAt({ threadId, archivedAt: null, updatedAt: occurredAt });
+    return new ThreadShell({
+      id: row.threadId,
+      title: row.title,
+      createdAt: row.createdAt,
+      updatedAt: occurredAt,
+    });
+  });
+
   const deleteThread = Effect.fn("ThreadPersistence.deleteThread")(function* (threadId: ThreadId) {
+    yield* requireThread(threadId);
     yield* deleteMessages({ threadId });
     yield* deleteThreadRow({ threadId });
     yield* deleteResume({ threadId });
@@ -692,6 +845,7 @@ export const makeThreadPersistence = Effect.gen(function* () {
       threadId,
       codexThreadId,
       updatedAt: new Date().toISOString(),
+      workspacePath,
     });
   });
 
@@ -705,9 +859,12 @@ export const makeThreadPersistence = Effect.gen(function* () {
 
   return ThreadPersistence.of({
     listThreads: withSql("ListThreads", listThreads),
+    listArchivedThreads: withSql("ListArchivedThreads", listArchivedThreads),
     getThread: (threadId) => withSql("GetThread", getThread(threadId)),
     createThread: (threadId, title) => withSql("createThread", createThread(threadId, title)),
     renameThread: (threadId, title) => withSql("RenameThread", renameThread(threadId, title)),
+    archiveThread: (threadId) => withSql("ArchiveThread", archiveThread(threadId)),
+    restoreThread: (threadId) => withSql("RestoreThread", restoreThread(threadId)),
     deleteThread: (threadId) => withSql("DeleteThread", deleteThread(threadId)),
     appendUser: (threadId, text) => withSql("appendUser", appendMessage(threadId, "user", text)),
     appendAssistant: (threadId, text) =>
@@ -723,6 +880,7 @@ export const threadPersistenceLayer = Layer.effect(ThreadPersistence, makeThread
 type MemoryThread = {
   shell: ThreadShell;
   messages: Array<ThreadMessage>;
+  archivedAt: string | null;
 };
 
 export const threadPersistenceMemory = Layer.sync(ThreadPersistence, () => {
@@ -743,6 +901,7 @@ export const threadPersistenceMemory = Layer.sync(ThreadPersistence, () => {
         updatedAt: occurredAt,
       }),
       messages: [],
+      archivedAt: null,
     };
     threads.set(threadId, created);
     return created;
@@ -774,6 +933,7 @@ export const threadPersistenceMemory = Layer.sync(ThreadPersistence, () => {
   return ThreadPersistence.of({
     listThreads: Effect.sync(() =>
       [...threads.values()]
+        .filter((record) => record.archivedAt === null)
         .map((record) => record.shell)
         .sort((left, right) => {
           if (left.updatedAt === right.updatedAt) {
@@ -781,6 +941,19 @@ export const threadPersistenceMemory = Layer.sync(ThreadPersistence, () => {
           }
           return right.updatedAt.localeCompare(left.updatedAt);
         }),
+    ),
+    listArchivedThreads: Effect.sync(() =>
+      [...threads.values()]
+        .filter((record) => record.archivedAt !== null)
+        .sort((left, right) => {
+          const leftArchived = left.archivedAt ?? "";
+          const rightArchived = right.archivedAt ?? "";
+          if (leftArchived === rightArchived) {
+            return right.shell.id.localeCompare(left.shell.id);
+          }
+          return rightArchived.localeCompare(leftArchived);
+        })
+        .map((record) => record.shell),
     ),
     getThread: (threadId) =>
       Effect.sync(() => {
@@ -804,6 +977,33 @@ export const threadPersistenceMemory = Layer.sync(ThreadPersistence, () => {
           title: trimmedTitle(title),
           updatedAt: occurredAt,
         });
+        return record.shell;
+      }),
+    archiveThread: (threadId) =>
+      Effect.gen(function* () {
+        const record = threads.get(threadId);
+        if (record === undefined) {
+          return yield* new PersistenceError({ message: `Unknown thread ${threadId}` });
+        }
+        if (record.archivedAt === null) {
+          record.archivedAt = new Date().toISOString();
+        }
+        return record.shell;
+      }),
+    restoreThread: (threadId) =>
+      Effect.gen(function* () {
+        const record = threads.get(threadId);
+        if (record === undefined) {
+          return yield* new PersistenceError({ message: `Unknown thread ${threadId}` });
+        }
+        if (record.archivedAt !== null) {
+          const occurredAt = new Date().toISOString();
+          record.archivedAt = null;
+          record.shell = new ThreadShell({
+            ...record.shell,
+            updatedAt: occurredAt,
+          });
+        }
         return record.shell;
       }),
     deleteThread: (threadId) =>

@@ -243,6 +243,14 @@ export function litterDropLanded(dropT: number, index: number, count: number): b
   return dropT - index * litterDropStagger(count) >= litterDropFall - 1e-9;
 }
 
+/** Seconds from litter-sequence start until drop `index` lands. */
+export function litterDropLandElapsed(index: number, count: number): number {
+  return (
+    litterSquatEnd +
+    (index * litterDropStagger(count) + litterDropFall) * (litterDropEnd - litterSquatEnd)
+  );
+}
+
 function hideChild(child: Object3D | undefined): void {
   if (child !== undefined) {
     child.visible = false;

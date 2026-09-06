@@ -9,7 +9,14 @@ import {
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Fiber, Stream } from "effect";
-import { existsSync, chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,7 +61,7 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      const sessionId = yield* provider.startSession("", testThread);
+      const sessionId = yield* provider.startSession(testThread);
       const fiber = yield* Stream.runCollect(
         Stream.take(provider.subscribeEvents(sessionId), 2),
       ).pipe(Effect.forkDetach);
@@ -73,7 +80,7 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin("empty");
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      const sessionId = yield* provider.startSession("", testThread);
+      const sessionId = yield* provider.startSession(testThread);
       const turn = yield* provider.sendTurn(sessionId, "hello");
       expect(turn).toEqual(new TurnResult({ stopReason: "completed" }));
     }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
@@ -83,7 +90,7 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin("exit-on-prompt");
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      const sessionId = yield* provider.startSession("", testThread);
+      const sessionId = yield* provider.startSession(testThread);
       const error = yield* provider.sendTurn(sessionId, "hello").pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
       expect(error.message).toMatch(/exited|stdout closed|boom from fake codex/i);
@@ -93,7 +100,7 @@ describe("CodexProviderLive", () => {
   it.effect("fails startSession when the binary is missing", () =>
     Effect.gen(function* () {
       const provider = yield* Provider;
-      const error = yield* provider.startSession("/tmp", testThread).pipe(Effect.flip);
+      const error = yield* provider.startSession(testThread).pipe(Effect.flip);
       expect(error._tag).toBe("ProviderError");
       expect(error.message).toMatch(/codex|Install Codex CLI/i);
     }).pipe(
@@ -107,7 +114,7 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      const sessionId = yield* provider.startSession("", testThread, "gpt-5.4-mini");
+      const sessionId = yield* provider.startSession(testThread, "gpt-5.4-mini");
       yield* provider.sendTurn(sessionId, "hello", "gpt-5.4");
       const thread = JSON.parse(
         readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
@@ -126,14 +133,14 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      yield* provider.startSession("", testThread);
+      yield* provider.startSession(testThread);
       const thread = JSON.parse(
         readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
       ) as {
         readonly cwd: string | null;
         readonly developerInstructions: string | null;
       };
-      expect(thread.cwd).toBe(fake.workspace);
+      expect(thread.cwd).toBe(realpathSync(fake.workspace));
       expect(thread.developerInstructions).toBe(defaultBernisePersona);
     }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
   });
@@ -143,7 +150,7 @@ describe("CodexProviderLive", () => {
     const persona = "You are a test cat.\n";
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      yield* provider.startSession("", testThread);
+      yield* provider.startSession(testThread);
       const thread = JSON.parse(
         readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
       ) as {
@@ -188,8 +195,8 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin();
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      yield* provider.startSession("", testThread);
-      yield* provider.startSession("", testThread);
+      yield* provider.startSession(testThread);
+      yield* provider.startSession(testThread);
       const resumed = JSON.parse(
         readFileSync(join(fake.workspace, "last-thread-resume.json"), "utf8"),
       ) as { readonly threadId: string | null };
@@ -201,13 +208,13 @@ describe("CodexProviderLive", () => {
     const fake = makeFakeBin("resume-fail");
     return Effect.gen(function* () {
       const provider = yield* Provider;
-      yield* provider.startSession("", testThread);
-      yield* provider.startSession("", testThread);
+      yield* provider.startSession(testThread);
+      yield* provider.startSession(testThread);
       expect(existsSync(join(fake.workspace, "last-thread-resume.json"))).toBe(true);
       const started = JSON.parse(
         readFileSync(join(fake.workspace, "last-thread-start.json"), "utf8"),
       ) as { readonly cwd: string | null };
-      expect(started.cwd).toBe(fake.workspace);
+      expect(started.cwd).toBe(realpathSync(fake.workspace));
     }).pipe(Effect.provide(codexDriverLayer(fake.bin, fake.workspace)));
   });
 });

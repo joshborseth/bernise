@@ -50,13 +50,13 @@ Exactly one state role on a triaged issue. Type labels (`Bug`, `Feature`, `Impro
 
 ### Issue created (triage automation)
 
-| Arrival | Lane |
-| --- | --- |
-| Unlabeled, or only type labels, or `needs-triage` | **triage** → [TRIAGE.md](TRIAGE.md) |
-| `needs-info` | **resume-triage** → [TRIAGE.md](TRIAGE.md) (resume section) |
-| `ready-for-agent` already on the issue | **handoff:** if status is not `Todo`, set `Todo` and stop. If it is already `Todo`, stop with no write. Never implement. |
-| `ready-for-human` or `wontfix` | Skip |
-| Conflicting state roles | Comment the conflict, leave labels, stop |
+| Arrival                                           | Lane                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Unlabeled, or only type labels, or `needs-triage` | **triage** → [TRIAGE.md](TRIAGE.md)                                                                                      |
+| `needs-info`                                      | **resume-triage** → [TRIAGE.md](TRIAGE.md) (resume section)                                                              |
+| `ready-for-agent` already on the issue            | **handoff:** if status is not `Todo`, set `Todo` and stop. If it is already `Todo`, stop with no write. Never implement. |
+| `ready-for-human` or `wontfix`                    | Skip                                                                                                                     |
+| Conflicting state roles                           | Comment the conflict, leave labels, stop                                                                                 |
 
 If triage applies `ready-for-agent`, set status to `Todo`, then **stop**. That status change is what starts the implement automation.
 

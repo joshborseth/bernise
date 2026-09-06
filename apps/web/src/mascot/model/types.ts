@@ -22,23 +22,23 @@ export type Surface =
   | "whisker";
 
 export const palette: Record<Surface, string> = {
-  snow: "#fffcf7",
-  snowShade: "#f4ebe0",
-  silver: "#ded3c6",
-  tabby: "#b3a294",
-  tabbyDark: "#8a7768",
-  innerEar: "#eeb2ab",
-  nose: "#d98f88",
-  liner: "#3a2b25",
-  mouth: "#a76a63",
+  snow: "#f4f5f8",
+  snowShade: "#e6e4df",
+  silver: "#c5c8d0",
+  tabby: "#9aa0ad",
+  tabbyDark: "#6b7280",
+  innerEar: "#f4dcd7",
+  nose: "#d7b0a8",
+  liner: "#2a2d36",
+  mouth: "#a87b76",
   eyeWhite: "#ffffff",
-  irisRim: "#1f6ba8",
-  iris: "#4ea8e2",
-  irisGlow: "#9fd9f6",
-  pupil: "#141a20",
+  irisRim: "#5a6e82",
+  iris: "#6a9ec4",
+  irisGlow: "#b7d3e8",
+  pupil: "#1b1e28",
   shine: "#ffffff",
-  fang: "#f3ece1",
-  whisker: "#c9bbae",
+  fang: "#f0ece6",
+  whisker: "#d5d0c8",
 };
 
 /** Groups the animation driver steers by name. */

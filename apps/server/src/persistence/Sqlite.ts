@@ -5,13 +5,11 @@ import { join } from "node:path";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { migrationLoader } from "./Migrations.ts";
-import { ThreadPersistence, threadPersistenceLayer } from "./ThreadPersistence.ts";
+import { makeThreadPersistence, ThreadPersistence } from "./ThreadPersistence.ts";
 
 const stateDirConfig = Config.string("BERNISE_STATE_DIR").pipe(
   Config.withDefault(join(homedir(), ".bernise")),
 );
-
-const migrationsLayer = Layer.effectDiscard(Migrator.make({})({ loader: migrationLoader }));
 
 const isBunRuntime = (): boolean => typeof process.versions.bun === "string";
 
@@ -30,10 +28,13 @@ const sqliteClientLayer = (filename: string): Layer.Layer<SqlClient.SqlClient> =
   );
 
 export const persistenceFromFile = (filename: string) =>
-  threadPersistenceLayer.pipe(
-    Layer.provide(migrationsLayer),
-    Layer.provide(sqliteClientLayer(filename)),
-  );
+  Layer.effect(
+    ThreadPersistence,
+    Effect.gen(function* () {
+      yield* Migrator.make({})({ loader: migrationLoader });
+      return yield* makeThreadPersistence;
+    }),
+  ).pipe(Layer.provide(sqliteClientLayer(filename)));
 
 export const persistenceMemory = persistenceFromFile(":memory:");
 

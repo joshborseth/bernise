@@ -14,6 +14,7 @@ import {
   ThreadShell,
   ThreadSnapshot,
   TurnResult,
+  WorkspaceInfo,
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Schema, Stream } from "effect";
@@ -40,8 +41,7 @@ import {
 } from "./chat.ts";
 import {
   bootThreadsAtom,
-  compactRelativeTime,
-  filterThreadItems,
+  archivedThreadsAtom,
   listThreadItems,
   composerFocusNonceAtom,
   newThreadAtom,
@@ -505,6 +505,8 @@ describe("chat atoms", () => {
     const threadId = ThreadId.make("thread-1");
     const fakeClient = ((tag: string) => {
       switch (tag) {
+        case "GetWorkspace":
+          return Effect.succeed(new WorkspaceInfo({ path: "/project", name: "project" }));
         case "ListThreads":
           return Effect.succeed(
             new ThreadList({
@@ -518,6 +520,8 @@ describe("chat atoms", () => {
               ],
             }),
           );
+        case "ListArchivedThreads":
+          return Effect.succeed(new ThreadList({ threads: [] }));
         case "GetThread":
           return Effect.succeed(
             new ThreadSnapshot({
@@ -558,6 +562,7 @@ describe("chat atoms", () => {
     );
     expect(registry.get(activeThreadIdAtom)).toBe(threadId);
     expect(registry.get(threadsAtom)).toHaveLength(1);
+    expect(registry.get(archivedThreadsAtom)).toEqual([]);
   });
 
   it("starts a draft thread without hydrating messages", async () => {
@@ -722,57 +727,6 @@ describe("listThreadItems", () => {
       throw new Error("expected threads");
     }
     const items = listThreadItems(threads, newest.id);
-    expect(items.filter((item) => item.kind === "thread")).toHaveLength(17);
     expect(items.some((item) => item.kind === "draft")).toBe(false);
-  });
-});
-
-describe("filterThreadItems", () => {
-  const shell = (id: string, title: string) =>
-    new ThreadShell({
-      id: ThreadId.make(id),
-      title,
-      createdAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-
-  it("returns the list unchanged when the query is blank", () => {
-    const items = listThreadItems([shell("a", "Grill the cache")], ThreadId.make("a"));
-    expect(filterThreadItems(items, "   ")).toEqual(items);
-  });
-
-  it("filters by title without changing order", () => {
-    const items = listThreadItems(
-      [shell("a", "Grill the cache"), shell("b", "Persona voice"), shell("c", "Cache bust")],
-      ThreadId.make("a"),
-    );
-    expect(
-      filterThreadItems(items, "CACHE").map((item) =>
-        item.kind === "thread" ? item.thread.id : item.threadId,
-      ),
-    ).toEqual(["a", "c"]);
-  });
-
-  it("matches the draft label", () => {
-    const draftId = ThreadId.make("draft");
-    const items = listThreadItems([shell("a", "Grill")], draftId);
-    const filtered = filterThreadItems(items, "new thread");
-    expect(filtered).toEqual([{ kind: "draft", threadId: draftId }]);
-  });
-});
-
-describe("compactRelativeTime", () => {
-  const now = Date.parse("2026-09-03T22:00:00.000Z");
-
-  it("compacts recent stamps the way the sidebar rows do", () => {
-    expect(compactRelativeTime("2026-09-03T21:59:20.000Z", now)).toBe("now");
-    expect(compactRelativeTime("2026-09-03T21:55:00.000Z", now)).toBe("5m");
-    expect(compactRelativeTime("2026-09-03T19:00:00.000Z", now)).toBe("3h");
-    expect(compactRelativeTime("2026-09-01T22:00:00.000Z", now)).toBe("2d");
-    expect(compactRelativeTime("2026-08-20T22:00:00.000Z", now)).toBe("Aug 20");
-  });
-
-  it("returns empty for unparseable stamps", () => {
-    expect(compactRelativeTime("nope", now)).toBe("");
   });
 });

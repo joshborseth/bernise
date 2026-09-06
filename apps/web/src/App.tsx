@@ -2,16 +2,22 @@ import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
+import { ChatMarkdown } from "./components/ChatMarkdown.tsx";
 import { PersonaConfig } from "./components/PersonaConfig.tsx";
-import { ThreadSidebar } from "./components/ThreadSidebar.tsx";
+import { ProjectLauncher } from "./components/ProjectLauncher.tsx";
+import { ThreadStrip } from "./components/ThreadStrip.tsx";
+import { WorkspacePane } from "./components/WorkspacePane.tsx";
+import { FilePreviewPanel } from "./files/FilePreviewPanel.tsx";
 import {
+  activeThreadIdAtom,
   formatError,
   holdingReplyAtom,
   speakAtom,
   speakKeyAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
-import { activeThreadTitleAtom, bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
+import { bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
+import { useStickToBottom } from "./hooks/use-stick-to-bottom.ts";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
@@ -31,8 +37,19 @@ import {
   settingsAtom,
   updateSettingsAtom,
 } from "./settings.ts";
+import { ListenToggle } from "./listen/ListenToggle.tsx";
+import { useListen } from "./listen/useListen.ts";
 import { speakingAtom } from "./voice/state.ts";
 import { useBerniseVoice } from "./voice/useVoice.ts";
+import { useThreadHotkeys } from "./hooks/use-thread-hotkeys.ts";
+import {
+  desktopBridge,
+  type BerniseDesktopBridge,
+  type DesktopLaunchState,
+  type OpenProjectResult,
+  type RecentProject,
+} from "./desktop.ts";
+import { activeWorkspaceEntryAtom, isOpenWorkspaceFilePath, workspaceAtom } from "./workspace.ts";
 
 const devFpsStorageKey = "bernise.devFps";
 
@@ -55,9 +72,134 @@ const writeDevFps = (on: boolean): void => {
   }
 };
 
-const threadPaneClass = "thread-pane flex h-full min-h-0 flex-col px-4 pt-7 pb-[1.15rem]";
+const threadPaneClass = "thread-pane flex h-full min-h-0 flex-col px-4 pt-4 pb-[1.15rem]";
 
 export function App() {
+  const bridge = desktopBridge();
+  return bridge === undefined ? <WorkspaceApp /> : <DesktopApp bridge={bridge} />;
+}
+
+type DesktopAppState =
+  | { readonly kind: "loading" }
+  | {
+      readonly kind: "launcher";
+      readonly activeProject: RecentProject | null;
+      readonly recentProjects: ReadonlyArray<RecentProject>;
+      readonly error?: string;
+    }
+  | { readonly kind: "ready"; readonly project: RecentProject };
+
+function DesktopApp({ bridge }: { readonly bridge: BerniseDesktopBridge }) {
+  const [state, setState] = useState<DesktopAppState>({ kind: "loading" });
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void bridge.getLaunchState().then(
+      (launchState) => {
+        setState(
+          launchState.activeProject === null
+            ? { kind: "launcher", ...launchState }
+            : { kind: "ready", project: launchState.activeProject },
+        );
+      },
+      (cause: unknown) => {
+        setState({
+          kind: "launcher",
+          activeProject: null,
+          recentProjects: [],
+          error: formatError(cause),
+        });
+      },
+    );
+  }, [bridge]);
+
+  const applyOpenResult = (result: OpenProjectResult, previous: DesktopLaunchState) => {
+    setBusy(false);
+    if (result.status === "cancelled") {
+      return;
+    }
+    if (result.status === "error") {
+      setState({ kind: "launcher", ...previous, error: result.message });
+      return;
+    }
+    if (previous.activeProject !== null) {
+      window.location.reload();
+      return;
+    }
+    setState({ kind: "ready", project: result.project });
+  };
+
+  const openProject = (path?: string) => {
+    if (state.kind !== "launcher" || busy) {
+      return;
+    }
+    const previous: DesktopLaunchState = {
+      activeProject: state.activeProject,
+      recentProjects: state.recentProjects,
+    };
+    setBusy(true);
+    const operation = path === undefined ? bridge.browseProject() : bridge.openProject(path);
+    void operation.then(
+      (result) => {
+        applyOpenResult(result, previous);
+      },
+      (cause: unknown) => {
+        setBusy(false);
+        setState({ kind: "launcher", ...previous, error: formatError(cause) });
+      },
+    );
+  };
+
+  if (state.kind === "loading") {
+    return (
+      <main className="grid min-h-dvh place-items-center bg-background text-sm text-muted-foreground">
+        Preparing Bernise…
+      </main>
+    );
+  }
+  if (state.kind === "launcher") {
+    const cancelProject = state.activeProject;
+    return (
+      <ProjectLauncher
+        recentProjects={state.recentProjects}
+        busy={busy}
+        error={state.error}
+        onBrowse={() => {
+          openProject();
+        }}
+        onOpen={openProject}
+        onCancel={
+          cancelProject === null
+            ? undefined
+            : () => {
+                setState({ kind: "ready", project: cancelProject });
+              }
+        }
+      />
+    );
+  }
+  return (
+    <WorkspaceApp
+      onOpenProject={() => {
+        void bridge.getLaunchState().then(
+          (launchState) => {
+            setState({ kind: "launcher", ...launchState });
+          },
+          (cause: unknown) => {
+            setState({
+              kind: "launcher",
+              activeProject: state.project,
+              recentProjects: [state.project],
+              error: formatError(cause),
+            });
+          },
+        );
+      }}
+    />
+  );
+}
+
+function WorkspaceApp({ onOpenProject }: { readonly onOpenProject?: (() => void) | undefined }) {
   useAtomValue(bootSettingsAtom);
   useAtomValue(bootThreadsAtom);
   useAtomValue(modelsResultAtom);
@@ -65,22 +207,24 @@ export function App() {
 
   return (
     <SidebarProvider className="relative z-1 h-dvh min-h-0 overflow-hidden">
-      <ChatWorkspace />
+      <ChatWorkspace onOpenProject={onOpenProject} />
     </SidebarProvider>
   );
 }
 
-function ChatWorkspace() {
+function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void) | undefined }) {
   const [personaOpen, setPersonaOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
-  const threadTitle = useAtomValue(activeThreadTitleAtom);
+  const activeThreadId = useAtomValue(activeThreadIdAtom);
+  const [speakNonce, setSpeakNonce] = useState(0);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
   const holdingReply = useAtomValue(holdingReplyAtom);
   useBerniseVoice();
+  useThreadHotkeys();
   const settings = useAtomValue(settingsAtom);
   const modelsResult = useAtomValue(modelsResultAtom);
   const modelView = composerModelView(modelsResult, settings.codex.model);
@@ -88,6 +232,10 @@ function ChatWorkspace() {
   const pending = AsyncResult.isWaiting(speakResult);
   const waitingOnVoice = pending || holdingReply;
   const modelsWaiting = AsyncResult.isWaiting(modelsResult);
+  const listen = useListen({
+    busy: waitingOnVoice || voicing,
+    speak,
+  });
 
   const resolvedModel = modelView.kind === "select" ? modelView.value : undefined;
 
@@ -102,12 +250,23 @@ function ChatWorkspace() {
     composerFocused,
     pending: waitingOnVoice,
     voicing,
+    speechActive: listen.speechActive,
+    addressed: listen.addressed,
   });
   const canSpeak = draft.trim().length > 0 && !pending;
   const [showFps, setShowFps] = useState(readDevFps);
   const fpsParentRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLInputElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
   const composerFocusNonce = useAtomValue(composerFocusNonceAtom);
+  const workspace = useAtomValue(workspaceAtom);
+  const [openFilePath, setOpenFilePath] = useAtom(activeWorkspaceEntryAtom);
+  const fileOpen = isOpenWorkspaceFilePath(openFilePath);
+  const lastVisible = visibleMessages.at(-1);
+  useStickToBottom(transcriptRef, {
+    contentKey: `${lastVisible?.id ?? ""}:${lastVisible?.text.length ?? 0}:${waitingOnVoice ? "1" : "0"}`,
+    forceKey: `${activeThreadId ?? ""}:${speakNonce}`,
+  });
 
   useEffect(() => {
     if (composerFocusNonce === 0) {
@@ -122,6 +281,7 @@ function ChatWorkspace() {
     if (text.length === 0 || pending) {
       return;
     }
+    setSpeakNonce((nonce) => nonce + 1);
     setDraft("");
     speak(text);
   };
@@ -145,7 +305,12 @@ function ChatWorkspace() {
   ) : null;
 
   const mascot = (
-    <aside className="mascot-slot relative flex h-full min-h-0 flex-col items-center justify-end overflow-hidden pb-12">
+    <aside
+      className={cn(
+        "mascot-slot relative flex h-full min-h-0 flex-col items-center overflow-hidden",
+        fileOpen ? "mascot-slot-compact justify-center pb-2" : "justify-end pb-12",
+      )}
+    >
       {import.meta.env.DEV ? (
         <div ref={fpsParentRef} className="dev-fps-counter" aria-hidden={!showFps} />
       ) : null}
@@ -155,20 +320,20 @@ function ChatWorkspace() {
         showFps={showFps}
         fpsParentRef={fpsParentRef as RefObject<HTMLElement>}
       />
+      <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center">
+        <ListenToggle
+          status={listen.status}
+          addressed={listen.addressed}
+          onToggle={listen.toggleMuted}
+        />
+      </div>
     </aside>
   );
 
   const thread = (
     <section className={threadPaneClass}>
-      <header className="mb-1.5 flex flex-none items-start gap-4">
-        <div className="min-w-0">
-          <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
-            {threadTitle}
-          </p>
-        </div>
-      </header>
-
       <div
+        ref={transcriptRef}
         className="grid flex-1 content-start gap-[0.7rem] overflow-y-auto px-[0.15rem] py-1 pb-2 empty:hidden"
         aria-live="polite"
       >
@@ -179,9 +344,13 @@ function ChatWorkspace() {
             </article>
           ) : message.from === "assistant" ? (
             <article key={message.id} className={assistantBubbleClass}>
-              <p className="m-0 text-[0.92rem] leading-[1.45] whitespace-pre-wrap">
-                {message.text}
-              </p>
+              <ChatMarkdown
+                text={message.text}
+                workspaceRoot={workspace.path}
+                onOpenFile={(relativePath) => {
+                  setOpenFilePath(relativePath);
+                }}
+              />
             </article>
           ) : (
             <article key={message.id} className={errorBubbleClass} role="alert">
@@ -197,7 +366,7 @@ function ChatWorkspace() {
       </div>
 
       <form
-        className="sticky bottom-[0.85rem] z-2 mt-auto grid flex-none gap-[0.15rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] pb-[0.4rem] shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent)] has-[input:focus]:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))] has-[input:focus]:shadow-[0_10px_24px_color-mix(in_srgb,var(--ink)_6%,transparent),0_0_0_3px_color-mix(in_srgb,var(--peach)_45%,transparent)]"
+        className="sticky bottom-[0.85rem] z-2 mt-auto grid flex-none gap-[0.15rem] rounded-[1.35rem] border border-border bg-card p-[0.45rem] pb-[0.4rem] has-[input:focus]:border-[color-mix(in_srgb,var(--peach-deep)_55%,var(--line))]"
         onSubmit={onSpeak}
       >
         <div className="grid grid-cols-[1fr_auto] gap-2.5">
@@ -254,7 +423,7 @@ function ChatWorkspace() {
               <SelectTrigger
                 size="sm"
                 aria-label="Model"
-                className="rounded-full border-0 bg-transparent text-muted-foreground shadow-none hover:bg-[color-mix(in_srgb,var(--peach)_32%,transparent)] hover:text-foreground"
+                className="rounded-full border-0 bg-transparent text-muted-foreground shadow-none hover:bg-[color-mix(in_srgb,var(--peach)_16%,transparent)] hover:text-foreground"
               >
                 <SelectValue />
               </SelectTrigger>
@@ -275,6 +444,7 @@ function ChatWorkspace() {
   const station = (
     <div className="relative h-full min-h-0">
       <ResizablePanelGroup
+        key={fileOpen ? "station-file" : "station-idle"}
         id="bernise-station"
         orientation="horizontal"
         className="h-full"
@@ -284,17 +454,33 @@ function ChatWorkspace() {
       >
         <ResizablePanel
           id="bernise"
-          defaultSize="42%"
-          minSize="12rem"
+          defaultSize={fileOpen ? "12%" : "42%"}
+          minSize={fileOpen ? "8rem" : "12rem"}
+          maxSize={fileOpen ? "12%" : undefined}
           className="h-full min-h-0 overflow-hidden"
         >
           {mascot}
         </ResizablePanel>
+        {fileOpen && openFilePath !== undefined ? (
+          <ResizablePanel
+            id="file"
+            defaultSize="55%"
+            minSize="24%"
+            className="h-full min-h-0 min-w-0 overflow-hidden"
+          >
+            <FilePreviewPanel
+              relativePath={openFilePath}
+              onClose={() => {
+                setOpenFilePath(undefined);
+              }}
+            />
+          </ResizablePanel>
+        ) : null}
         <ResizablePanel
           id="thread"
-          defaultSize="58%"
-          minSize="58%"
-          maxSize="58%"
+          defaultSize={fileOpen ? "33%" : "58%"}
+          minSize={fileOpen ? "22%" : "58%"}
+          maxSize={fileOpen ? "40%" : "58%"}
           className="h-full min-h-0 min-w-0 overflow-hidden"
         >
           {thread}
@@ -305,6 +491,7 @@ function ChatWorkspace() {
 
   const shell = (
     <ResizablePanelGroup
+      key={fileOpen ? "shell-file" : "shell-idle"}
       id="bernise-shell"
       orientation="horizontal"
       className="h-full"
@@ -313,21 +500,29 @@ function ChatWorkspace() {
       resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
     >
       <ResizablePanel
-        id="threads"
-        defaultSize="24%"
-        minSize="24%"
-        maxSize="24%"
+        id="workspace"
+        defaultSize={fileOpen ? "16%" : "24%"}
+        minSize={fileOpen ? "16%" : "24%"}
+        maxSize={fileOpen ? "16%" : "24%"}
         className="h-full min-h-0 min-w-0 overflow-hidden"
       >
-        <ThreadSidebar onOpenPersona={() => setPersonaOpen(true)} footerExtra={fpsButton} />
+        <WorkspacePane
+          onOpenPersona={() => setPersonaOpen(true)}
+          onOpenProject={onOpenProject}
+          projectSwitchDisabled={pending}
+          footerExtra={fpsButton}
+        />
       </ResizablePanel>
       <ResizablePanel
         id="station"
-        defaultSize="76%"
-        minSize="64%"
+        defaultSize={fileOpen ? "84%" : "76%"}
+        minSize={fileOpen ? "70%" : "64%"}
         className="h-full min-h-0 min-w-0"
       >
-        {station}
+        <div className="flex h-full min-h-0 flex-col">
+          <ThreadStrip />
+          <div className="min-h-0 flex-1">{station}</div>
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );
@@ -344,19 +539,19 @@ const bubbleMotion = "animate-bubble-in motion-reduce:animate-none";
 
 const userBubbleClass = cn(
   bubbleMotion,
-  "justify-self-end max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_0.4rem_1.35rem] border border-[color-mix(in_srgb,var(--sky-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--sky)_82%,white)] px-[0.95rem] py-3 shadow-[0_8px_18px_color-mix(in_srgb,var(--sky-deep)_16%,transparent)]",
+  "justify-self-end max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_0.4rem_1.35rem] border border-[color-mix(in_srgb,var(--sky-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--sky)_22%,var(--bg-elev))] px-[0.95rem] py-3",
 );
 
 const assistantBubbleClass = cn(
   bubbleMotion,
-  "justify-self-start max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_1.35rem_0.4rem] border border-[color-mix(in_srgb,var(--peach-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--peach)_78%,white)] px-[0.95rem] py-3 shadow-[0_8px_18px_color-mix(in_srgb,var(--peach-deep)_16%,transparent)]",
+  "justify-self-start max-w-[min(28rem,86%)] rounded-[1.35rem_1.35rem_1.35rem_0.4rem] border border-[color-mix(in_srgb,var(--peach-deep)_42%,var(--line))] bg-[color-mix(in_srgb,var(--peach)_18%,var(--bg-elev))] px-[0.95rem] py-3",
 );
 
 const errorBubbleClass = cn(
   bubbleMotion,
-  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-[color-mix(in_srgb,var(--rose)_55%,var(--line))] bg-[color-mix(in_srgb,var(--rose)_28%,white)] px-[0.9rem] py-[0.7rem]",
+  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-[color-mix(in_srgb,var(--rose)_55%,var(--line))] bg-[color-mix(in_srgb,var(--rose)_18%,var(--bg))] px-[0.9rem] py-[0.7rem]",
 );
 
 const statusBubbleClass = cn(
-  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-dashed border-[color-mix(in_srgb,var(--muted)_45%,var(--line))] bg-[color-mix(in_srgb,var(--bg-wash)_70%,white)] px-[0.85rem] py-[0.55rem] text-muted-foreground",
+  "justify-self-center max-w-[min(32rem,92%)] rounded-2xl border border-dashed border-[color-mix(in_srgb,var(--muted)_45%,var(--line))] bg-[color-mix(in_srgb,var(--bg-wash)_70%,var(--bg))] px-[0.85rem] py-[0.55rem] text-muted-foreground",
 );

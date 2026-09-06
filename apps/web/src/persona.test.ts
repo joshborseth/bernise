@@ -6,7 +6,9 @@ describe("resolvePersona", () => {
     expect(resolvePersona("")).toBe(defaultBernisePersona);
     expect(resolvePersona("   ")).toBe(defaultBernisePersona);
     expect(defaultBernisePersona).toMatch(/You are Bernise/i);
-    expect(defaultBernisePersona).toMatch(/cream cat/i);
+    expect(defaultBernisePersona).toMatch(/sweet cat/i);
+    expect(defaultBernisePersona).toMatch(/NEVER use emojis/i);
+    expect(defaultBernisePersona).toMatch(/spoken aloud via TTS/i);
   });
 
   it("keeps a custom persona", () => {

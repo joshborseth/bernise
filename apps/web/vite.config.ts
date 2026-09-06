@@ -13,6 +13,12 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  optimizeDeps: {
+    exclude: ["@huggingface/transformers"],
+  },
+  worker: {
+    format: "es",
+  },
   server: {
     host,
     port,

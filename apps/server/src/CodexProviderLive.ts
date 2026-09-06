@@ -291,12 +291,11 @@ export const CodexProviderLive = Layer.effect(
     };
 
     const startSession = Effect.fn("CodexProvider.startSession")(function* (
-      workspace: string,
       berniseThreadId: ThreadId,
       model?: string,
     ) {
       yield* closeAllSessions();
-      const cwd = resolveWorkspacePath(configuredWorkspace, workspace);
+      const cwd = resolveWorkspacePath(configuredWorkspace);
       const settings = yield* serverSettings.get;
       const command = resolveCodexBin(settings.codex.binaryPath, envBin);
       const homePath = settings.codex.homePath.trim();

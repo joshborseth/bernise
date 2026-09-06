@@ -3,13 +3,15 @@ import {
   ProviderError,
   WorkspaceDirectoryListing,
   WorkspaceEntry,
+  WorkspaceFileContents,
+  WorkspaceFileWritten,
   WorkspaceFsError,
   WorkspaceInfo,
 } from "@bernise/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import { RpcTest } from "effect/unstable/rpc";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { threadPersistenceMemory } from "../src/persistence/ThreadPersistence.ts";
@@ -66,7 +68,7 @@ describe("ListWorkspaceDirectory", () => {
     return Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(BerniseRpcs);
       expect(yield* client.GetWorkspace()).toEqual(
-        new WorkspaceInfo({ path: root, name: basename(root) }),
+        new WorkspaceInfo({ path: realpathSync(root), name: basename(root) }),
       );
       expect(yield* client.ListWorkspaceDirectory({ path: "" })).toEqual(
         new WorkspaceDirectoryListing({
@@ -122,6 +124,47 @@ describe("ListWorkspaceDirectory", () => {
       );
       expect(yield* client.ListWorkspaceDirectory({ path: "missing" }).pipe(Effect.flip)).toEqual(
         new WorkspaceFsError({ message: "Directory not found." }),
+      );
+    }).pipe(Effect.provide(rpcLayer(root)));
+  });
+});
+
+describe("ReadFile and WriteFile", () => {
+  it.effect("reads and writes a workspace file through RPC", () => {
+    const root = makeRoot();
+    return Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      expect(yield* client.ReadFile({ path: "README.md" })).toEqual(
+        new WorkspaceFileContents({
+          path: "README.md",
+          contents: "readme",
+          byteLength: 6,
+          truncated: false,
+        }),
+      );
+      expect(yield* client.WriteFile({ path: "README.md", contents: "spoken" })).toEqual(
+        new WorkspaceFileWritten({ path: "README.md" }),
+      );
+      expect(yield* client.ReadFile({ path: "README.md" })).toEqual(
+        new WorkspaceFileContents({
+          path: "README.md",
+          contents: "spoken",
+          byteLength: 6,
+          truncated: false,
+        }),
+      );
+    }).pipe(Effect.provide(rpcLayer(root)));
+  });
+
+  it.effect("returns a tagged failure for an invalid file path", () => {
+    const root = makeRoot();
+    return Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      expect(yield* client.ReadFile({ path: ".." }).pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Workspace paths must stay inside the workspace." }),
+      );
+      expect(yield* client.ReadFile({ path: "src" }).pipe(Effect.flip)).toEqual(
+        new WorkspaceFsError({ message: "Not a file." }),
       );
     }).pipe(Effect.provide(rpcLayer(root)));
   });

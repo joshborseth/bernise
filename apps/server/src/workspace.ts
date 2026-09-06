@@ -1,22 +1,25 @@
 import { WorkspaceInfo } from "@bernise/contracts";
 import { Config, Option } from "effect";
-import { basename } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, resolve } from "node:path";
 
 export const workspaceConfig = Config.string("BERNISE_WORKSPACE").pipe(Config.option);
 
-export const resolveWorkspacePath = (
-  configured: Option.Option<string>,
-  override?: string,
-): string => {
-  const fromOverride = override?.trim() ?? "";
-  if (fromOverride.length > 0) {
-    return fromOverride;
+const canonicalPath = (path: string): string => {
+  const absolute = resolve(path);
+  try {
+    return realpathSync(absolute);
+  } catch {
+    return absolute;
   }
+};
+
+export const resolveWorkspacePath = (configured: Option.Option<string>): string => {
   const fromConfig = Option.getOrElse(configured, () => "").trim();
   if (fromConfig.length > 0) {
-    return fromConfig;
+    return canonicalPath(fromConfig);
   }
-  return process.cwd();
+  return canonicalPath(process.cwd());
 };
 
 export const workspaceInfoFromPath = (path: string): WorkspaceInfo => {

@@ -16,7 +16,12 @@ import {
   ProviderSnapshots,
   SettingsError,
 } from "./Settings.ts";
-import { WorkspaceDirectoryListing, WorkspaceFsError } from "./Workspace.ts";
+import {
+  WorkspaceDirectoryListing,
+  WorkspaceFileContents,
+  WorkspaceFileWritten,
+  WorkspaceFsError,
+} from "./Workspace.ts";
 
 export class Pong extends Schema.Class<Pong>("Pong")({
   pong: Schema.Literal(true),
@@ -34,7 +39,6 @@ export class Ping extends Rpc.make("Ping", {
 export class StartSession extends Rpc.make("StartSession", {
   payload: {
     threadId: ThreadId,
-    workspace: Schema.optionalKey(Schema.String),
     model: Schema.optionalKey(Schema.String),
   },
   success: SessionStarted,
@@ -73,6 +77,23 @@ export class ListWorkspaceDirectory extends Rpc.make("ListWorkspaceDirectory", {
     path: Schema.String,
   },
   success: WorkspaceDirectoryListing,
+  error: WorkspaceFsError,
+}) {}
+
+export class ReadFile extends Rpc.make("ReadFile", {
+  payload: {
+    path: Schema.String,
+  },
+  success: WorkspaceFileContents,
+  error: WorkspaceFsError,
+}) {}
+
+export class WriteFile extends Rpc.make("WriteFile", {
+  payload: {
+    path: Schema.String,
+    contents: Schema.String,
+  },
+  success: WorkspaceFileWritten,
   error: WorkspaceFsError,
 }) {}
 
@@ -132,6 +153,27 @@ export class DeleteThread extends Rpc.make("DeleteThread", {
   error: PersistenceError,
 }) {}
 
+export class ListArchivedThreads extends Rpc.make("ListArchivedThreads", {
+  success: ThreadList,
+  error: PersistenceError,
+}) {}
+
+export class ArchiveThread extends Rpc.make("ArchiveThread", {
+  payload: {
+    threadId: ThreadId,
+  },
+  success: ThreadShell,
+  error: PersistenceError,
+}) {}
+
+export class RestoreThread extends Rpc.make("RestoreThread", {
+  payload: {
+    threadId: ThreadId,
+  },
+  success: ThreadShell,
+  error: PersistenceError,
+}) {}
+
 export const BerniseRpcs = RpcGroup.make(
   Ping,
   StartSession,
@@ -139,6 +181,8 @@ export const BerniseRpcs = RpcGroup.make(
   SubscribeEvents,
   GetWorkspace,
   ListWorkspaceDirectory,
+  ReadFile,
+  WriteFile,
   GetSettings,
   UpdateSettings,
   GetProviderSnapshots,
@@ -148,4 +192,7 @@ export const BerniseRpcs = RpcGroup.make(
   GetThread,
   RenameThread,
   DeleteThread,
+  ListArchivedThreads,
+  ArchiveThread,
+  RestoreThread,
 );

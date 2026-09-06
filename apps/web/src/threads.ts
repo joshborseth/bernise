@@ -14,12 +14,18 @@ import {
 } from "./chat.ts";
 import { BerniseRpc } from "./rpc.ts";
 import { voiceRevealAtom } from "./voice/state.ts";
+import { workspaceAtom } from "./workspace.ts";
 
 export const activeThreadStorageKey = "bernise.activeThreadId";
 
-export const readStoredThreadId = (): ThreadId | undefined => {
+export const activeThreadStorageKeyFor = (workspacePath: string): string =>
+  workspacePath.length === 0
+    ? activeThreadStorageKey
+    : `${activeThreadStorageKey}:${workspacePath}`;
+
+export const readStoredThreadId = (workspacePath = ""): ThreadId | undefined => {
   try {
-    const value = globalThis.localStorage?.getItem(activeThreadStorageKey);
+    const value = globalThis.localStorage?.getItem(activeThreadStorageKeyFor(workspacePath));
     return value !== undefined && value !== null && value.length > 0
       ? ThreadId.make(value)
       : undefined;
@@ -28,13 +34,14 @@ export const readStoredThreadId = (): ThreadId | undefined => {
   }
 };
 
-export const writeStoredThreadId = (threadId: ThreadId | undefined): void => {
+export const writeStoredThreadId = (threadId: ThreadId | undefined, workspacePath = ""): void => {
+  const key = activeThreadStorageKeyFor(workspacePath);
   try {
     if (threadId === undefined) {
-      globalThis.localStorage?.removeItem(activeThreadStorageKey);
+      globalThis.localStorage?.removeItem(key);
       return;
     }
-    globalThis.localStorage?.setItem(activeThreadStorageKey, threadId);
+    globalThis.localStorage?.setItem(key, threadId);
   } catch {
     // Quota or private mode — selection still lives in memory.
   }
@@ -68,51 +75,43 @@ export const listThreadItems = (
   return items;
 };
 
-export const filterThreadItems = (
+export const threadIdAtHotkeyIndex = (
   items: ReadonlyArray<ThreadListItem>,
-  query: string,
-): ReadonlyArray<ThreadListItem> => {
-  const needle = query.trim().toLowerCase();
-  if (needle.length === 0) {
-    return items;
+  digit: number,
+): ThreadId | undefined => {
+  if (!Number.isInteger(digit) || digit < 1 || digit > 9) {
+    return undefined;
   }
-  return items.filter((item) => threadItemTitle(item).toLowerCase().includes(needle));
+  const item = items[digit - 1];
+  return item === undefined ? undefined : threadItemId(item);
 };
 
-const minuteMs = 60_000;
-const hourMs = 60 * minuteMs;
-const dayMs = 24 * hourMs;
-const weekMs = 7 * dayMs;
+export type CloseActiveThread =
+  | { readonly kind: "archive"; readonly threadId: ThreadId }
+  | { readonly kind: "discard"; readonly nextId: ThreadId | undefined };
 
-export const compactRelativeTime = (iso: string, now = Date.now()): string => {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) {
-    return "";
+export const closeActiveThread = (
+  items: ReadonlyArray<ThreadListItem>,
+  activeId: ThreadId | undefined,
+): CloseActiveThread | undefined => {
+  if (activeId === undefined) {
+    return undefined;
   }
-  const delta = Math.max(0, now - then);
-  if (delta < minuteMs) {
-    return "now";
+  const active = items.find((item) => threadItemId(item) === activeId);
+  if (active === undefined) {
+    return undefined;
   }
-  if (delta < hourMs) {
-    return `${String(Math.floor(delta / minuteMs))}m`;
+  if (active.kind === "draft") {
+    const next = items.find((item) => item.kind === "thread");
+    return { kind: "discard", nextId: next === undefined ? undefined : next.thread.id };
   }
-  if (delta < dayMs) {
-    return `${String(Math.floor(delta / hourMs))}h`;
-  }
-  if (delta < weekMs) {
-    return `${String(Math.floor(delta / dayMs))}d`;
-  }
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(
-    new Date(then),
-  );
+  return { kind: "archive", threadId: activeId };
 };
-
-export const threadRenameAtom = Atom.make<
-  { readonly threadId: ThreadId; readonly draft: string } | undefined
->(undefined);
 
 /** Incremented when the composer should receive focus (e.g. New thread). */
 export const composerFocusNonceAtom = Atom.make(0);
+
+export const archivedThreadsAtom = Atom.make<ReadonlyArray<ThreadShell>>([]);
 
 export const activeThreadTitleAtom = Atom.make((get) => {
   const activeId = get(activeThreadIdAtom);
@@ -138,9 +137,13 @@ export const bootThreadsAtom = BerniseRpc.runtime
   .atom((get) =>
     Effect.gen(function* () {
       const client = yield* BerniseRpc;
+      const workspace = yield* client("GetWorkspace", undefined);
+      get.set(workspaceAtom, workspace);
       const listed = yield* client("ListThreads", undefined);
       get.set(threadsAtom, listed.threads);
-      const stored = readStoredThreadId();
+      const archived = yield* client("ListArchivedThreads", undefined);
+      get.set(archivedThreadsAtom, archived.threads);
+      const stored = readStoredThreadId(workspace.path);
       const chosen =
         stored !== undefined && listed.threads.some((thread) => thread.id === stored)
           ? stored
@@ -148,11 +151,11 @@ export const bootThreadsAtom = BerniseRpc.runtime
       if (chosen === undefined) {
         get.set(activeThreadIdAtom, newThreadId());
         get.set(chatAtom, initialChat);
-        writeStoredThreadId(undefined);
+        writeStoredThreadId(undefined, workspace.path);
         return;
       }
       get.set(activeThreadIdAtom, chosen);
-      writeStoredThreadId(chosen);
+      writeStoredThreadId(chosen, workspace.path);
       const snapshot = yield* client("GetThread", { threadId: chosen });
       const chat = get.once(chatAtom);
       const alreadySpoken = chat.messages.some(
@@ -187,6 +190,7 @@ export const bootThreadsAtom = BerniseRpc.runtime
 
 export const switchThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) =>
   Effect.gen(function* () {
+    const workspacePath = get.registry.get(workspaceAtom).path;
     if (get.registry.get(activeThreadIdAtom) === threadId) {
       return;
     }
@@ -196,10 +200,10 @@ export const switchThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) 
     const listed = get.registry.get(threadsAtom).some((thread) => thread.id === threadId);
     if (!listed) {
       get.set(chatAtom, initialChat);
-      writeStoredThreadId(undefined);
+      writeStoredThreadId(undefined, workspacePath);
       return;
     }
-    writeStoredThreadId(threadId);
+    writeStoredThreadId(threadId, workspacePath);
     const client = yield* BerniseRpc;
     const snapshot = yield* client("GetThread", { threadId });
     get.set(chatAtom, hydrateFromThread(snapshot.messages));
@@ -230,47 +234,29 @@ export const newThreadAtom = BerniseRpc.runtime.fn((_arg: void, get) =>
     get.set(voiceRevealAtom, undefined);
     get.set(sessionEpochAtom, get.registry.get(sessionEpochAtom) + 1);
     get.set(composerFocusNonceAtom, get.registry.get(composerFocusNonceAtom) + 1);
-    writeStoredThreadId(undefined);
+    writeStoredThreadId(undefined, get.registry.get(workspaceAtom).path);
   }),
 );
 
-export const renameThreadAtom = BerniseRpc.runtime.fn(
-  (input: { readonly threadId: ThreadId; readonly title: string }, get) =>
-    Effect.gen(function* () {
-      const client = yield* BerniseRpc;
-      const renamed = yield* client("RenameThread", input);
-      get.set(
-        threadsAtom,
-        get.registry
-          .get(threadsAtom)
-          .map((thread) => (thread.id === renamed.id ? renamed : thread))
-          .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
-      );
-    }).pipe(
-      Effect.catchCause((cause) => {
-        if (Cause.hasInterruptsOnly(cause)) {
-          return Effect.void;
-        }
-        return Effect.sync(() => {
-          get.set(
-            chatAtom,
-            appendError(
-              get.registry.get(chatAtom),
-              formatError(Cause.squash(cause)),
-              crypto.randomUUID(),
-            ),
-          );
-        });
-      }),
-    ),
-);
+const sortThreadShells = (threads: ReadonlyArray<ThreadShell>): ReadonlyArray<ThreadShell> =>
+  threads.slice().sort((left, right) => {
+    if (left.updatedAt === right.updatedAt) {
+      return right.id.localeCompare(left.id);
+    }
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
 
-export const deleteThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) =>
+export const archiveThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) =>
   Effect.gen(function* () {
+    const workspacePath = get.registry.get(workspaceAtom).path;
     const client = yield* BerniseRpc;
-    yield* client("DeleteThread", { threadId });
+    const archived = yield* client("ArchiveThread", { threadId });
     const remaining = get.registry.get(threadsAtom).filter((thread) => thread.id !== threadId);
     get.set(threadsAtom, remaining);
+    get.set(archivedThreadsAtom, [
+      archived,
+      ...get.registry.get(archivedThreadsAtom).filter((thread) => thread.id !== threadId),
+    ]);
     if (get.registry.get(activeThreadIdAtom) !== threadId) {
       return;
     }
@@ -280,14 +266,58 @@ export const deleteThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) 
       get.set(chatAtom, initialChat);
       get.set(voiceRevealAtom, undefined);
       get.set(sessionEpochAtom, get.registry.get(sessionEpochAtom) + 1);
-      writeStoredThreadId(undefined);
+      writeStoredThreadId(undefined, workspacePath);
       return;
     }
     get.set(activeThreadIdAtom, next.id);
     get.set(voiceRevealAtom, undefined);
     get.set(sessionEpochAtom, get.registry.get(sessionEpochAtom) + 1);
-    writeStoredThreadId(next.id);
+    writeStoredThreadId(next.id, workspacePath);
     const snapshot = yield* client("GetThread", { threadId: next.id });
+    get.set(chatAtom, hydrateFromThread(snapshot.messages));
+  }).pipe(
+    Effect.catchCause((cause) => {
+      if (Cause.hasInterruptsOnly(cause)) {
+        return Effect.void;
+      }
+      return Effect.sync(() => {
+        get.set(
+          chatAtom,
+          appendError(
+            get.registry.get(chatAtom),
+            formatError(Cause.squash(cause)),
+            crypto.randomUUID(),
+          ),
+        );
+      });
+    }),
+  ),
+);
+
+export const restoreThreadAtom = BerniseRpc.runtime.fn((threadId: ThreadId, get) =>
+  Effect.gen(function* () {
+    const workspacePath = get.registry.get(workspaceAtom).path;
+    const client = yield* BerniseRpc;
+    const restored = yield* client("RestoreThread", { threadId });
+    get.set(
+      threadsAtom,
+      sortThreadShells([
+        restored,
+        ...get.registry.get(threadsAtom).filter((thread) => thread.id !== restored.id),
+      ]),
+    );
+    get.set(
+      archivedThreadsAtom,
+      get.registry.get(archivedThreadsAtom).filter((thread) => thread.id !== threadId),
+    );
+    if (get.registry.get(activeThreadIdAtom) === restored.id) {
+      return;
+    }
+    get.set(activeThreadIdAtom, restored.id);
+    get.set(voiceRevealAtom, undefined);
+    get.set(sessionEpochAtom, get.registry.get(sessionEpochAtom) + 1);
+    writeStoredThreadId(restored.id, workspacePath);
+    const snapshot = yield* client("GetThread", { threadId: restored.id });
     get.set(chatAtom, hydrateFromThread(snapshot.messages));
   }).pipe(
     Effect.catchCause((cause) => {

@@ -12,17 +12,26 @@ import {
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import { RpcTest } from "effect/unstable/rpc";
-import { persistenceMemory } from "../src/persistence/Sqlite.ts";
-import { ThreadPersistence } from "../src/persistence/ThreadPersistence.ts";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { persistenceFromFile, persistenceMemory } from "../src/persistence/Sqlite.ts";
+import {
+  ThreadPersistence,
+  threadPersistenceMemory,
+} from "../src/persistence/ThreadPersistence.ts";
 import { Provider } from "../src/Provider.ts";
 import { providerHealthMemory } from "../src/ProviderHealth.ts";
 import { RpcHandlersLive } from "../src/RpcLive.ts";
 import { serverSettingsMemory } from "../src/ServerSettings.ts";
-import { pendingSnapshots } from "./testLayers.ts";
+import { pendingSnapshots, testConfig } from "./testLayers.ts";
 
 const threadA = ThreadId.make("thread-a");
 const threadB = ThreadId.make("thread-b");
 const sessionId = SessionId.make("sess-1");
+
+const workspacePersistence = (filename: string, workspace: string) =>
+  persistenceFromFile(filename).pipe(Layer.provide(testConfig({ BERNISE_WORKSPACE: workspace })));
 
 describe("titleFromPrompt", () => {
   it("collapses whitespace and truncates long prompts", () => {
@@ -94,6 +103,48 @@ describe("ThreadPersistence", () => {
     }).pipe(Effect.provide(persistenceMemory)),
   );
 
+  it.effect("archives a thread out of the list and restores it", () =>
+    Effect.gen(function* () {
+      const threads = yield* ThreadPersistence;
+      yield* threads.appendUser(threadA, "keep me");
+      const archived = yield* threads.archiveThread(threadA);
+      expect(archived.id).toBe(threadA);
+      expect(yield* threads.listThreads).toEqual([]);
+      expect((yield* threads.listArchivedThreads).map((thread) => thread.id)).toEqual([threadA]);
+      expect((yield* threads.getThread(threadA)).messages.map((message) => message.text)).toEqual([
+        "keep me",
+      ]);
+      expect(yield* threads.getResumeCursor(threadA)).toBeUndefined();
+      const restored = yield* threads.restoreThread(threadA);
+      expect(restored.id).toBe(threadA);
+      expect((yield* threads.listThreads).map((thread) => thread.id)).toEqual([threadA]);
+      expect(yield* threads.listArchivedThreads).toEqual([]);
+    }).pipe(Effect.provide(persistenceMemory)),
+  );
+
+  it.effect("archives and restores in the in-memory persistence layer", () =>
+    Effect.gen(function* () {
+      const threads = yield* ThreadPersistence;
+      yield* threads.appendUser(threadA, "memory archive");
+      yield* threads.setResumeCursor(threadA, "codex-keep");
+      yield* threads.archiveThread(threadA);
+      expect(yield* threads.listThreads).toEqual([]);
+      expect(yield* threads.getResumeCursor(threadA)).toBe("codex-keep");
+      yield* threads.restoreThread(threadA);
+      expect((yield* threads.listThreads).map((thread) => thread.id)).toEqual([threadA]);
+      expect(yield* threads.getResumeCursor(threadA)).toBe("codex-keep");
+    }).pipe(Effect.provide(threadPersistenceMemory)),
+  );
+
+  it.effect("fails to archive an unknown thread", () =>
+    Effect.gen(function* () {
+      const threads = yield* ThreadPersistence;
+      expect(yield* threads.archiveThread(threadA).pipe(Effect.flip)).toEqual(
+        new PersistenceError({ message: `Unknown thread ${threadA}` }),
+      );
+    }).pipe(Effect.provide(persistenceMemory)),
+  );
+
   it.effect("backfills New thread titles from the first user message", () =>
     Effect.gen(function* () {
       const threads = yield* ThreadPersistence;
@@ -103,6 +154,30 @@ describe("ThreadPersistence", () => {
       expect(listed[0]?.title).toBe("name this after me");
     }).pipe(Effect.provide(persistenceMemory)),
   );
+
+  it.effect("isolates threads and resume cursors by workspace", () => {
+    const root = mkdtempSync(join(tmpdir(), "bernise-thread-workspaces-"));
+    const filename = join(root, "state.sqlite");
+    const workspaceA = join(root, "project-a");
+    const workspaceB = join(root, "project-b");
+    return Effect.gen(function* () {
+      yield* Effect.gen(function* () {
+        const threads = yield* ThreadPersistence;
+        yield* threads.appendUser(threadA, "only in project a");
+        yield* threads.setResumeCursor(threadA, "codex-project-a");
+      }).pipe(Effect.provide(workspacePersistence(filename, workspaceA)));
+
+      yield* Effect.gen(function* () {
+        const threads = yield* ThreadPersistence;
+        expect(yield* threads.listThreads).toEqual([]);
+        expect((yield* threads.getThread(threadA)).messages).toEqual([]);
+        expect(yield* threads.getResumeCursor(threadA)).toBeUndefined();
+        expect(yield* threads.renameThread(threadA, "leak").pipe(Effect.flip)).toEqual(
+          new PersistenceError({ message: `Unknown thread ${threadA}` }),
+        );
+      }).pipe(Effect.provide(workspacePersistence(filename, workspaceB)));
+    });
+  });
 });
 
 const rpcLayer = RpcHandlersLive.pipe(
@@ -147,6 +222,27 @@ describe("SendTurn transcript persistence", () => {
       expect(listed.threads).toHaveLength(1);
       expect(listed.threads[0]?.id).toBe(threadA);
       expect(listed.threads[0]?.title).toBe("hello");
+    }).pipe(Effect.provide(rpcLayer)),
+  );
+
+  it.effect("archives a thread out of ListThreads and restores it", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(BerniseRpcs);
+      yield* client.StartSession({ threadId: threadA });
+      yield* client.SendTurn({
+        sessionId,
+        prompt: "hello",
+      });
+      const archived = yield* client.ArchiveThread({ threadId: threadA });
+      expect(archived.id).toBe(threadA);
+      expect((yield* client.ListThreads()).threads).toEqual([]);
+      expect((yield* client.ListArchivedThreads()).threads.map((thread) => thread.id)).toEqual([
+        threadA,
+      ]);
+      const restored = yield* client.RestoreThread({ threadId: threadA });
+      expect(restored.id).toBe(threadA);
+      expect((yield* client.ListThreads()).threads.map((thread) => thread.id)).toEqual([threadA]);
+      expect((yield* client.ListArchivedThreads()).threads).toEqual([]);
     }).pipe(Effect.provide(rpcLayer)),
   );
 });
