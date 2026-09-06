@@ -43,6 +43,8 @@ import {
   compactRelativeTime,
   filterThreadItems,
   listThreadItems,
+  threadItemTitle,
+  threadTabTooltip,
   composerFocusNonceAtom,
   newThreadAtom,
   switchThreadAtom,
@@ -764,7 +766,7 @@ describe("filterThreadItems", () => {
 describe("compactRelativeTime", () => {
   const now = Date.parse("2026-09-03T22:00:00.000Z");
 
-  it("compacts recent stamps the way the sidebar rows do", () => {
+  it("compacts recent stamps the way thread tab tooltips do", () => {
     expect(compactRelativeTime("2026-09-03T21:59:20.000Z", now)).toBe("now");
     expect(compactRelativeTime("2026-09-03T21:55:00.000Z", now)).toBe("5m");
     expect(compactRelativeTime("2026-09-03T19:00:00.000Z", now)).toBe("3h");
@@ -774,5 +776,42 @@ describe("compactRelativeTime", () => {
 
   it("returns empty for unparseable stamps", () => {
     expect(compactRelativeTime("nope", now)).toBe("");
+  });
+});
+
+describe("threadTabTooltip", () => {
+  const now = Date.parse("2026-09-03T22:00:00.000Z");
+
+  it("keeps the draft label without a timestamp", () => {
+    expect(threadTabTooltip({ kind: "draft", threadId: ThreadId.make("draft") }, now)).toBe(
+      "new thread",
+    );
+  });
+
+  it("puts the relative stamp on the tooltip, not the label", () => {
+    const item = {
+      kind: "thread" as const,
+      thread: new ThreadShell({
+        id: ThreadId.make("a"),
+        title: "Grill the cache",
+        createdAt: "2026-09-03T21:00:00.000Z",
+        updatedAt: "2026-09-03T21:55:00.000Z",
+      }),
+    };
+    expect(threadItemTitle(item)).toBe("Grill the cache");
+    expect(threadTabTooltip(item, now)).toBe("Grill the cache · 5m");
+  });
+
+  it("falls back to the title when the stamp cannot be parsed", () => {
+    const item = {
+      kind: "thread" as const,
+      thread: new ThreadShell({
+        id: ThreadId.make("a"),
+        title: "Grill",
+        createdAt: "nope",
+        updatedAt: "nope",
+      }),
+    };
+    expect(threadTabTooltip(item, now)).toBe("Grill");
   });
 });

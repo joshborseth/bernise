@@ -1,4 +1,4 @@
-import { ThreadId, ThreadShell, defaultThreadTitle } from "@bernise/contracts";
+import { ThreadId, ThreadShell } from "@bernise/contracts";
 import { Cause, Effect } from "effect";
 import { Atom } from "effect/unstable/reactivity";
 import {
@@ -107,24 +107,21 @@ export const compactRelativeTime = (iso: string, now = Date.now()): string => {
   );
 };
 
+export const threadTabTooltip = (item: ThreadListItem, now = Date.now()): string => {
+  const title = threadItemTitle(item);
+  if (item.kind !== "thread") {
+    return title;
+  }
+  const time = compactRelativeTime(item.thread.updatedAt, now);
+  return time.length === 0 ? title : `${title} · ${time}`;
+};
+
 export const threadRenameAtom = Atom.make<
   { readonly threadId: ThreadId; readonly draft: string } | undefined
 >(undefined);
 
 /** Incremented when the composer should receive focus (e.g. New thread). */
 export const composerFocusNonceAtom = Atom.make(0);
-
-export const activeThreadTitleAtom = Atom.make((get) => {
-  const activeId = get(activeThreadIdAtom);
-  const listed = get(threadsAtom).find((thread) => thread.id === activeId);
-  if (listed !== undefined) {
-    return listed.title;
-  }
-  if (activeId !== undefined) {
-    return defaultThreadTitle;
-  }
-  return "station";
-});
 
 export const isDraftThreadAtom = Atom.make((get) => {
   const activeId = get(activeThreadIdAtom);

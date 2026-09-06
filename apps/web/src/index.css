@@ -437,14 +437,65 @@ body::after {
   }
 }
 
-.threads-pane,
+.bernise-shell {
+  --tab-strip-height: 2.75rem;
+  display: grid;
+  grid-template-columns: 24% minmax(0, 1fr) 44%;
+  grid-template-rows: var(--tab-strip-height) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bernise-shell-file-chrome,
+.bernise-shell-thread-tabs,
+.bernise-shell-explorer,
+.bernise-shell-mascot,
+.bernise-shell-conversation {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.bernise-shell-file-chrome {
+  grid-column: 1 / 3;
+  grid-row: 1;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 94%, white);
+}
+
+.bernise-shell-thread-tabs {
+  grid-column: 3;
+  grid-row: 1;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-elev) 94%, white);
+  box-shadow: inset 1px 0 0 color-mix(in srgb, white 55%, transparent);
+}
+
+.bernise-shell-explorer {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.bernise-shell-mascot {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.bernise-shell-conversation {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.explorer-pane,
 .thread-pane {
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--peach) 16%, transparent), transparent 7.5rem),
     color-mix(in srgb, var(--bg-elev) 94%, white);
 }
 
-.threads-pane {
+.explorer-pane {
   border-right: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
   box-shadow: inset -1px 0 0 color-mix(in srgb, white 55%, transparent);
 }

@@ -2,8 +2,9 @@ import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { BerniseMascot, deriveBerniseMood } from "./mascot/index.ts";
+import { ExplorerColumn } from "./components/ExplorerColumn.tsx";
 import { PersonaConfig } from "./components/PersonaConfig.tsx";
-import { ThreadSidebar } from "./components/ThreadSidebar.tsx";
+import { ThreadStrip } from "./components/ThreadStrip.tsx";
 import {
   formatError,
   holdingReplyAtom,
@@ -11,10 +12,9 @@ import {
   speakKeyAtom,
   visibleMessagesAtom,
 } from "./chat.ts";
-import { activeThreadTitleAtom, bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
+import { bootThreadsAtom, composerFocusNonceAtom } from "./threads.ts";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { ResizablePanel, ResizablePanelGroup } from "~/components/ui/resizable";
 import {
   Select,
   SelectContent,
@@ -55,7 +55,7 @@ const writeDevFps = (on: boolean): void => {
   }
 };
 
-const threadPaneClass = "thread-pane flex h-full min-h-0 flex-col px-4 pt-7 pb-[1.15rem]";
+const threadPaneClass = "thread-pane flex h-full min-h-0 flex-col px-4 pt-4 pb-[1.15rem]";
 
 export function App() {
   useAtomValue(bootSettingsAtom);
@@ -76,7 +76,6 @@ function ChatWorkspace() {
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
   const speakKey = useAtomValue(speakKeyAtom);
-  const threadTitle = useAtomValue(activeThreadTitleAtom);
   const [speakResult, speak] = useAtom(speakAtom);
   const voicing = useAtomValue(speakingAtom);
   const holdingReply = useAtomValue(holdingReplyAtom);
@@ -160,14 +159,6 @@ function ChatWorkspace() {
 
   const thread = (
     <section className={threadPaneClass}>
-      <header className="mb-1.5 flex flex-none items-start gap-4">
-        <div className="min-w-0">
-          <p className="m-0 text-[0.72rem] tracking-[0.16em] text-muted-foreground uppercase">
-            {threadTitle}
-          </p>
-        </div>
-      </header>
-
       <div
         className="grid flex-1 content-start gap-[0.7rem] overflow-y-auto px-[0.15rem] py-1 pb-2 empty:hidden"
         aria-live="polite"
@@ -272,64 +263,18 @@ function ChatWorkspace() {
     </section>
   );
 
-  const station = (
-    <div className="relative h-full min-h-0">
-      <ResizablePanelGroup
-        id="bernise-station"
-        orientation="horizontal"
-        className="h-full"
-        disableCursor
-        disabled
-        resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
-      >
-        <ResizablePanel
-          id="bernise"
-          defaultSize="42%"
-          minSize="12rem"
-          className="h-full min-h-0 overflow-hidden"
-        >
-          {mascot}
-        </ResizablePanel>
-        <ResizablePanel
-          id="thread"
-          defaultSize="58%"
-          minSize="58%"
-          maxSize="58%"
-          className="h-full min-h-0 min-w-0 overflow-hidden"
-        >
-          {thread}
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
-  );
-
   const shell = (
-    <ResizablePanelGroup
-      id="bernise-shell"
-      orientation="horizontal"
-      className="h-full"
-      disableCursor
-      disabled
-      resizeTargetMinimumSize={{ coarse: 0, fine: 0 }}
-    >
-      <ResizablePanel
-        id="threads"
-        defaultSize="24%"
-        minSize="24%"
-        maxSize="24%"
-        className="h-full min-h-0 min-w-0 overflow-hidden"
-      >
-        <ThreadSidebar onOpenPersona={() => setPersonaOpen(true)} footerExtra={fpsButton} />
-      </ResizablePanel>
-      <ResizablePanel
-        id="station"
-        defaultSize="76%"
-        minSize="64%"
-        className="h-full min-h-0 min-w-0"
-      >
-        {station}
-      </ResizablePanel>
-    </ResizablePanelGroup>
+    <div className="bernise-shell">
+      <div className="bernise-shell-file-chrome" aria-hidden="true" />
+      <div className="bernise-shell-thread-tabs">
+        <ThreadStrip />
+      </div>
+      <div className="bernise-shell-explorer">
+        <ExplorerColumn onOpenPersona={() => setPersonaOpen(true)} footerExtra={fpsButton} />
+      </div>
+      <div className="bernise-shell-mascot">{mascot}</div>
+      <div className="bernise-shell-conversation">{thread}</div>
+    </div>
   );
 
   return (
