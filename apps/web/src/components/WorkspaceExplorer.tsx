@@ -27,6 +27,8 @@ import {
   expandedWorkspaceDirectoriesAtom,
   isSelectableWorkspaceEntry,
   isWorkspaceDirectoryExpanded,
+  openWorkspaceFile,
+  openWorkspaceFilesAtom,
   toggleWorkspaceDirectoryExpanded,
   workspaceAtom,
   workspaceDirectoryAtom,
@@ -44,7 +46,8 @@ export function WorkspaceExplorer({
   const workspace = useAtomValue(workspaceAtom);
   const listing = useAtomValue(workspaceDirectoryAtom(workspaceRootPath));
   const [epoch, setEpoch] = useAtom(workspaceDirectoryEpochAtom(workspaceRootPath));
-  const [activePath, setActivePath] = useAtom(activeWorkspaceEntryAtom);
+  const activePath = useAtomValue(activeWorkspaceEntryAtom);
+  const [openFiles, setOpenFiles] = useAtom(openWorkspaceFilesAtom);
   const [expanded, setExpanded] = useAtom(expandedWorkspaceDirectoriesAtom);
 
   return (
@@ -85,7 +88,7 @@ export function WorkspaceExplorer({
           }}
           onSelect={(entry) => {
             if (isSelectableWorkspaceEntry(entry.kind)) {
-              setActivePath(entry.path);
+              setOpenFiles(openWorkspaceFile(openFiles, entry.path));
             }
           }}
         />

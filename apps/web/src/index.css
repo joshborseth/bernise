@@ -432,9 +432,15 @@ body::after {
   border-right: 1px solid var(--line);
 }
 
-.thread-strip {
+.thread-strip,
+.file-strip {
+  min-height: 2.5rem;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
+}
+
+.thread-strip {
+  border-left: 1px solid var(--line);
 }
 
 .thread-pane {
