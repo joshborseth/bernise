@@ -1,3 +1,4 @@
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
@@ -42,6 +43,9 @@ import { useListen } from "./listen/useListen.ts";
 import { speakingAtom } from "./voice/state.ts";
 import { useBerniseVoice } from "./voice/useVoice.ts";
 import { useThreadHotkeys } from "./hooks/use-thread-hotkeys.ts";
+import { ShortcutsDialog } from "./components/ShortcutsDialog.tsx";
+import { Kbd } from "~/components/ui/kbd";
+import { shortcutsHotkey } from "./hotkeys.ts";
 import {
   desktopBridge,
   type BerniseDesktopBridge,
@@ -214,6 +218,7 @@ function WorkspaceApp({ onOpenProject }: { readonly onOpenProject?: (() => void)
 
 function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void) | undefined }) {
   const [personaOpen, setPersonaOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [composerFocused, setComposerFocused] = useState(false);
   const visibleMessages = useAtomValue(visibleMessagesAtom);
@@ -225,6 +230,15 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
   const holdingReply = useAtomValue(holdingReplyAtom);
   useBerniseVoice();
   useThreadHotkeys();
+  useHotkeys([
+    {
+      hotkey: shortcutsHotkey,
+      callback: () => {
+        setShortcutsOpen((open) => !open);
+      },
+      options: { meta: { name: "Keyboard shortcuts" } },
+    },
+  ]);
   const settings = useAtomValue(settingsAtom);
   const modelsResult = useAtomValue(modelsResultAtom);
   const modelView = composerModelView(modelsResult, settings.codex.model);
@@ -393,8 +407,12 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
             size="lg"
             className="self-center tracking-[0.04em]"
             disabled={!canSpeak}
+            aria-label="Speak (Enter)"
           >
             {pending ? "Thinking…" : "Speak"}
+            {pending ? null : (
+              <Kbd className="ml-1 bg-primary-foreground/15 text-primary-foreground">Enter</Kbd>
+            )}
           </Button>
         </div>
         {modelView.kind === "error" ? (
@@ -508,6 +526,9 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
       >
         <WorkspacePane
           onOpenPersona={() => setPersonaOpen(true)}
+          onOpenShortcuts={() => {
+            setShortcutsOpen(true);
+          }}
           onOpenProject={onOpenProject}
           projectSwitchDisabled={pending}
           footerExtra={fpsButton}
@@ -531,6 +552,7 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
     <SidebarInset className="h-full min-h-0 overflow-hidden bg-transparent">
       {shell}
       <PersonaConfig open={personaOpen} onOpenChange={setPersonaOpen} />
+      <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
     </SidebarInset>
   );
 }

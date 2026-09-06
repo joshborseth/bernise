@@ -1,4 +1,4 @@
-import { SettingsIcon } from "lucide-react";
+import { KeyboardIcon, SettingsIcon } from "lucide-react";
 import { type ReactNode } from "react";
 import { WorkspaceExplorer } from "./WorkspaceExplorer.tsx";
 import {
@@ -7,14 +7,18 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
+import { Kbd } from "~/components/ui/kbd";
+import { formatHotkeyCaption, shortcutsHotkey } from "../hotkeys.ts";
 
 export function WorkspacePane({
   onOpenPersona,
+  onOpenShortcuts,
   onOpenProject,
   projectSwitchDisabled,
   footerExtra,
 }: {
   readonly onOpenPersona: () => void;
+  readonly onOpenShortcuts: () => void;
   readonly onOpenProject?: (() => void) | undefined;
   readonly projectSwitchDisabled?: boolean | undefined;
   readonly footerExtra?: ReactNode;
@@ -28,6 +32,13 @@ export function WorkspacePane({
       <SidebarFooter className="border-t border-sidebar-border/80">
         <div className="flex items-end gap-2">
           <SidebarMenu className="min-w-0 flex-1">
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={onOpenShortcuts}>
+                <KeyboardIcon />
+                <span className="min-w-0 flex-1 truncate">Shortcuts</span>
+                <Kbd className="ml-auto shrink-0">{formatHotkeyCaption(shortcutsHotkey)}</Kbd>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={onOpenPersona} tooltip="Bernise Persona">
                 <SettingsIcon />
