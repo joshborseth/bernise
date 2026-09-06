@@ -14,7 +14,9 @@ import {
   threadItemTitle,
   type ThreadListItem,
 } from "../threads.ts";
+import { formatHotkeyCaption, archiveThreadHotkey, newThreadHotkey } from "../hotkeys.ts";
 import { Button } from "~/components/ui/button";
+import { Kbd } from "~/components/ui/kbd";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +45,7 @@ export function ThreadStrip() {
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label="New thread"
+              aria-label={`New thread (${formatHotkeyCaption(newThreadHotkey)})`}
               className="text-muted-foreground hover:text-foreground"
               onClick={() => {
                 newThread();
@@ -53,15 +55,23 @@ export function ThreadStrip() {
         >
           <SquarePenIcon />
         </TooltipTrigger>
-        <TooltipContent side="bottom">New thread</TooltipContent>
+        <TooltipContent side="bottom">
+          New thread
+          <Kbd>{formatHotkeyCaption(newThreadHotkey)}</Kbd>
+        </TooltipContent>
       </Tooltip>
       <div
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:thin]"
         role="tablist"
         aria-label="Open threads"
       >
-        {items.map((item) => (
-          <ThreadChip key={threadItemId(item)} item={item} activeId={activeId} />
+        {items.map((item, index) => (
+          <ThreadChip
+            key={threadItemId(item)}
+            item={item}
+            activeId={activeId}
+            jumpIndex={index < 9 ? index + 1 : undefined}
+          />
         ))}
       </div>
       {archived.length > 0 ? <ArchivedMenu /> : null}
@@ -72,9 +82,11 @@ export function ThreadStrip() {
 function ThreadChip({
   item,
   activeId,
+  jumpIndex,
 }: {
   readonly item: ThreadListItem;
   readonly activeId: ThreadId | undefined;
+  readonly jumpIndex: number | undefined;
 }) {
   const threadId = threadItemId(item);
   const title = threadItemTitle(item);
@@ -82,6 +94,9 @@ function ThreadChip({
   const draft = item.kind === "draft";
   const [, switchThread] = useAtom(switchThreadAtom);
   const [, archiveThread] = useAtom(archiveThreadAtom);
+  const jumpKeys =
+    jumpIndex === undefined ? undefined : formatHotkeyCaption(`Mod+${String(jumpIndex)}`);
+  const archiveKeys = formatHotkeyCaption(archiveThreadHotkey);
 
   return (
     <div
@@ -98,30 +113,41 @@ function ThreadChip({
     >
       <button
         type="button"
-        className="min-w-0 flex-1 truncate px-2.5 py-1 text-left"
-        title={title}
+        className="flex min-w-0 flex-1 items-center gap-1 truncate px-2.5 py-1 text-left"
+        aria-label={jumpKeys === undefined ? title : `${title}, switch with ${jumpKeys}`}
         onClick={() => {
           switchThread(threadId);
         }}
       >
-        {title}
+        {jumpIndex !== undefined ? <Kbd className="shrink-0">{jumpIndex}</Kbd> : null}
+        <span className="min-w-0 truncate">{title}</span>
       </button>
       {item.kind === "thread" ? (
-        <button
-          type="button"
-          className={cn(
-            "mr-1 rounded-full p-0.5 hover:bg-background/70",
-            active
-              ? "text-foreground/75 hover:text-foreground"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          aria-label={`Archive ${title}`}
-          onClick={() => {
-            archiveThread(threadId);
-          }}
-        >
-          <XIcon className="size-3" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className={cn(
+                  "mr-1 rounded-full p-0.5 hover:bg-background/70",
+                  active
+                    ? "text-foreground/75 hover:text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                aria-label={active ? `Archive ${title} (${archiveKeys})` : `Archive ${title}`}
+                onClick={() => {
+                  archiveThread(threadId);
+                }}
+              />
+            }
+          >
+            <XIcon className="size-3" />
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            Archive thread
+            {active ? <Kbd>{archiveKeys}</Kbd> : null}
+          </TooltipContent>
+        </Tooltip>
       ) : null}
     </div>
   );

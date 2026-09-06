@@ -19,6 +19,7 @@
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@ricky0123/vad-web": "^0.0.29",
+    "@tanstack/hotkeys": "0.8.0",
     "@tanstack/react-hotkeys": "^0.10.0",
     "class-variance-authority": "^0.7.1",
     "effect": "rc",

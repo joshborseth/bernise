@@ -6,7 +6,8 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { Kbd } from "~/components/ui/kbd";
-import { listedHotkeys } from "../hotkeys.ts";
+import { useHotkeyRegistrations } from "@tanstack/react-hotkeys";
+import { labeledHotkeyRows } from "../hotkeys.ts";
 
 export function ShortcutsDialog({
   open,
@@ -15,7 +16,13 @@ export function ShortcutsDialog({
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
 }) {
-  const listed = listedHotkeys(navigator.platform);
+  const { hotkeys } = useHotkeyRegistrations();
+  const listed = labeledHotkeyRows(
+    hotkeys.map((registration) => ({
+      hotkey: registration.hotkey,
+      label: registration.options.meta?.name,
+    })),
+  );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm gap-3 sm:max-w-sm">
@@ -25,7 +32,7 @@ export function ShortcutsDialog({
         </DialogHeader>
         <ul className="m-0 grid list-none gap-1 p-0">
           {listed.map((item) => (
-            <li key={item.id} className="flex items-center justify-between gap-4 py-1">
+            <li key={item.label} className="flex items-center justify-between gap-4 py-1">
               <span className="text-sm">{item.label}</span>
               <Kbd>{item.keys}</Kbd>
             </li>

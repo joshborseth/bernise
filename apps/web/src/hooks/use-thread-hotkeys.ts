@@ -10,6 +10,7 @@ import {
   switchThreadAtom,
   threadIdAtHotkeyIndex,
 } from "../threads.ts";
+import { archiveThreadHotkey, newThreadHotkey } from "../hotkeys.ts";
 
 const threadDigitHotkeys = [
   "Mod+1",
@@ -33,14 +34,14 @@ export function useThreadHotkeys(): void {
 
   useHotkeys([
     {
-      hotkey: "Mod+T",
+      hotkey: newThreadHotkey,
       callback: () => {
         newThread();
       },
       options: { meta: { name: "New thread" } },
     },
     {
-      hotkey: "Mod+W",
+      hotkey: archiveThreadHotkey,
       callback: () => {
         const action = closeActiveThread(items, activeId);
         if (action === undefined) {
