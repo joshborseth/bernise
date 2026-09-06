@@ -25,9 +25,63 @@ export const workspaceDirectoryAtom = Atom.family((path: string) =>
     .pipe(Atom.keepAlive),
 );
 
-export const activeWorkspaceEntryAtom = Atom.make<string | undefined>(undefined).pipe(
+export type OpenWorkspaceFiles = {
+  readonly paths: ReadonlyArray<string>;
+  readonly active: string | undefined;
+};
+
+export const emptyOpenWorkspaceFiles: OpenWorkspaceFiles = {
+  paths: [],
+  active: undefined,
+};
+
+export const openWorkspaceFile = (open: OpenWorkspaceFiles, path: string): OpenWorkspaceFiles => {
+  if (open.paths.includes(path)) {
+    return { paths: open.paths, active: path };
+  }
+  return { paths: [...open.paths, path], active: path };
+};
+
+export const closeWorkspaceFile = (open: OpenWorkspaceFiles, path: string): OpenWorkspaceFiles => {
+  const index = open.paths.indexOf(path);
+  if (index === -1) {
+    return open;
+  }
+  const paths = open.paths.filter((candidate) => candidate !== path);
+  if (open.active !== path) {
+    return { paths, active: open.active };
+  }
+  return { paths, active: paths[index] ?? paths[index - 1] };
+};
+
+export const workspaceFileBasename = (path: string): string => {
+  const slash = path.lastIndexOf("/");
+  return slash === -1 ? path : path.slice(slash + 1);
+};
+
+export const workspaceFileTabLabel = (path: string, openPaths: ReadonlyArray<string>): string => {
+  const basename = workspaceFileBasename(path);
+  const clash = openPaths.some(
+    (other) => other !== path && workspaceFileBasename(other) === basename,
+  );
+  if (!clash) {
+    return basename;
+  }
+  const slash = path.lastIndexOf("/");
+  if (slash === -1) {
+    return basename;
+  }
+  const parent = path.slice(0, slash);
+  const parentSlash = parent.lastIndexOf("/");
+  const parentName = parentSlash === -1 ? parent : parent.slice(parentSlash + 1);
+  return `${parentName}/${basename}`;
+};
+
+export const openWorkspaceFilesAtom = Atom.make<OpenWorkspaceFiles>(emptyOpenWorkspaceFiles).pipe(
   Atom.keepAlive,
 );
+
+export const activeWorkspaceEntryAtom = Atom.make((get) => get(openWorkspaceFilesAtom).active);
 
 export const workspaceFileEpochAtom = Atom.family((_path: string) =>
   Atom.make(0).pipe(Atom.keepAlive),
