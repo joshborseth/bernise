@@ -434,7 +434,7 @@ body::after {
 
 .thread-strip,
 .file-strip {
-  min-height: 2.5rem;
+  min-height: 3rem;
   background: var(--bg-elev);
   border-bottom: 1px solid var(--line);
 }

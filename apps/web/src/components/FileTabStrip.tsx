@@ -12,10 +12,7 @@ export function FileTabStrip() {
   const [openFiles, setOpenFiles] = useAtom(openWorkspaceFilesAtom);
 
   return (
-    <div
-      className="file-strip flex min-h-0 min-w-0 items-center gap-1 px-2 py-1.5"
-      aria-label="Open files"
-    >
+    <div className="file-strip flex min-w-0 items-center gap-1 px-2 py-1.5" aria-label="Open files">
       <div
         className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:thin]"
         role="tablist"
