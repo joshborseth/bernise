@@ -13,7 +13,7 @@ export function FileTabStrip() {
 
   return (
     <div
-      className="file-strip flex h-full min-h-0 min-w-0 items-center gap-1 px-2 py-1.5"
+      className="file-strip flex min-h-0 min-w-0 items-center gap-1 px-2 py-1.5"
       aria-label="Open files"
     >
       <div

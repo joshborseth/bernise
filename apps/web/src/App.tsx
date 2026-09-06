@@ -475,12 +475,10 @@ function ChatWorkspace({ onOpenProject }: { readonly onOpenProject?: (() => void
         gridTemplateRows: "auto minmax(0, 1fr)",
       }}
     >
-      <div
-        className={cn("min-h-0 min-w-0 overflow-hidden", fileOpen ? "col-span-3" : "col-span-2")}
-      >
+      <div className={cn("min-w-0", fileOpen ? "col-span-3" : "col-span-2")}>
         <FileTabStrip />
       </div>
-      <div className="min-h-0 min-w-0 overflow-hidden">
+      <div className="min-w-0">
         <ThreadStrip />
       </div>
       <div className="min-h-0 min-w-0 overflow-hidden">
