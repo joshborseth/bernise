@@ -1,0 +1,15 @@
+{
+  "name": "@bernise/summary",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@bernise/speakable": "workspace:*"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@bernise/pet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "build": "vp build",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@bernise/attention": "workspace:*",
+    "@bernise/speakable": "workspace:*",
+    "@bernise/summary": "workspace:*",
+    "@huggingface/transformers": "^3.8.1",
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@ricky0123/vad-web": "^0.0.29",
+    "onnxruntime-web": "^1.22.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "three": "^0.185.1",
+    "three-stdlib": "^2.36.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-react": "latest",
+    "tailwindcss": "^4.0.0",
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

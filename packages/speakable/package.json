@@ -1,0 +1,12 @@
+{
+  "name": "@bernise/speakable",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/speakable.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build"
+  }
+}
