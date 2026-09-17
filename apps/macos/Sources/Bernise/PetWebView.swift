@@ -78,6 +78,12 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         }
     }
 
+    func requestAction(_ action: String) {
+        webView.evaluateJavaScript(
+            "window.__bernise && window.__bernise.requestAction(\"\(action)\")"
+        )
+    }
+
     private static func jsBool(_ result: Any?) -> Bool {
         if let value = result as? Bool {
             return value

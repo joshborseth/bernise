@@ -108,6 +108,27 @@ export const summarizeBase64 = (base64: string): string => {
   }
 };
 
+export type PetAction = "litter" | "sleep" | "wake";
+
+const petActionListeners = new Set<(action: PetAction) => void>();
+
+export const subscribePetAction = (listener: (action: PetAction) => void): (() => void) => {
+  petActionListeners.add(listener);
+  return () => {
+    petActionListeners.delete(listener);
+  };
+};
+
+export const requestAction = (action: string): void => {
+  if (action !== "litter" && action !== "sleep" && action !== "wake") {
+    return;
+  }
+  for (const listener of petActionListeners) {
+    listener(action);
+  }
+  playMascotAction(action);
+};
+
 export const nativeAvailable = (): boolean => window.webkit?.messageHandlers?.bernise !== undefined;
 
 export const postNative = (message: unknown): void => {
@@ -188,6 +209,7 @@ export const installHost = (): void => {
     summarizeBase64,
     resetAttention,
     hitTest: hitTestBody,
+    requestAction,
   };
   postNative({ type: "ready" });
 };

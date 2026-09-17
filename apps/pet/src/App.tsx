@@ -5,6 +5,7 @@ import {
   nativeAvailable,
   onAddressedPrompt,
   pushShellJson,
+  requestAction,
   resetAttention,
   setHostState,
   subscribeHost,
@@ -129,6 +130,15 @@ export function App() {
           </button>
           <button type="button" onClick={() => setHostState({ muted: !host.muted })}>
             {host.muted ? "Unmute mic" : "Mute mic"}
+          </button>
+          <button type="button" onClick={() => requestAction("litter")}>
+            Litter box
+          </button>
+          <button type="button" onClick={() => requestAction("sleep")}>
+            Sleep
+          </button>
+          <button type="button" onClick={() => requestAction("wake")}>
+            Wake
           </button>
           <button type="button" onClick={() => setHostState({ perch: "left" })}>
             Peek left

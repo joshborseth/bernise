@@ -29,6 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onPerchChange = { [weak self] _ in
             self?.applyHost()
         }
+        overlay.onPetAction = { [weak self] action in
+            self?.pet.requestAction(action)
+        }
         overlay.installInteraction(pet: pet)
         overlay.makeKeyAndOrderFront(nil)
 

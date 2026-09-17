@@ -25,5 +25,6 @@ interface Window {
     readonly summarizeBase64: (base64: string) => string;
     readonly resetAttention: () => void;
     readonly hitTest: (clientX: number, clientY: number) => boolean;
+    readonly requestAction: (action: string) => void;
   };
 }
