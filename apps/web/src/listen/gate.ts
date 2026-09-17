@@ -24,8 +24,7 @@ export const idleListenGate: ListenGateState = {
   lockUntil: 0,
 };
 
-const wakePattern =
-  /^(?:hey[,.]?\s+)?(?:bernise|bernice|bernie)(?:['’]s)?(?:\s*[,.!?]+)?(?:\s+|$)/i;
+const wakePattern = /^hey[,.]?\s+(?:bernise|bernice|bernie)(?:['’]s)?(?:\s*[,.!?]+)?(?:\s+|$)/i;
 
 export const applyListenGate = (
   state: ListenGateState,

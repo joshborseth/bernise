@@ -23,17 +23,28 @@ describe("applyListenGate", () => {
     });
   });
 
-  it("opens the lock on bernice and bernie aliases without a prompt", () => {
+  it("opens the lock on hey bernice and hey bernie as STT aliases", () => {
     expect(
       applyListenGate(idleListenGate, { now: 0, busy: false, transcript: "hey bernice" }),
     ).toEqual({
       state: { phase: "addressed", lockUntil: listenLockMs },
       prompt: undefined,
     });
-    expect(applyListenGate(idleListenGate, { now: 0, busy: false, transcript: "Bernie" })).toEqual({
+    expect(
+      applyListenGate(idleListenGate, { now: 0, busy: false, transcript: "hey Bernie" }),
+    ).toEqual({
       state: { phase: "addressed", lockUntil: listenLockMs },
       prompt: undefined,
     });
+  });
+
+  it("stays idle unless the utterance starts with hey plus the name", () => {
+    for (const transcript of ["Bernie", "Bernise", "bernise look at this", "okay bernise"]) {
+      expect(applyListenGate(idleListenGate, { now: 0, busy: false, transcript })).toEqual({
+        state: idleListenGate,
+        prompt: undefined,
+      });
+    }
   });
 
   it("sends follow-ups while addressed and refreshes the lock", () => {
