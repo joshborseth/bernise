@@ -1,12 +1,12 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { nativeAvailable, subscribePetAction, type PetAction } from "../host.ts";
+import { subscribePetAction, subscribePointer, type PetAction } from "../host.ts";
 import { startPurr } from "./audio/purr.ts";
 import type { Perch } from "./animation/perchPose.ts";
 import type { BerniseMood } from "./mood.ts";
 import { mascotCameraFov, mascotCameraPosition } from "./scene/camera.ts";
 import { BerniseScene } from "./scene/BerniseScene.tsx";
-import { pointerGoal, setPointerGoal } from "./scene/pointerGoal.ts";
+import { pointerGoalFromClient, type PointerGoal } from "./scene/pointerGoal.ts";
 
 const idleUntilSleepMs = 14_000;
 
@@ -23,7 +23,7 @@ export function BerniseMascot({
   readonly showFps?: boolean;
   readonly fpsParentRef?: RefObject<HTMLElement>;
 }) {
-  const pointer = useRef(pointerGoal);
+  const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageReady, setStageReady] = useState(false);
   const [purring, setPurring] = useState(false);
@@ -84,21 +84,35 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
-    if (nativeAvailable()) {
-      return;
-    }
-    const onMove = (event: PointerEvent) => {
-      const stage = stageRef.current;
-      const rect = stage?.getBoundingClientRect();
-      const cx = rect === undefined ? window.innerWidth / 2 : rect.left + rect.width / 2;
-      const cy = rect === undefined ? window.innerHeight / 2 : rect.top + rect.height * 0.38;
-      setPointerGoal(
-        (event.clientX - cx) / (window.innerWidth * 0.42),
-        -(event.clientY - cy) / (window.innerHeight * 0.42),
+    let hostPointerActive = false;
+    const applyClient = (
+      clientX: number,
+      clientY: number,
+      viewWidth: number,
+      viewHeight: number,
+    ) => {
+      const rect = stageRef.current?.getBoundingClientRect();
+      pointer.current = pointerGoalFromClient(
+        { clientX, clientY },
+        rect === undefined
+          ? undefined
+          : { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        { width: viewWidth, height: viewHeight },
       );
+    };
+    const stopPointer = subscribePointer((next) => {
+      hostPointerActive = true;
+      applyClient(next.clientX, next.clientY, next.viewWidth, next.viewHeight);
+    });
+    const onMove = (event: PointerEvent) => {
+      if (hostPointerActive) {
+        return;
+      }
+      applyClient(event.clientX, event.clientY, window.innerWidth, window.innerHeight);
     };
     window.addEventListener("pointermove", onMove);
     return () => {
+      stopPointer();
       window.removeEventListener("pointermove", onMove);
     };
   }, []);

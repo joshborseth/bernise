@@ -6,6 +6,8 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
     var onReady: (() -> Void)?
     var onTranscript: ((String, String) -> Void)?
     private var ready = false
+    private var pointerTimer: Timer?
+    private var lastPointerKey: (Int, Int, Int, Int)?
 
     override init() {
         let config = WKWebViewConfiguration()
@@ -71,15 +73,6 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         }
     }
 
-    func setPointer(x: Double, y: Double) {
-        let script = String(
-            format: "window.__bernise && window.__bernise.setPointer(%.4f, %.4f)",
-            x,
-            y
-        )
-        webView.evaluateJavaScript(script, completionHandler: nil)
-    }
-
     func requestAction(_ action: String) {
         webView.evaluateJavaScript(
             "window.__bernise && window.__bernise.requestAction(\"\(action)\")"
@@ -96,12 +89,65 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         return false
     }
 
+    private func startPointerFollow() {
+        guard pointerTimer == nil else {
+            followMouse(at: NSEvent.mouseLocation)
+            return
+        }
+        let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+            self?.followMouse(at: NSEvent.mouseLocation)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pointerTimer = timer
+        followMouse(at: NSEvent.mouseLocation)
+    }
+
+    private func followMouse(at screenPoint: NSPoint) {
+        guard ready, let window = webView.window else {
+            return
+        }
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        let viewPoint = webView.convert(windowPoint, from: nil)
+        let clientX = Double(viewPoint.x)
+        let clientY = webView.isFlipped
+            ? Double(viewPoint.y)
+            : Double(webView.bounds.height - viewPoint.y)
+        let screen = NSScreen.screens.first { $0.frame.contains(screenPoint) }
+            ?? window.screen
+            ?? NSScreen.main
+        let viewWidth = Double(screen?.frame.width ?? max(webView.bounds.width, 1))
+        let viewHeight = Double(screen?.frame.height ?? max(webView.bounds.height, 1))
+        let key = (
+            Int((clientX / 2).rounded()),
+            Int((clientY / 2).rounded()),
+            Int(viewWidth.rounded()),
+            Int(viewHeight.rounded())
+        )
+        if let lastPointerKey, lastPointerKey == key {
+            return
+        }
+        lastPointerKey = key
+        let payload: [String: Any] = [
+            "clientX": clientX,
+            "clientY": clientY,
+            "viewWidth": viewWidth,
+            "viewHeight": viewHeight,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8)
+        else {
+            return
+        }
+        webView.evaluateJavaScript("window.__bernise && window.__bernise.setPointer(\(json))")
+    }
+
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else {
             return
         }
         if type == "ready" {
             ready = true
+            startPointerFollow()
             onReady?()
             return
         }

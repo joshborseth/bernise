@@ -3,7 +3,6 @@ import { classifyPrompt, parseThreadDetail, summarizeThread } from "@bernise/sum
 import { hitTestBody } from "./mascot/hitTest.ts";
 import type { BerniseMood } from "./mascot/mood.ts";
 import { parsePerch, type Perch } from "./mascot/animation/perchPose.ts";
-import { setPointerGoal } from "./mascot/scene/pointerGoal.ts";
 
 export type HostState = {
   readonly connected: boolean;
@@ -128,10 +127,6 @@ export const requestAction = (action: string): void => {
   }
 };
 
-export const setPointer = (x: number, y: number): void => {
-  setPointerGoal(x, y);
-};
-
 export const nativeAvailable = (): boolean => window.webkit?.messageHandlers?.bernise !== undefined;
 
 export const postNative = (message: unknown): void => {
@@ -142,16 +137,71 @@ export const onAddressedPrompt = (text: string): void => {
   postNative({ type: "transcript", text, intent: classifyPrompt(text) });
 };
 
+export type HostPointer = {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly viewWidth: number;
+  readonly viewHeight: number;
+};
+
+let hostPointer: HostPointer | undefined;
+const pointerListeners = new Set<(pointer: HostPointer) => void>();
+
+const positiveSize = (value: number | undefined, fallback: number): number =>
+  value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback;
+
+const viewportFallback = (): number => {
+  const width = globalThis.innerWidth;
+  return typeof width === "number" && Number.isFinite(width) && width > 0 ? width : 1;
+};
+
+export const setPointer = (input: {
+  readonly clientX: number;
+  readonly clientY: number;
+  readonly viewWidth?: number;
+  readonly viewHeight?: number;
+}): void => {
+  if (!Number.isFinite(input.clientX) || !Number.isFinite(input.clientY)) {
+    return;
+  }
+  const height = globalThis.innerHeight;
+  const next: HostPointer = {
+    clientX: input.clientX,
+    clientY: input.clientY,
+    viewWidth: positiveSize(input.viewWidth, viewportFallback()),
+    viewHeight: positiveSize(
+      input.viewHeight,
+      typeof height === "number" && Number.isFinite(height) && height > 0
+        ? height
+        : viewportFallback(),
+    ),
+  };
+  hostPointer = next;
+  for (const listener of pointerListeners) {
+    listener(next);
+  }
+};
+
+export const subscribePointer = (listener: (pointer: HostPointer) => void): (() => void) => {
+  pointerListeners.add(listener);
+  if (hostPointer !== undefined) {
+    listener(hostPointer);
+  }
+  return () => {
+    pointerListeners.delete(listener);
+  };
+};
+
 export const installHost = (): void => {
   window.__bernise = {
     setHostState,
+    setPointer,
     pushShellJson,
     pushShellBase64,
     summarizeJson,
     summarizeBase64,
     resetAttention,
     hitTest: hitTestBody,
-    setPointer,
     requestAction,
   };
   postNative({ type: "ready" });
