@@ -21,6 +21,7 @@ export type ListenControls = {
 
 const listenMutedKey = "bernise.listen.muted";
 const tickMs = 500;
+const pendingClipMs = 2_000;
 
 const readMuted = (): boolean => {
   try {
@@ -55,26 +56,54 @@ export const useListen = (input: {
   const busyRef = useRef(false);
   const speakRef = useRef(input.speak);
   const speechRef = useRef(false);
+  const addressedRef = useRef(false);
+  const pendingClipRef = useRef<{ readonly audio: Float32Array; readonly at: number } | undefined>(
+    undefined,
+  );
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
     busyRef.current = input.busy;
     speakRef.current = input.speak;
   }, [input.busy, input.speak]);
 
-  const apply = useCallback((event: { readonly now?: number; readonly transcript?: string }) => {
-    const now = event.now ?? Date.now();
-    const output = applyListenGate(gateRef.current, {
-      now,
-      busy: busyRef.current,
-      ...(speechRef.current ? { speechActive: true } : {}),
-      ...(event.transcript !== undefined ? { transcript: event.transcript } : {}),
-    });
-    gateRef.current = output.state;
-    setAddressed(output.state.phase === "addressed");
-    if (output.prompt !== undefined) {
-      speakRef.current(output.prompt);
-    }
-  }, []);
+  const apply = useCallback(
+    (event: { readonly now?: number; readonly transcript?: string; readonly wake?: boolean }) => {
+      const now = event.now ?? Date.now();
+      const output = applyListenGate(gateRef.current, {
+        now,
+        busy: busyRef.current,
+        ...(speechRef.current ? { speechActive: true } : {}),
+        ...(event.transcript !== undefined ? { transcript: event.transcript } : {}),
+        ...(event.wake === true ? { wake: true } : {}),
+      });
+      gateRef.current = output.state;
+      addressedRef.current = output.state.phase === "addressed";
+      setAddressed(output.state.phase === "addressed");
+      if (output.prompt !== undefined) {
+        speakRef.current(output.prompt);
+      }
+    },
+    [],
+  );
+
+  const transcribe = useCallback(
+    (audio: Float32Array) => {
+      void transcribeUtterance(audio)
+        .then((transcript) => {
+          if (cancelledRef.current || transcript.length === 0) {
+            apply({ now: Date.now() });
+            return;
+          }
+          apply({ now: Date.now(), transcript });
+        })
+        .catch((cause: unknown) => {
+          console.warn("Bernise listen transcribe failed", cause);
+          apply({ now: Date.now() });
+        });
+    },
+    [apply],
+  );
 
   useEffect(() => {
     const timer = globalThis.setInterval(() => {
@@ -85,29 +114,31 @@ export const useListen = (input: {
     };
   }, [apply]);
 
+  /* oxlint-disable react/exhaustive-effect-dependencies -- mute/retry is the session lifetime */
   useEffect(() => {
     if (muted) {
       return;
     }
     void retry;
-    let cancelled = false;
+    cancelledRef.current = false;
     let session: ListenSession | undefined;
     let stream: MediaStream | undefined;
     void (async () => {
       try {
         stream = await requestMicrophone();
-        if (cancelled) {
+        if (cancelledRef.current) {
           stopMicrophone(stream);
           return;
         }
         await warmTranscriber();
-        if (cancelled) {
+        if (cancelledRef.current) {
           stopMicrophone(stream);
           return;
         }
         session = await createListenSession(
           {
             onSpeechStart: () => {
+              pendingClipRef.current = undefined;
               speechRef.current = true;
               setSpeechActive(true);
               apply({ now: Date.now() });
@@ -116,32 +147,39 @@ export const useListen = (input: {
               speechRef.current = false;
               setSpeechActive(false);
               if (busyRef.current) {
+                pendingClipRef.current = undefined;
                 apply({ now: Date.now() });
                 return;
               }
-              void transcribeUtterance(audio)
-                .then((transcript) => {
-                  if (cancelled || transcript.length === 0) {
-                    apply({ now: Date.now() });
-                    return;
-                  }
-                  apply({ now: Date.now(), transcript });
-                })
-                .catch((cause: unknown) => {
-                  console.warn("Bernise listen transcribe failed", cause);
-                  apply({ now: Date.now() });
-                });
+              if (addressedRef.current) {
+                pendingClipRef.current = undefined;
+                transcribe(audio);
+                return;
+              }
+              pendingClipRef.current = { audio, at: Date.now() };
+              apply({ now: Date.now() });
+            },
+            onWake: () => {
+              apply({ now: Date.now(), wake: true });
+              if (speechRef.current || busyRef.current) {
+                return;
+              }
+              const pending = pendingClipRef.current;
+              pendingClipRef.current = undefined;
+              if (pending !== undefined && Date.now() - pending.at < pendingClipMs) {
+                transcribe(pending.audio);
+              }
             },
           },
           stream,
         );
         stream = undefined;
-        if (cancelled) {
+        if (cancelledRef.current) {
           session.destroy();
           return;
         }
         await session.start();
-        if (cancelled) {
+        if (cancelledRef.current) {
           session.destroy();
           return;
         }
@@ -150,7 +188,7 @@ export const useListen = (input: {
         if (stream !== undefined) {
           stopMicrophone(stream);
         }
-        if (cancelled) {
+        if (cancelledRef.current) {
           return;
         }
         if (isMicPermissionError(cause)) {
@@ -162,10 +200,11 @@ export const useListen = (input: {
       }
     })();
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       session?.destroy();
     };
   }, [muted, retry]);
+  /* oxlint-enable react/exhaustive-effect-dependencies */
 
   const status: ListenStatus = muted ? "off" : engineStatus;
 
@@ -182,6 +221,8 @@ export const useListen = (input: {
     setEngineStatus(next ? "off" : "starting");
     if (next) {
       speechRef.current = false;
+      addressedRef.current = false;
+      pendingClipRef.current = undefined;
       setSpeechActive(false);
     }
   }, [engineStatus, muted]);

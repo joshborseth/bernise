@@ -14,7 +14,7 @@ export default defineConfig({
     tsconfigPaths: true,
   },
   optimizeDeps: {
-    exclude: ["@huggingface/transformers"],
+    exclude: ["@huggingface/transformers", "onnxruntime-web"],
   },
   worker: {
     format: "es",

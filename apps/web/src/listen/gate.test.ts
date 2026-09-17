@@ -11,10 +11,32 @@ describe("applyListenGate", () => {
     expect(result).toEqual({ state: idleListenGate, prompt: undefined });
   });
 
-  it("strips a wake and sends the remainder while opening the lock", () => {
+  it("stays idle on a hey bernise transcript without a keyword hit", () => {
     const result = applyListenGate(idleListenGate, {
       now: 1_000,
       busy: false,
+      transcript: "hey bernise look at package.json",
+    });
+    expect(result).toEqual({ state: idleListenGate, prompt: undefined });
+  });
+
+  it("opens the lock on a keyword hit with no transcript", () => {
+    const result = applyListenGate(idleListenGate, {
+      now: 500,
+      busy: false,
+      wake: true,
+    });
+    expect(result).toEqual({
+      state: { phase: "addressed", lockUntil: 500 + listenLockMs },
+      prompt: undefined,
+    });
+  });
+
+  it("strips a wake phrase from the remainder after a keyword hit", () => {
+    const result = applyListenGate(idleListenGate, {
+      now: 1_000,
+      busy: false,
+      wake: true,
       transcript: "hey bernise look at package.json",
     });
     expect(result).toEqual({
@@ -23,35 +45,49 @@ describe("applyListenGate", () => {
     });
   });
 
-  it("opens the lock on hey bernice and hey bernie as STT aliases", () => {
-    expect(
-      applyListenGate(idleListenGate, { now: 0, busy: false, transcript: "hey bernice" }),
-    ).toEqual({
-      state: { phase: "addressed", lockUntil: listenLockMs },
-      prompt: undefined,
+  it("sends the full transcript after a keyword hit when Whisper missed the phrase", () => {
+    const result = applyListenGate(idleListenGate, {
+      now: 0,
+      busy: false,
+      wake: true,
+      transcript: "look at package.json",
     });
-    expect(
-      applyListenGate(idleListenGate, { now: 0, busy: false, transcript: "hey Bernie" }),
-    ).toEqual({
+    expect(result).toEqual({
       state: { phase: "addressed", lockUntil: listenLockMs },
-      prompt: undefined,
+      prompt: "look at package.json",
     });
   });
 
-  it("stays idle unless the utterance starts with hey plus the name", () => {
-    for (const transcript of ["Bernie", "Bernise", "bernise look at this", "okay bernise"]) {
-      expect(applyListenGate(idleListenGate, { now: 0, busy: false, transcript })).toEqual({
-        state: idleListenGate,
-        prompt: undefined,
-      });
-    }
+  it("strips hey bernice and hey bernie remainders after a keyword hit", () => {
+    expect(
+      applyListenGate(idleListenGate, {
+        now: 0,
+        busy: false,
+        wake: true,
+        transcript: "hey bernice",
+      }),
+    ).toEqual({
+      state: { phase: "addressed", lockUntil: listenLockMs },
+      prompt: undefined,
+    });
+    expect(
+      applyListenGate(idleListenGate, {
+        now: 0,
+        busy: false,
+        wake: true,
+        transcript: "hey Bernie check src",
+      }),
+    ).toEqual({
+      state: { phase: "addressed", lockUntil: listenLockMs },
+      prompt: "check src",
+    });
   });
 
   it("sends follow-ups while addressed and refreshes the lock", () => {
     const woke = applyListenGate(idleListenGate, {
       now: 0,
       busy: false,
-      transcript: "hey bernise",
+      wake: true,
     });
     const follow = applyListenGate(woke.state, {
       now: 2_000,
@@ -68,7 +104,7 @@ describe("applyListenGate", () => {
     const woke = applyListenGate(idleListenGate, {
       now: 0,
       busy: false,
-      transcript: "hey bernise",
+      wake: true,
     });
     expect(applyListenGate(woke.state, { now: listenLockMs - 1, busy: false }).state.phase).toBe(
       "addressed",
@@ -83,6 +119,7 @@ describe("applyListenGate", () => {
     const woke = applyListenGate(idleListenGate, {
       now: 0,
       busy: false,
+      wake: true,
       transcript: "hey bernise look at this",
     });
     const ignored = applyListenGate(woke.state, {
@@ -95,17 +132,5 @@ describe("applyListenGate", () => {
     expect(
       applyListenGate(ignored.state, { now: 9_000 + listenLockMs, busy: false }).state.phase,
     ).toBe("idle");
-  });
-
-  it("opens the lock on a wake with no remainder", () => {
-    const result = applyListenGate(idleListenGate, {
-      now: 500,
-      busy: false,
-      transcript: "hey Bernise",
-    });
-    expect(result).toEqual({
-      state: { phase: "addressed", lockUntil: 500 + listenLockMs },
-      prompt: undefined,
-    });
   });
 });

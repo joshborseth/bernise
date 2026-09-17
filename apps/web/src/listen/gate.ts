@@ -10,6 +10,7 @@ export type ListenGateInput = {
   readonly busy: boolean;
   readonly speechActive?: boolean;
   readonly transcript?: string;
+  readonly wake?: boolean;
 };
 
 export type ListenGateOutput = {
@@ -32,22 +33,22 @@ export const applyListenGate = (
 ): ListenGateOutput => {
   const held = holdLock(state, input);
   const transcript = input.transcript?.trim();
-  if (transcript === undefined || transcript.length === 0) {
+  const hasTranscript = transcript !== undefined && transcript.length > 0;
+  const woke = input.wake === true;
+  if (!hasTranscript && !woke) {
     return { state: expireLock(held, input), prompt: undefined };
   }
   if (input.busy) {
     return { state: held, prompt: undefined };
   }
   const current = expireLock(held, input);
-  const wake = stripWake(transcript);
   if (current.phase === "idle") {
-    if (!wake.matched) {
+    if (!woke) {
       return { state: current, prompt: undefined };
     }
-    return openLock(input.now, nonempty(wake.remainder));
+    return openLock(input.now, hasTranscript ? remainderPrompt(transcript) : undefined);
   }
-  const prompt = wake.matched ? wake.remainder : transcript;
-  return openLock(input.now, nonempty(prompt));
+  return openLock(input.now, hasTranscript ? remainderPrompt(transcript) : undefined);
 };
 
 const holdLock = (state: ListenGateState, input: ListenGateInput): ListenGateState => {
@@ -74,6 +75,11 @@ const openLock = (now: number, prompt: string | undefined): ListenGateOutput => 
   state: { phase: "addressed", lockUntil: now + listenLockMs },
   prompt,
 });
+
+const remainderPrompt = (transcript: string): string | undefined => {
+  const wake = stripWake(transcript);
+  return nonempty(wake.matched ? wake.remainder : transcript);
+};
 
 const nonempty = (value: string): string | undefined => (value.length > 0 ? value : undefined);
 

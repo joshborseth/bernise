@@ -1,4 +1,5 @@
 import { MicVAD } from "@ricky0123/vad-web";
+import { createWakeListener, type WakeListener } from "./wake/engine.ts";
 
 const vadAssetPath = "https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.29/dist/";
 const onnxWasmPath = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/";
@@ -19,6 +20,7 @@ export type ListenSession = {
 export type ListenSessionListeners = {
   readonly onSpeechStart: () => void;
   readonly onSpeechEnd: (audio: Float32Array) => void;
+  readonly onWake: () => void;
 };
 
 export const requestMicrophone = (): Promise<MediaStream> =>
@@ -34,6 +36,12 @@ export const createListenSession = async (
   listeners: ListenSessionListeners,
   stream: MediaStream,
 ): Promise<ListenSession> => {
+  let wake: WakeListener | undefined;
+  try {
+    wake = await createWakeListener(stream, listeners.onWake);
+  } catch (cause) {
+    console.warn("Bernise wake listener failed to start", cause);
+  }
   const vad = await MicVAD.new({
     startOnLoad: false,
     baseAssetPath: vadAssetPath,
@@ -49,9 +57,13 @@ export const createListenSession = async (
     },
   });
   return {
-    start: () => vad.start(),
+    start: async () => {
+      await wake?.start();
+      await vad.start();
+    },
     pause: () => vad.pause(),
     destroy: () => {
+      wake?.destroy();
       try {
         vad.destroy();
       } catch {
