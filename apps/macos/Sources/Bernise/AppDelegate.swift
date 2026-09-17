@@ -3,7 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let overlay = OverlayPanel(
-        contentRect: NSRect(x: 40, y: 80, width: 360, height: 420),
+        contentRect: OverlayLayout.defaultFrame,
         styleMask: [.nonactivatingPanel, .borderless],
         backing: .buffered,
         defer: false
@@ -14,7 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let queue = SpeakQueue()
     private var connected = false
     private var muted = false
-    private var clickThrough = true
+    private var mood = "idle"
+    private var speakKey = ""
     private var latestShell: Data?
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -24,9 +25,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.backgroundColor = .clear
         overlay.hasShadow = false
         overlay.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
-        overlay.ignoresMouseEvents = true
-        overlay.isMovableByWindowBackground = true
         overlay.contentView = pet.webView
+        overlay.onPerchChange = { [weak self] _ in
+            self?.applyHost()
+        }
+        overlay.installInteraction(pet: pet)
+        overlay.onPetAction = { [weak self] action in
+            self?.pet.requestAction(action)
+        }
         overlay.makeKeyAndOrderFront(nil)
 
         status.onMute = { [weak self] muted in
@@ -40,10 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         status.onQuit = {
             NSApp.terminate(nil)
         }
-        status.onMove = { [weak self] in
-            guard let self else { return }
-            self.clickThrough.toggle()
-            self.overlay.ignoresMouseEvents = self.clickThrough
+        status.onResetPosition = { [weak self] in
+            self?.overlay.resetPosition()
         }
 
         queue.onStart = { [weak self] speakKey in
@@ -79,11 +83,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyHost(mood: String? = nil, speakKey: String? = nil) {
+        if let mood {
+            self.mood = mood
+        }
+        if let speakKey {
+            self.speakKey = speakKey
+        }
         pet.setHostState(
             connected: connected,
             muted: muted,
-            mood: mood ?? (connected ? "idle" : "idle"),
-            speakKey: speakKey ?? ""
+            mood: self.mood,
+            speakKey: self.speakKey,
+            perch: overlay.perch.rawValue
         )
     }
 

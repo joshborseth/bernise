@@ -1,26 +1,29 @@
 import { Canvas } from "@react-three/fiber";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { nativeAvailable, subscribePetAction, type PetAction } from "../host.ts";
 import { startPurr } from "./audio/purr.ts";
+import type { Perch } from "./animation/perchPose.ts";
 import type { BerniseMood } from "./mood.ts";
 import { mascotCameraFov, mascotCameraPosition } from "./scene/camera.ts";
 import { BerniseScene } from "./scene/BerniseScene.tsx";
-import type { PointerGoal } from "./scene/pointerGoal.ts";
+import { pointerGoal, setPointerGoal } from "./scene/pointerGoal.ts";
 
 const idleUntilSleepMs = 14_000;
-const sleepUntilLitterMs = 8_000;
 
 export function BerniseMascot({
   mood,
   speakKey,
+  perch = "none",
   showFps = false,
   fpsParentRef,
 }: {
   readonly mood: BerniseMood;
   readonly speakKey: string;
+  readonly perch?: Perch;
   readonly showFps?: boolean;
   readonly fpsParentRef?: RefObject<HTMLElement>;
 }) {
-  const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
+  const pointer = useRef(pointerGoal);
   const stageRef = useRef<HTMLDivElement>(null);
   const [stageReady, setStageReady] = useState(false);
   const [purring, setPurring] = useState(false);
@@ -33,7 +36,7 @@ export function BerniseMascot({
   if (awake && sleeping) {
     setSleeping(false);
   }
-  if (awake && usingLitter) {
+  if ((purring || biting || hissing) && usingLitter) {
     setUsingLitter(false);
   }
 
@@ -64,18 +67,34 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
+    return subscribePetAction((action: PetAction) => {
+      if (action === "litter") {
+        setSleeping(false);
+        setUsingLitter(true);
+        return;
+      }
+      if (action === "sleep") {
+        setUsingLitter(false);
+        setSleeping(true);
+        return;
+      }
+      setUsingLitter(false);
+      setSleeping(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (nativeAvailable()) {
+      return;
+    }
     const onMove = (event: PointerEvent) => {
       const stage = stageRef.current;
       const rect = stage?.getBoundingClientRect();
       const cx = rect === undefined ? window.innerWidth / 2 : rect.left + rect.width / 2;
       const cy = rect === undefined ? window.innerHeight / 2 : rect.top + rect.height * 0.38;
-      pointer.current.x = Math.max(
-        -1,
-        Math.min(1, (event.clientX - cx) / (window.innerWidth * 0.42)),
-      );
-      pointer.current.y = Math.max(
-        -1,
-        Math.min(1, -(event.clientY - cy) / (window.innerHeight * 0.42)),
+      setPointerGoal(
+        (event.clientX - cx) / (window.innerWidth * 0.42),
+        -(event.clientY - cy) / (window.innerHeight * 0.42),
       );
     };
     window.addEventListener("pointermove", onMove);
@@ -111,19 +130,6 @@ export function BerniseMascot({
   }, [awake, sleeping, usingLitter]);
 
   useEffect(() => {
-    if (!sleeping || usingLitter) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setSleeping(false);
-      setUsingLitter(true);
-    }, sleepUntilLitterMs);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [sleeping, usingLitter]);
-
-  useEffect(() => {
     if (!purring) {
       return;
     }
@@ -141,10 +147,11 @@ export function BerniseMascot({
           : sleeping
             ? `mascot mascot-${mood} mascot-sleeping`
             : `mascot mascot-${mood}`;
+  const perched = perch !== "none";
 
   return (
     <div
-      className={className}
+      className={perched ? `${className} mascot-perch mascot-perch-${perch}` : className}
       role="img"
       aria-label={
         biting
@@ -161,7 +168,6 @@ export function BerniseMascot({
       }
       aria-pressed={purring}
     >
-      <div className="mascot-halo" aria-hidden="true" />
       {sleeping ? (
         <div className="mascot-zzz" aria-hidden="true">
           <span>z</span>
@@ -203,6 +209,7 @@ export function BerniseMascot({
               hissing={hissing}
               sleeping={sleeping}
               usingLitter={usingLitter}
+              perch={perch}
               reducedMotion={reducedMotion}
               showFps={showFps}
               {...(fpsParentRef === undefined ? {} : { fpsParentRef })}

@@ -17,5 +17,8 @@ interface Window {
     readonly summarizeJson: (json: string) => string;
     readonly summarizeBase64: (base64: string) => string;
     readonly resetAttention: () => void;
+    readonly hitTest: (clientX: number, clientY: number) => boolean;
+    readonly setPointer: (x: number, y: number) => void;
+    readonly requestAction: (action: string) => void;
   };
 }

@@ -1,5 +1,6 @@
 import { ContactShadows, Stats } from "@react-three/drei";
 import type { RefObject } from "react";
+import type { Perch } from "../animation/perchPose.ts";
 import type { BerniseMood } from "../mood.ts";
 import { AnimatedFigure } from "./AnimatedFigure.tsx";
 import { FitCamera } from "./FitCamera.tsx";
@@ -14,6 +15,7 @@ export function BerniseScene({
   hissing,
   sleeping,
   usingLitter,
+  perch,
   reducedMotion,
   showFps,
   fpsParentRef,
@@ -30,6 +32,7 @@ export function BerniseScene({
   readonly hissing: boolean;
   readonly sleeping: boolean;
   readonly usingLitter: boolean;
+  readonly perch: Perch;
   readonly reducedMotion: boolean;
   readonly showFps: boolean;
   readonly fpsParentRef?: RefObject<HTMLElement>;
@@ -43,7 +46,7 @@ export function BerniseScene({
       {import.meta.env.DEV && showFps && fpsParentRef ? (
         <Stats parent={fpsParentRef as RefObject<HTMLElement>} className="dev-fps-stats" />
       ) : null}
-      <FitCamera usingLitter={usingLitter} />
+      <FitCamera usingLitter={usingLitter} perch={perch} />
       <hemisphereLight args={["#eef1f6", "#506477", 0.72]} />
       <ambientLight intensity={0.42} color="#e8eaef" />
       <directionalLight position={[2.4, 3.4, 4.2]} intensity={1.05} color="#f2f4f8" />
@@ -59,22 +62,25 @@ export function BerniseScene({
         hissing={hissing}
         sleeping={sleeping}
         usingLitter={usingLitter}
+        perch={perch}
         reducedMotion={reducedMotion}
         onPurringChange={onPurringChange}
         onBitingChange={onBitingChange}
         onHissingChange={onHissingChange}
         onLitterDone={onLitterDone}
       />
-      <ContactShadows
-        position={[0, -1.2, 0]}
-        opacity={sleeping || usingLitter ? 0.26 : 0.16}
-        scale={8.2}
-        blur={sleeping || usingLitter ? 1.6 : 3.2}
-        far={2.2}
-        resolution={256}
-        frames={reducedMotion ? 1 : Number.POSITIVE_INFINITY}
-        color="#1b1e28"
-      />
+      {perch === "none" ? (
+        <ContactShadows
+          position={[0, -1.2, 0]}
+          opacity={sleeping || usingLitter ? 0.26 : 0.16}
+          scale={8.2}
+          blur={sleeping || usingLitter ? 1.6 : 3.2}
+          far={2.2}
+          resolution={256}
+          frames={reducedMotion ? 1 : Number.POSITIVE_INFINITY}
+          color="#1b1e28"
+        />
+      ) : null}
     </>
   );
 }

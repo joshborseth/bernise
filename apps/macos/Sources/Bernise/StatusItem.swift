@@ -7,7 +7,7 @@ final class StatusItemController {
     var onMute: ((Bool) -> Void)?
     var onReconnect: (() -> Void)?
     var onQuit: (() -> Void)?
-    var onMove: (() -> Void)?
+    var onResetPosition: (() -> Void)?
 
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -38,9 +38,9 @@ final class StatusItemController {
         )
         mute.target = self
         menu.addItem(mute)
-        let move = NSMenuItem(title: "Allow drag", action: #selector(movePet), keyEquivalent: "")
-        move.target = self
-        menu.addItem(move)
+        let reset = NSMenuItem(title: "Reset position", action: #selector(resetPosition), keyEquivalent: "")
+        reset.target = self
+        menu.addItem(reset)
         let reconnect = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
         reconnect.target = self
         menu.addItem(reconnect)
@@ -65,7 +65,7 @@ final class StatusItemController {
         onQuit?()
     }
 
-    @objc private func movePet() {
-        onMove?()
+    @objc private func resetPosition() {
+        onResetPosition?()
     }
 }

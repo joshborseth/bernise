@@ -1,12 +1,16 @@
 import { diffShell, emptyAttention, parseShell, type SpeakEvent } from "@bernise/attention";
 import { classifyPrompt, parseThreadDetail, summarizeThread } from "@bernise/summary";
+import { hitTestBody } from "./mascot/hitTest.ts";
 import type { BerniseMood } from "./mascot/mood.ts";
+import { parsePerch, type Perch } from "./mascot/animation/perchPose.ts";
+import { setPointerGoal } from "./mascot/scene/pointerGoal.ts";
 
 export type HostState = {
   readonly connected: boolean;
   readonly muted: boolean;
   readonly mood: BerniseMood;
   readonly speakKey: string;
+  readonly perch: Perch;
 };
 
 export type HostStatePatch = Partial<HostState>;
@@ -16,6 +20,7 @@ const defaultState = (): HostState => ({
   muted: false,
   mood: "idle",
   speakKey: "",
+  perch: "none",
 });
 
 let hostState: HostState = defaultState();
@@ -39,7 +44,11 @@ const emit = (): void => {
 };
 
 export const setHostState = (patch: HostStatePatch): void => {
-  hostState = { ...hostState, ...patch };
+  hostState = {
+    ...hostState,
+    ...patch,
+    perch: patch.perch === undefined ? hostState.perch : parsePerch(patch.perch),
+  };
   emit();
 };
 
@@ -99,6 +108,30 @@ export const summarizeBase64 = (base64: string): string => {
   }
 };
 
+export type PetAction = "litter" | "sleep" | "wake";
+
+const petActionListeners = new Set<(action: PetAction) => void>();
+
+export const subscribePetAction = (listener: (action: PetAction) => void): (() => void) => {
+  petActionListeners.add(listener);
+  return () => {
+    petActionListeners.delete(listener);
+  };
+};
+
+export const requestAction = (action: string): void => {
+  if (action !== "litter" && action !== "sleep" && action !== "wake") {
+    return;
+  }
+  for (const listener of petActionListeners) {
+    listener(action);
+  }
+};
+
+export const setPointer = (x: number, y: number): void => {
+  setPointerGoal(x, y);
+};
+
 export const nativeAvailable = (): boolean => window.webkit?.messageHandlers?.bernise !== undefined;
 
 export const postNative = (message: unknown): void => {
@@ -117,6 +150,9 @@ export const installHost = (): void => {
     summarizeJson,
     summarizeBase64,
     resetAttention,
+    hitTest: hitTestBody,
+    setPointer,
+    requestAction,
   };
   postNative({ type: "ready" });
 };
