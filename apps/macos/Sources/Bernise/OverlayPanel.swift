@@ -14,7 +14,6 @@ final class OverlayPanel: NSPanel {
     private var grabbedCursor = false
     private var overBody = false
     private var probeGeneration = 0
-    private var lastPointer = (x: 99.0, y: 99.0)
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -88,7 +87,6 @@ final class OverlayPanel: NSPanel {
 
     private func handleLocal(_ event: NSEvent) -> NSEvent? {
         let mouse = NSEvent.mouseLocation
-        pushPointer(at: mouse)
         switch event.type {
         case .mouseMoved:
             updateClickThrough(at: mouse)
@@ -115,7 +113,6 @@ final class OverlayPanel: NSPanel {
 
     private func handleGlobal(_ event: NSEvent) {
         let mouse = NSEvent.mouseLocation
-        pushPointer(at: mouse)
         switch event.type {
         case .mouseMoved, .leftMouseDown:
             updateClickThrough(at: mouse)
@@ -220,15 +217,6 @@ final class OverlayPanel: NSPanel {
         }
         perch = next
         onPerchChange?(next)
-    }
-
-    private func pushPointer(at screenPoint: NSPoint) {
-        let goal = OverlayPosition.lookGoal(mouse: screenPoint, frame: frame)
-        guard abs(goal.x - lastPointer.x) > 0.012 || abs(goal.y - lastPointer.y) > 0.012 else {
-            return
-        }
-        lastPointer = goal
-        pet?.setPointer(x: goal.x, y: goal.y)
     }
 
     private func showPetMenu(at mouse: NSPoint) {

@@ -212,25 +212,8 @@ enum OverlayPosition {
         return next
     }
 
-    static func lookGoal(mouse: NSPoint, frame: NSRect) -> (x: Double, y: Double) {
-        guard let bounds = screenBounds(for: frame, mouse: mouse) else {
-            return (0, 0)
-        }
-        let cat = catCenter(in: frame)
-        let spanX = max(bounds.width * 0.42, 1)
-        let spanY = max(bounds.height * 0.42, 1)
-        return (
-            clampUnit((mouse.x - cat.x) / spanX),
-            clampUnit((mouse.y - cat.y) / spanY)
-        )
-    }
-
     static func catCenter(in frame: NSRect) -> NSPoint {
         NSPoint(x: frame.minX + frame.width * 0.5, y: frame.minY + frame.height * 0.44)
-    }
-
-    private static func clampUnit(_ value: CGFloat) -> Double {
-        Double(Swift.min(Swift.max(value, -1), 1))
     }
 
     private static func screenBounds(for frame: NSRect, mouse: NSPoint?) -> NSRect? {

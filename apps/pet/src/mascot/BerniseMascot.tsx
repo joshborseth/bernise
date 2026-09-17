@@ -1,5 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { subscribePointer } from "../host.ts";
 import {
   applyMascotAction,
   subscribeMascotAction,
@@ -12,7 +13,7 @@ import { MascotMenu } from "./MascotMenu.tsx";
 import type { BerniseMood } from "./mood.ts";
 import { mascotCameraFov, mascotCameraPosition } from "./scene/camera.ts";
 import { BerniseScene } from "./scene/BerniseScene.tsx";
-import type { PointerGoal } from "./scene/pointerGoal.ts";
+import { pointerGoalFromClient, type PointerGoal } from "./scene/pointerGoal.ts";
 
 const idleUntilSleepMs = 14_000;
 
@@ -108,22 +109,35 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
+    let hostPointerActive = false;
+    const applyClient = (
+      clientX: number,
+      clientY: number,
+      viewWidth: number,
+      viewHeight: number,
+    ) => {
+      const rect = stageRef.current?.getBoundingClientRect();
+      pointer.current = pointerGoalFromClient(
+        { clientX, clientY },
+        rect === undefined
+          ? undefined
+          : { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        { width: viewWidth, height: viewHeight },
+      );
+    };
+    const stopPointer = subscribePointer((next) => {
+      hostPointerActive = true;
+      applyClient(next.clientX, next.clientY, next.viewWidth, next.viewHeight);
+    });
     const onMove = (event: PointerEvent) => {
-      const stage = stageRef.current;
-      const rect = stage?.getBoundingClientRect();
-      const cx = rect === undefined ? window.innerWidth / 2 : rect.left + rect.width / 2;
-      const cy = rect === undefined ? window.innerHeight / 2 : rect.top + rect.height * 0.38;
-      pointer.current.x = Math.max(
-        -1,
-        Math.min(1, (event.clientX - cx) / (window.innerWidth * 0.42)),
-      );
-      pointer.current.y = Math.max(
-        -1,
-        Math.min(1, -(event.clientY - cy) / (window.innerHeight * 0.42)),
-      );
+      if (hostPointerActive) {
+        return;
+      }
+      applyClient(event.clientX, event.clientY, window.innerWidth, window.innerHeight);
     };
     window.addEventListener("pointermove", onMove);
     return () => {
+      stopPointer();
       window.removeEventListener("pointermove", onMove);
     };
   }, []);

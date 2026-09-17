@@ -13,6 +13,12 @@ interface Window {
   __bernise?: {
     readonly setHostState: (partial: import("./host.ts").HostStatePatch) => void;
     readonly playAction: (value: unknown) => void;
+    readonly setPointer: (pointer: {
+      readonly clientX: number;
+      readonly clientY: number;
+      readonly viewWidth?: number;
+      readonly viewHeight?: number;
+    }) => void;
     readonly pushShellJson: (json: string) => string;
     readonly pushShellBase64: (base64: string) => string;
     readonly summarizeJson: (json: string) => string;
