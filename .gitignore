@@ -11,3 +11,5 @@ release
 .vite-plus
 .vite-hooks
 *.log
+.build
+.swiftpm
