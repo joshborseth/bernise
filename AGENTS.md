@@ -33,16 +33,14 @@ Install the global `vp` CLI first (`curl -fsSL https://vite.plus | bash`).
 - `vp fmt --check` — oxfmt `--check`
 - macOS overlay: `swift run` in `apps/macos` (not available in this Linux environment)
 
-## Agent skills
-
-### Issue tracker
+## Issue tracker
 
 Issues live in Linear workspace SLAMMER, team Bernise. See `docs/agents/issue-tracker.md`.
 
-### Triage labels
+## Triage labels
 
 Canonical roles map 1:1 to Linear labels `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
 
-### Domain docs
+## Domain docs
 
 Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
