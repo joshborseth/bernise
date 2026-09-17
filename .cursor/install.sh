@@ -11,7 +11,7 @@ export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
 VP_BIN_DIR="$HOME/.local/share/vite-plus/bin"
 export PATH="$BUN_INSTALL/bin:$VP_BIN_DIR:$PATH"
 
-# 1. Pinned bun (package manager for the workspace; also runs the Effect server).
+# Pinned bun (package manager for the workspace).
 if ! command -v bun >/dev/null 2>&1 || [ "$(bun --version 2>/dev/null)" != "$EXPECTED_BUN_VERSION" ]; then
   echo "[install] Installing bun $EXPECTED_BUN_VERSION"
   curl -fsSL https://bun.sh/install | bash -s "$BUN_VERSION_TAG"

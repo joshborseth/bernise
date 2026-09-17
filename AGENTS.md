@@ -1,28 +1,16 @@
 # Bernise
 
-Desktop control surface for grilling technical decisions until they are explicit. Effect-native Electron shell with a Codex App Server harness.
+macOS overlay pet that watches a local t3code environment. It summarizes threads and speaks when they need you or settle. It is not a code-building harness.
 
-## Effect Best Practices
+Coding work must not call model APIs. Intelligence lives in t3code. Bernise is listen-only in v1: no `dispatchCommand`. See [docs/companion.md](docs/companion.md).
 
-**IMPORTANT:** Always consult effect-solutions before writing Effect code.
+## Layout
 
-1. Run `effect-solutions list` to see available guides
-2. Run `effect-solutions show...` for relevant patterns (supports multiple topics)
-3. Search `~/.local/share/effect-solutions/effect` for real implementations
-
-Topics: quick-start, project-setup, tsconfig, basics, services-and-layers, data-modeling, error-handling, config, testing, cli.
-
-Never guess at Effect patterns - check the guide first.
-
-## Local Effect Source
-
-The Effect v4 repository is cloned to `~/.local/share/effect-solutions/effect` for reference.
-Use this to explore APIs, find usage examples, and understand implementation
-details when the documentation isn't enough.
-
-## Agent harness
-
-Bernise is a harness control surface (t3code-style). Coding work must not call model APIs; Codex CLI (`codex app-server`) is the live provider. See [docs/harness.md](docs/harness.md). `Provider` is implemented by `CodexProviderLive`.
+- `apps/pet` — Three.js cat, listen/VAD, host bridge (Vite, port 5733)
+- `apps/macos` — AppKit overlay, t3code HTTP, Chatterbox TTS (build on a Mac)
+- `packages/attention` — shell snapshot → `needsYou` / `settled` events
+- `packages/summary` — extractive spoken brief
+- `packages/speakable` — markdown strip for TTS
 
 ## TypeScript 7 / effect-tsgo
 
@@ -37,14 +25,13 @@ This repo uses TypeScript 7 (native `tsgo`) with [`@effect/tsgo`](https://github
 Install the global `vp` CLI first (`curl -fsSL https://vite.plus | bash`).
 
 - `vp i` — install workspace dependencies
-- `vp run dev` — Electron + Vite renderer; Electron supervises the Effect server (ports 13773 / 5733)
-- `vp run dev:desktop` — same as `dev`
-- `vp run dev:web` — Vite + Effect server in a browser (ports 13773 / 5733)
-- `vp test run` — `@effect/vitest`
-- `vp run typecheck` — `tsc --build` plus the web and scripts projects
+- `vp run dev` / `vp run dev:pet` — Vite pet in a browser (port 5733)
+- `vp test run` — vitest for attention, summary, listen gate, speakable
+- `vp run typecheck` — package builds plus the pet project
 - `vp lint` — oxlint via Vite+
 - `vp fmt` — oxfmt via Vite+
 - `vp fmt --check` — oxfmt `--check`
+- macOS overlay: `swift run` in `apps/macos` (not available in this Linux environment)
 
 ## Agent skills
 

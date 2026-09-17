@@ -9,8 +9,8 @@
     ]
   },
   "references": [
-    { "path": "./packages/contracts" },
-    { "path": "./apps/server" },
-    { "path": "./apps/desktop" }
+    { "path": "./packages/speakable" },
+    { "path": "./packages/attention" },
+    { "path": "./packages/summary" }
   ]
 }

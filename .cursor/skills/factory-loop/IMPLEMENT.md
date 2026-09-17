@@ -17,7 +17,7 @@ Done when all of these are true, or the run has stopped:
 
 1. Claim: `assignee: "me"`, status `In Progress`.
 2. Treat **Key interfaces** in the brief as the pre-agreed test seams. Red → green one slice at a time at those seams. Behaviour through public interfaces; no implementation-coupled tests.
-3. Before writing Effect code, consult `effect-solutions`. Coding work in this repo must not call model APIs; Codex CLI is the live provider (`docs/harness.md`).
+3. Coding work in this repo must not call model APIs; t3code is the live intelligence (`docs/companion.md`). Bernise is listen-only.
 4. Run `vp test run` on touched tests as you go. `vp run typecheck` before review. Full `vp test run` once at the end.
 5. Two-axis review of `git diff main...HEAD` (or the repo default branch):
    - **Standards:** repo docs + the smell baseline in the `code-review` skill if present; skip what tooling already enforces.
