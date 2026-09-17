@@ -1,5 +1,6 @@
 import { diffShell, emptyAttention, parseShell, type SpeakEvent } from "@bernise/attention";
 import { classifyPrompt, parseThreadDetail, summarizeThread } from "@bernise/summary";
+import { playMascotAction } from "./mascot/actions.ts";
 import { hitTestBody } from "./mascot/hitTest.ts";
 import type { BerniseMood } from "./mascot/mood.ts";
 import { parsePerch, type Perch } from "./mascot/animation/perchPose.ts";
@@ -125,6 +126,7 @@ export const requestAction = (action: string): void => {
   for (const listener of petActionListeners) {
     listener(action);
   }
+  playMascotAction(action);
 };
 
 export const nativeAvailable = (): boolean => window.webkit?.messageHandlers?.bernise !== undefined;
@@ -135,6 +137,10 @@ export const postNative = (message: unknown): void => {
 
 export const onAddressedPrompt = (text: string): void => {
   postNative({ type: "transcript", text, intent: classifyPrompt(text) });
+};
+
+export const playAction = (value: unknown): void => {
+  playMascotAction(value);
 };
 
 export type HostPointer = {
@@ -195,6 +201,7 @@ export const subscribePointer = (listener: (pointer: HostPointer) => void): (() 
 export const installHost = (): void => {
   window.__bernise = {
     setHostState,
+    playAction,
     setPointer,
     pushShellJson,
     pushShellBase64,

@@ -28,9 +28,9 @@ const litterCamera: CameraRig = {
 };
 
 const perchCameras: Record<Exclude<Perch, "none">, CameraRig> = {
-  left: { position: [0.62, -0.12, 4.85], lookAt: [0.32, -0.16, 0], fov: 30 },
-  right: { position: [-0.62, -0.12, 4.85], lookAt: [-0.32, -0.16, 0], fov: 30 },
-  top: { position: [0, -0.22, 5.05], lookAt: [0, -0.28, 0], fov: 30 },
+  left: { position: [0.62, 0.02, 4.95], lookAt: [0.28, 0, 0], fov: 30 },
+  right: { position: [-0.62, 0.02, 4.95], lookAt: [-0.28, 0, 0], fov: 30 },
+  top: { position: [0, -0.22, 5.15], lookAt: [0, 0.26, 0], fov: 30 },
   bottom: { position: [0, 0.28, 5.2], lookAt: [0, -0.06, 0], fov: 32 },
 };
 

@@ -81,7 +81,7 @@ import {
   sleepTailZ,
   sleepYaw,
 } from "../animation/sleepPose.ts";
-import { perchPose, type Perch } from "../animation/perchPose.ts";
+import { perchFaceLook, perchPose, type Perch } from "../animation/perchPose.ts";
 import { bernise } from "../model/sceneGraph.ts";
 import type { BerniseMood } from "../mood.ts";
 import { LitterBox } from "./LitterBox.tsx";
@@ -161,6 +161,7 @@ export function AnimatedFigure({
     signaled: false,
     chomped: false,
     hissed: false,
+    fromMenu: false,
     region: "body" as PetRegion,
   });
   const litterClock = useRef({
@@ -216,7 +217,7 @@ export function AnimatedFigure({
 
   const onPetDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
-    if (biting || hissing) {
+    if (event.nativeEvent.button !== 0 || biting || hissing) {
       return;
     }
     petRegion.current = petRegionFrom(event);
@@ -294,11 +295,25 @@ export function AnimatedFigure({
         overpet.current.signaled = false;
         overpet.current.chomped = false;
         overpet.current.hissed = false;
+        overpet.current.fromMenu = false;
         overpet.current.region = "body";
       }
     } else if (purring && overpet.current.heldSince < 0) {
       overpet.current.heldSince = t;
+      overpet.current.fromMenu = false;
       overpet.current.region = petRegion.current;
+    } else if (biting && overpet.current.strikeAt < 0) {
+      overpet.current.fromMenu = true;
+      overpet.current.region = "head";
+      overpet.current.strikeAt = t;
+      overpet.current.signaled = true;
+      overpet.current.chomped = false;
+    } else if (hissing && overpet.current.strikeAt < 0) {
+      overpet.current.fromMenu = true;
+      overpet.current.region = "body";
+      overpet.current.strikeAt = t;
+      overpet.current.signaled = true;
+      overpet.current.hissed = false;
     }
     if (
       purring &&
@@ -338,6 +353,17 @@ export function AnimatedFigure({
     }
 
     const escalateElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
+    if (
+      overpet.current.fromMenu &&
+      escalateElapsed >= (overpet.current.region === "head" ? strikeDone : hissDone)
+    ) {
+      overpet.current.fromMenu = false;
+      if (overpet.current.region === "head") {
+        onBitingChange(false);
+      } else {
+        onHissingChange(false);
+      }
+    }
     const striking = escalateElapsed >= 0 && overpet.current.region === "head";
     const recoiling = escalateElapsed >= 0 && overpet.current.region === "body";
     const strike = striking ? strikeMotion(escalateElapsed) : strikeMotion(-1);
@@ -649,12 +675,13 @@ export function AnimatedFigure({
 
     const lookX = MathUtils.clamp(pointer.current.x + peek.lookX, -1, 1);
     const lookY = MathUtils.clamp(pointer.current.y + peek.lookY, -1, 1);
+    const face = perchFaceLook(perch, lookX, lookY);
     const lookScale = asleep
       ? 0.06
       : inLitter
         ? 0
         : peeking
-          ? 0.85
+          ? 0.5
           : happyPurr
             ? 0.45
             : recoiling
@@ -778,7 +805,7 @@ export function AnimatedFigure({
     head.rotation.y = MathUtils.damp(
       head.rotation.y,
       peek.headYaw +
-        lookX * 0.34 * lookScale +
+        face.x * 0.34 * lookScale +
         (happyPurr
           ? 0
           : asleep && !peeking
@@ -786,7 +813,7 @@ export function AnimatedFigure({
             : inLitter
               ? 0
               : striking
-                ? lookX * 0.08
+                ? face.x * 0.08
                 : thinking
                   ? 0.16
                   : listening
@@ -799,7 +826,7 @@ export function AnimatedFigure({
     head.rotation.x = MathUtils.damp(
       head.rotation.x,
       peek.headPitch +
-        -lookY * 0.2 * lookScale +
+        -face.y * 0.2 * lookScale +
         (striking
           ? 0.1
           : recoiling
@@ -842,8 +869,8 @@ export function AnimatedFigure({
       dt,
     );
 
-    const irisX = lookX * 0.018 * lookScale;
-    const irisY = lookY * 0.012 * lookScale;
+    const irisX = face.x * 0.018 * lookScale;
+    const irisY = face.y * 0.012 * lookScale;
     for (const id of ["leftIris", "rightIris"] as const) {
       const iris = refs[id].current;
       if (iris !== null) {

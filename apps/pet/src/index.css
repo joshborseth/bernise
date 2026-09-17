@@ -124,6 +124,43 @@ body {
   pointer-events: none;
 }
 
+.mascot-menu {
+  position: fixed;
+  z-index: 8;
+  display: flex;
+  min-width: 10.5rem;
+  flex-direction: column;
+  gap: 0.08rem;
+  padding: 0.28rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  pointer-events: auto;
+}
+
+.mascot-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.34rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mascot-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--peach) 18%, transparent);
+}
+
+.mascot-menu button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 .mascot-stage {
   position: absolute;
   inset: 0;

@@ -29,10 +29,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.onPerchChange = { [weak self] _ in
             self?.applyHost()
         }
-        overlay.installInteraction(pet: pet)
         overlay.onPetAction = { [weak self] action in
             self?.pet.requestAction(action)
         }
+        overlay.installInteraction(pet: pet)
         overlay.makeKeyAndOrderFront(nil)
 
         status.onMute = { [weak self] muted in
@@ -48,6 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.onResetPosition = { [weak self] in
             self?.overlay.resetPosition()
+        }
+        status.onPlayAction = { [weak self] id in
+            self?.pet.playAction(id)
         }
 
         queue.onStart = { [weak self] speakKey in

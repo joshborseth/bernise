@@ -8,6 +8,7 @@ final class StatusItemController {
     var onReconnect: (() -> Void)?
     var onQuit: (() -> Void)?
     var onResetPosition: (() -> Void)?
+    var onPlayAction: ((String) -> Void)?
 
     init() {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -41,6 +42,11 @@ final class StatusItemController {
         let reset = NSMenuItem(title: "Reset position", action: #selector(resetPosition), keyEquivalent: "")
         reset.target = self
         menu.addItem(reset)
+        let actions = NSMenuItem(title: "Actions", action: nil, keyEquivalent: "")
+        actions.submenu = MascotAction.menu { [weak self] action in
+            self?.onPlayAction?(action.rawValue)
+        }
+        menu.addItem(actions)
         let reconnect = NSMenuItem(title: "Reconnect", action: #selector(reconnect), keyEquivalent: "r")
         reconnect.target = self
         menu.addItem(reconnect)

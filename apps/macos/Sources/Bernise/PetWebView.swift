@@ -58,6 +58,11 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         }
     }
 
+    func playAction(_ id: String) {
+        let escaped = id.replacingOccurrences(of: "\"", with: "")
+        webView.evaluateJavaScript("window.__bernise && window.__bernise.playAction(\"\(escaped)\")")
+    }
+
     func resetAttention() {
         webView.evaluateJavaScript("window.__bernise && window.__bernise.resetAttention()")
     }

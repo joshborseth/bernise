@@ -1,8 +1,15 @@
 import { Canvas } from "@react-three/fiber";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { subscribePetAction, subscribePointer, type PetAction } from "../host.ts";
-import { startPurr } from "./audio/purr.ts";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { subscribePointer } from "../host.ts";
+import {
+  applyMascotAction,
+  subscribeMascotAction,
+  type MascotActionId,
+  type MascotPlayState,
+} from "./actions.ts";
 import type { Perch } from "./animation/perchPose.ts";
+import { startPurr } from "./audio/purr.ts";
+import { MascotMenu } from "./MascotMenu.tsx";
 import type { BerniseMood } from "./mood.ts";
 import { mascotCameraFov, mascotCameraPosition } from "./scene/camera.ts";
 import { BerniseScene } from "./scene/BerniseScene.tsx";
@@ -25,20 +32,55 @@ export function BerniseMascot({
 }) {
   const pointer = useRef<PointerGoal>({ x: 0, y: 0 });
   const stageRef = useRef<HTMLDivElement>(null);
+  const mascotRef = useRef<HTMLDivElement>(null);
   const [stageReady, setStageReady] = useState(false);
   const [purring, setPurring] = useState(false);
   const [biting, setBiting] = useState(false);
   const [hissing, setHissing] = useState(false);
   const [sleeping, setSleeping] = useState(false);
   const [usingLitter, setUsingLitter] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const reducedMotion = usePrefersReducedMotion();
-  const awake = mood !== "idle" || purring || biting || hissing;
-  if (awake && sleeping) {
+  const petting = purring || biting || hissing;
+  const play: MascotPlayState = { sleeping, usingLitter, purring, biting, hissing };
+  if (mood !== "idle" && sleeping) {
     setSleeping(false);
   }
-  if ((purring || biting || hissing) && usingLitter) {
+  if (petting && sleeping) {
+    setSleeping(false);
+  }
+  if (petting && usingLitter) {
     setUsingLitter(false);
   }
+  if (perch !== "none" && usingLitter) {
+    setUsingLitter(false);
+  }
+
+  const runAction = useCallback(
+    (id: MascotActionId) => {
+      if (id === "litter" && perch !== "none") {
+        setMenu(null);
+        return;
+      }
+      const next = applyMascotAction(
+        {
+          sleeping,
+          usingLitter,
+          purring,
+          biting,
+          hissing,
+        },
+        id,
+      );
+      setSleeping(next.sleeping);
+      setUsingLitter(next.usingLitter);
+      setPurring(next.purring);
+      setBiting(next.biting);
+      setHissing(next.hissing);
+      setMenu(null);
+    },
+    [sleeping, usingLitter, purring, biting, hissing, perch],
+  );
 
   useLayoutEffect(() => {
     const stage = stageRef.current;
@@ -64,23 +106,6 @@ export function BerniseMascot({
     return () => {
       observer.disconnect();
     };
-  }, []);
-
-  useEffect(() => {
-    return subscribePetAction((action: PetAction) => {
-      if (action === "litter") {
-        setSleeping(false);
-        setUsingLitter(true);
-        return;
-      }
-      if (action === "sleep") {
-        setUsingLitter(false);
-        setSleeping(true);
-        return;
-      }
-      setUsingLitter(false);
-      setSleeping(false);
-    });
   }, []);
 
   useEffect(() => {
@@ -118,21 +143,37 @@ export function BerniseMascot({
   }, []);
 
   useEffect(() => {
-    const stop = () => {
+    const stopPurr = () => {
       setPurring(false);
-      setBiting(false);
-      setHissing(false);
     };
-    window.addEventListener("pointerup", stop);
-    window.addEventListener("pointercancel", stop);
+    window.addEventListener("pointerup", stopPurr);
+    window.addEventListener("pointercancel", stopPurr);
     return () => {
-      window.removeEventListener("pointerup", stop);
-      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("pointerup", stopPurr);
+      window.removeEventListener("pointercancel", stopPurr);
     };
   }, []);
 
   useEffect(() => {
-    if (awake || sleeping || usingLitter) {
+    const node = mascotRef.current;
+    if (node === null) {
+      return;
+    }
+    const onMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      setMenu({ x: event.clientX, y: event.clientY });
+    };
+    node.addEventListener("contextmenu", onMenu, true);
+    return () => {
+      node.removeEventListener("contextmenu", onMenu, true);
+    };
+  }, []);
+
+  useEffect(() => subscribeMascotAction(runAction), [runAction]);
+
+  useEffect(() => {
+    if (mood !== "idle" || petting || sleeping || usingLitter) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -141,7 +182,7 @@ export function BerniseMascot({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [awake, sleeping, usingLitter]);
+  }, [mood, petting, sleeping, usingLitter]);
 
   useEffect(() => {
     if (!purring) {
@@ -165,6 +206,7 @@ export function BerniseMascot({
 
   return (
     <div
+      ref={mascotRef}
       className={perched ? `${className} mascot-perch mascot-perch-${perch}` : className}
       role="img"
       aria-label={
@@ -178,7 +220,7 @@ export function BerniseMascot({
                 ? "Bernise is using the litter box"
                 : sleeping
                   ? "Bernise is sleeping"
-                  : "Bernise. Hold to pet."
+                  : "Bernise. Hold to pet. Right-click for actions."
       }
       aria-pressed={purring}
     >
@@ -190,6 +232,17 @@ export function BerniseMascot({
           <span>Z</span>
         </div>
       ) : null}
+      {menu === null ? null : (
+        <MascotMenu
+          x={menu.x}
+          y={menu.y}
+          play={play}
+          onPick={runAction}
+          onClose={() => {
+            setMenu(null);
+          }}
+        />
+      )}
       <div ref={stageRef} className="mascot-stage">
         {stageReady ? (
           <Canvas

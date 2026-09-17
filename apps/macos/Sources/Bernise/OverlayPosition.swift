@@ -142,6 +142,17 @@ enum OverlayPosition {
         return clampDrag(next, mouse: mouse)
     }
 
+    static func petContains(_ screenPoint: NSPoint, frame: NSRect, perch: OverlayPerch) -> Bool {
+        guard frame.contains(screenPoint) else {
+            return false
+        }
+        let local = NSPoint(x: screenPoint.x - frame.minX, y: screenPoint.y - frame.minY)
+        let (center, rx, ry) = hitEllipse(size: frame.size, perch: perch)
+        let dx = (local.x - center.x) / rx
+        let dy = (local.y - center.y) / ry
+        return dx * dx + dy * dy <= 1
+    }
+
     static func frame(from placement: OverlayPlacement, size: NSSize, mouse: NSPoint? = nil) -> NSRect {
         if placement.perch == .none {
             return clamp(NSRect(origin: placement.origin, size: size), mouse: mouse)
@@ -154,6 +165,21 @@ enum OverlayPosition {
             mouse: mouse,
             hint: hint
         )
+    }
+
+    private static func hitEllipse(size: NSSize, perch: OverlayPerch) -> (NSPoint, CGFloat, CGFloat) {
+        switch perch {
+        case .none:
+            return (NSPoint(x: size.width * 0.5, y: size.height * 0.44), size.width * 0.46, size.height * 0.46)
+        case .left:
+            return (NSPoint(x: size.width * 0.82, y: size.height * 0.5), size.width * 0.22, size.height * 0.34)
+        case .right:
+            return (NSPoint(x: size.width * 0.18, y: size.height * 0.5), size.width * 0.22, size.height * 0.34)
+        case .top:
+            return (NSPoint(x: size.width * 0.5, y: size.height * 0.22), size.width * 0.36, size.height * 0.26)
+        case .bottom:
+            return (NSPoint(x: size.width * 0.5, y: size.height * 0.7), size.width * 0.4, size.height * 0.3)
+        }
     }
 
     private static func sizeAlong(perch: OverlayPerch, size: NSSize) -> CGFloat {
@@ -186,7 +212,7 @@ enum OverlayPosition {
         return next
     }
 
-    private static func catCenter(in frame: NSRect) -> NSPoint {
+    static func catCenter(in frame: NSRect) -> NSPoint {
         NSPoint(x: frame.minX + frame.width * 0.5, y: frame.minY + frame.height * 0.44)
     }
 

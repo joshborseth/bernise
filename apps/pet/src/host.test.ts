@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { subscribeMascotAction } from "./mascot/actions.ts";
 import {
   pushShellJson,
   requestAction,
@@ -41,14 +42,20 @@ describe("setPointer", () => {
 describe("requestAction", () => {
   it("forwards litter sleep and wake and ignores unknown names", () => {
     const seen: string[] = [];
+    const mascot: string[] = [];
     const stop = subscribePetAction((action) => {
       seen.push(action);
+    });
+    const stopMascot = subscribeMascotAction((id) => {
+      mascot.push(id);
     });
     requestAction("litter");
     requestAction("sleep");
     requestAction("wake");
     requestAction("dance");
     stop();
+    stopMascot();
     expect(seen).toEqual(["litter", "sleep", "wake"]);
+    expect(mascot).toEqual(["litter", "sleep", "wake"]);
   });
 });

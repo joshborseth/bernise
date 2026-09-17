@@ -12,6 +12,7 @@ interface Window {
   };
   __bernise?: {
     readonly setHostState: (partial: import("./host.ts").HostStatePatch) => void;
+    readonly playAction: (value: unknown) => void;
     readonly setPointer: (pointer: {
       readonly clientX: number;
       readonly clientY: number;
