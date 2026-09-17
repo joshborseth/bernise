@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
-import { pushShellJson, resetAttention, setPointer, subscribePointer } from "./host.ts";
+import {
+  pushShellJson,
+  requestAction,
+  resetAttention,
+  setPointer,
+  subscribePetAction,
+  subscribePointer,
+} from "./host.ts";
 
 describe("pushShellJson", () => {
   it("hydrates silently then emits needsYou", () => {
@@ -28,5 +35,20 @@ describe("setPointer", () => {
     setPointer({ clientX: 120, clientY: 40, viewWidth: 1512, viewHeight: 982 });
     stop();
     expect(seen.at(-1)).toEqual({ clientX: 120, clientY: 40, viewWidth: 1512, viewHeight: 982 });
+  });
+});
+
+describe("requestAction", () => {
+  it("forwards litter sleep and wake and ignores unknown names", () => {
+    const seen: string[] = [];
+    const stop = subscribePetAction((action) => {
+      seen.push(action);
+    });
+    requestAction("litter");
+    requestAction("sleep");
+    requestAction("wake");
+    requestAction("dance");
+    stop();
+    expect(seen).toEqual(["litter", "sleep", "wake"]);
   });
 });

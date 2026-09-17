@@ -1,36 +1,40 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useRef } from "react";
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
-import {
-  litterCameraFov,
-  litterCameraLookAt,
-  litterCameraPosition,
-  mascotCameraFov,
-  mascotCameraLookAt,
-  mascotCameraPosition,
-} from "./camera.ts";
+import type { Perch } from "../animation/perchPose.ts";
+import { cameraForPet, mascotCameraLookAt } from "./camera.ts";
 
-const lookTarget = new Vector3();
+const lookTarget = new Vector3(...mascotCameraLookAt);
 
-export function FitCamera({ usingLitter }: { readonly usingLitter: boolean }) {
+export function FitCamera({
+  usingLitter,
+  perch,
+}: {
+  readonly usingLitter: boolean;
+  readonly perch: Perch;
+}) {
   const camera = useThree((state) => state.camera) as PerspectiveCamera;
-  const blend = useRef(0);
+  const blend = useRef<{ x: number; y: number; z: number; fov: number }>({
+    x: mascotCameraLookAt[0],
+    y: mascotCameraLookAt[1],
+    z: mascotCameraLookAt[2],
+    fov: 30,
+  });
 
   useFrame((_, dt) => {
-    blend.current = MathUtils.damp(blend.current, usingLitter ? 1 : 0, 8, dt);
-    const t = blend.current;
+    const target = cameraForPet({ usingLitter, perch });
     camera.position.set(
-      MathUtils.lerp(mascotCameraPosition[0], litterCameraPosition[0], t),
-      MathUtils.lerp(mascotCameraPosition[1], litterCameraPosition[1], t),
-      MathUtils.lerp(mascotCameraPosition[2], litterCameraPosition[2], t),
+      MathUtils.damp(camera.position.x, target.position[0], 8, dt),
+      MathUtils.damp(camera.position.y, target.position[1], 8, dt),
+      MathUtils.damp(camera.position.z, target.position[2], 8, dt),
     );
-    lookTarget.set(
-      MathUtils.lerp(mascotCameraLookAt[0], litterCameraLookAt[0], t),
-      MathUtils.lerp(mascotCameraLookAt[1], litterCameraLookAt[1], t),
-      MathUtils.lerp(mascotCameraLookAt[2], litterCameraLookAt[2], t),
-    );
+    blend.current.x = MathUtils.damp(blend.current.x, target.lookAt[0], 8, dt);
+    blend.current.y = MathUtils.damp(blend.current.y, target.lookAt[1], 8, dt);
+    blend.current.z = MathUtils.damp(blend.current.z, target.lookAt[2], 8, dt);
+    blend.current.fov = MathUtils.damp(blend.current.fov, target.fov, 8, dt);
+    lookTarget.set(blend.current.x, blend.current.y, blend.current.z);
     camera.lookAt(lookTarget);
-    camera.fov = MathUtils.lerp(mascotCameraFov, litterCameraFov, t);
+    camera.fov = blend.current.fov;
     camera.updateProjectionMatrix();
   });
 
