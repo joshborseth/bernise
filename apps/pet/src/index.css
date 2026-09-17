@@ -1,0 +1,237 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Mono", ui-monospace, monospace;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+  --bg: #1b1e28;
+  --ink: #e4f0fb;
+  --muted: #767c9d;
+  --peach: #5de4c7;
+  --peach-deep: #5fb3a1;
+  --rose: #d0679d;
+  --sky: #add7ff;
+  --sky-deep: #91b4d5;
+  --halo: color-mix(in srgb, var(--sky) 18%, transparent);
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+
+.pet {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0 1.5rem;
+}
+
+.pet-disconnected {
+  opacity: 0.72;
+}
+
+.pet-status {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.pet-fixture {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 4;
+  display: flex;
+  max-width: 22rem;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  padding: 0.6rem;
+}
+
+.pet-fixture p {
+  width: 100%;
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.pet-fixture button {
+  border: 1px solid color-mix(in srgb, var(--peach-deep) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 70%, white);
+  color: var(--ink);
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.pet-fixture pre {
+  width: 100%;
+  margin: 0.2rem 0 0;
+  overflow: auto;
+  font-size: 0.68rem;
+  color: var(--sky);
+}
+
+.mascot {
+  position: relative;
+  overflow: visible;
+  width: min(22rem, 90vmin);
+  height: min(22rem, 90vmin);
+  aspect-ratio: 1;
+}
+
+.mascot-halo {
+  position: absolute;
+  inset: -4% -8% 2%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 45%, var(--halo) 0%, transparent 74%),
+    radial-gradient(
+      circle at 50% 52%,
+      color-mix(in srgb, var(--sky) 12%, transparent),
+      transparent 78%
+    );
+  animation: halo-pulse 4.6s ease-in-out infinite;
+}
+
+.mascot-listening .mascot-halo {
+  animation-duration: 2.6s;
+}
+
+.mascot-purring .mascot-halo {
+  animation-duration: 1.35s;
+}
+
+.mascot-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+}
+
+.mascot-stage canvas {
+  display: block;
+}
+
+.mascot-sleeping .mascot-halo {
+  animation-duration: 6.4s;
+}
+
+.mascot-zzz {
+  position: absolute;
+  left: 52%;
+  top: 30%;
+  z-index: 2;
+  width: 8.5rem;
+  height: 10rem;
+  pointer-events: none;
+}
+
+.mascot-zzz span {
+  position: absolute;
+  left: 0;
+  bottom: 0.4rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  line-height: 1;
+  color: color-mix(in srgb, var(--sky-deep) 78%, var(--ink));
+  animation: zzz-drift 3.2s cubic-bezier(0.22, 0.7, 0.28, 1) infinite;
+  opacity: 0;
+}
+
+.mascot-zzz span:nth-child(1) {
+  font-size: 1.05rem;
+  animation-delay: 0s;
+}
+
+.mascot-zzz span:nth-child(2) {
+  font-size: 1.4rem;
+  animation-delay: 0.7s;
+}
+
+.mascot-zzz span:nth-child(3) {
+  font-size: 1.85rem;
+  animation-delay: 1.4s;
+}
+
+.mascot-zzz span:nth-child(4) {
+  font-size: 2.35rem;
+  animation-delay: 2.1s;
+}
+
+.mascot-biting .mascot-halo,
+.mascot-hissing .mascot-halo {
+  animation-duration: 0.5s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-halo,
+  .mascot-zzz span {
+    animation: none;
+  }
+
+  .mascot-zzz span {
+    opacity: 0.78;
+  }
+}
+
+@keyframes halo-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.78;
+    transform: scale(1.03);
+  }
+}
+
+@keyframes zzz-drift {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(-10deg) scale(0.62);
+  }
+  10% {
+    opacity: 0.95;
+  }
+  70% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(3.6rem, -7.2rem) rotate(16deg) scale(1.12);
+  }
+}

@@ -8,25 +8,20 @@
   "type": "module",
   "scripts": {
     "prepare": "effect-tsgo patch",
-    "typecheck": "tsc --build && tsc -p apps/web --noEmit && tsc -p scripts --noEmit",
+    "typecheck": "tsc --build && tsc -p apps/pet --noEmit",
     "lint": "vp lint --report-unused-disable-directives",
     "fmt": "vp fmt",
     "fmt:check": "vp fmt --check",
     "test": "vp test run",
     "test:watch": "vp test",
-    "dev": "node scripts/dev-runner.ts dev",
-    "dev:server": "node scripts/dev-runner.ts dev:server",
-    "dev:web": "node scripts/dev-runner.ts dev:web",
-    "dev:desktop": "node scripts/dev-runner.ts dev:desktop"
+    "dev": "bun run --filter @bernise/pet dev",
+    "dev:pet": "bun run --filter @bernise/pet dev"
   },
   "devDependencies": {
     "@effect/language-service": "latest",
-    "@effect/platform-node": "rc",
     "@effect/tsgo": "latest",
-    "@effect/vitest": "rc",
     "@types/node": "latest",
     "@typescript/native-preview": "latest",
-    "effect": "rc",
     "typescript": "latest",
     "vite": "catalog:",
     "vite-plus": "catalog:",
