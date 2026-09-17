@@ -12,10 +12,12 @@ interface Window {
   };
   __bernise?: {
     readonly setHostState: (partial: import("./host.ts").HostStatePatch) => void;
+    readonly playAction: (value: unknown) => void;
     readonly pushShellJson: (json: string) => string;
     readonly pushShellBase64: (base64: string) => string;
     readonly summarizeJson: (json: string) => string;
     readonly summarizeBase64: (base64: string) => string;
     readonly resetAttention: () => void;
+    readonly hitTest: (clientX: number, clientY: number) => boolean;
   };
 }

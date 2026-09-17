@@ -1,6 +1,6 @@
 # macOS overlay
 
-Accessory AppKit app: always-on-top click-through `NSPanel`, menu extra, `WKWebView` pet, t3code HTTP poll, Chatterbox TTS.
+Accessory AppKit app: always-on-top `NSPanel` (click-through around the cat, drag the cat to move, drop on a screen edge to perch head-first, right-click the cat for litter/sleep/wake). The cat looks at the mouse across the whole screen. Menu extra, `WKWebView` pet, t3code HTTP poll, Chatterbox TTS.
 
 This Linux environment cannot link AppKit. On a Mac:
 

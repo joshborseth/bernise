@@ -1,7 +1,8 @@
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Euler, MathUtils, Vector3 } from "three";
 import type { Group, Object3D } from "three";
+import { bindHitTarget } from "../hitTest.ts";
 import { playChomp, playHiss, playScratch, schedulePlinks } from "../audio/reactionSounds.ts";
 import { purrBurst } from "../audio/purr.ts";
 import { escalateDamp } from "../animation/easing.ts";
@@ -80,6 +81,7 @@ import {
   sleepTailZ,
   sleepYaw,
 } from "../animation/sleepPose.ts";
+import { perchFaceLook, perchPose, type Perch } from "../animation/perchPose.ts";
 import { bernise } from "../model/sceneGraph.ts";
 import type { BerniseMood } from "../mood.ts";
 import { LitterBox } from "./LitterBox.tsx";
@@ -111,6 +113,7 @@ export function AnimatedFigure({
   hissing,
   sleeping,
   usingLitter,
+  perch,
   reducedMotion,
   onPurringChange,
   onBitingChange,
@@ -125,6 +128,7 @@ export function AnimatedFigure({
   readonly hissing: boolean;
   readonly sleeping: boolean;
   readonly usingLitter: boolean;
+  readonly perch: Perch;
   readonly reducedMotion: boolean;
   readonly onPurringChange: (purring: boolean) => void;
   readonly onBitingChange: (biting: boolean) => void;
@@ -132,8 +136,10 @@ export function AnimatedFigure({
   readonly onLitterDone: () => void;
 }) {
   const gl = useThree((state) => state.gl);
+  const camera = useThree((state) => state.camera);
   const materials = useCatMaterials();
   const refs = usePartRefs();
+  const bodyHitRef = useRef<Group>(null);
   const rest = useRef<{
     tail: Euler;
     tailPos: Vector3;
@@ -155,6 +161,7 @@ export function AnimatedFigure({
     signaled: false,
     chomped: false,
     hissed: false,
+    fromMenu: false,
     region: "body" as PetRegion,
   });
   const litterClock = useRef({
@@ -183,6 +190,14 @@ export function AnimatedFigure({
     };
   }, [gl]);
 
+  useLayoutEffect(() => {
+    const target = bodyHitRef.current;
+    if (target === null) {
+      return;
+    }
+    return bindHitTarget(camera, target, gl.domElement);
+  }, [camera, gl]);
+
   useEffect(() => {
     return () => {
       litterClock.current.stopPlinks?.();
@@ -202,7 +217,7 @@ export function AnimatedFigure({
 
   const onPetDown = (event: ThreeEvent<PointerEvent>) => {
     event.stopPropagation();
-    if (biting || hissing) {
+    if (event.nativeEvent.button !== 0 || biting || hissing) {
       return;
     }
     petRegion.current = petRegionFrom(event);
@@ -280,11 +295,25 @@ export function AnimatedFigure({
         overpet.current.signaled = false;
         overpet.current.chomped = false;
         overpet.current.hissed = false;
+        overpet.current.fromMenu = false;
         overpet.current.region = "body";
       }
     } else if (purring && overpet.current.heldSince < 0) {
       overpet.current.heldSince = t;
+      overpet.current.fromMenu = false;
       overpet.current.region = petRegion.current;
+    } else if (biting && overpet.current.strikeAt < 0) {
+      overpet.current.fromMenu = true;
+      overpet.current.region = "head";
+      overpet.current.strikeAt = t;
+      overpet.current.signaled = true;
+      overpet.current.chomped = false;
+    } else if (hissing && overpet.current.strikeAt < 0) {
+      overpet.current.fromMenu = true;
+      overpet.current.region = "body";
+      overpet.current.strikeAt = t;
+      overpet.current.signaled = true;
+      overpet.current.hissed = false;
     }
     if (
       purring &&
@@ -324,6 +353,17 @@ export function AnimatedFigure({
     }
 
     const escalateElapsed = overpet.current.strikeAt < 0 ? -1 : t - overpet.current.strikeAt;
+    if (
+      overpet.current.fromMenu &&
+      escalateElapsed >= (overpet.current.region === "head" ? strikeDone : hissDone)
+    ) {
+      overpet.current.fromMenu = false;
+      if (overpet.current.region === "head") {
+        onBitingChange(false);
+      } else {
+        onHissingChange(false);
+      }
+    }
     const striking = escalateElapsed >= 0 && overpet.current.region === "head";
     const recoiling = escalateElapsed >= 0 && overpet.current.region === "body";
     const strike = striking ? strikeMotion(escalateElapsed) : strikeMotion(-1);
@@ -332,6 +372,8 @@ export function AnimatedFigure({
     const happyPurr = purring && !striking && !recoiling;
     const inLitter = usingLitter && !happyPurr && !striking && !recoiling;
     const asleep = sleeping && !happyPurr && !striking && !recoiling && !inLitter;
+    const peeking = perch !== "none";
+    const peek = perchPose(perch);
     const listening = mood === "listening";
     const thinking = mood === "thinking";
     const speaking =
@@ -436,7 +478,7 @@ export function AnimatedFigure({
     };
 
     if (reducedMotion) {
-      if (asleep) {
+      if (asleep && !peeking) {
         root.position.set(0, sleepDrop, sleepPush);
         root.rotation.set(sleepPitch, sleepYaw, sleepRoll);
         body.position.set(0, sleepBodyDrop, 0);
@@ -480,7 +522,7 @@ export function AnimatedFigure({
         }
         return;
       }
-      if (inLitter) {
+      if (inLitter && !peeking) {
         root.position.set(0, squat * litterRootDrop, squat * litterPush);
         root.rotation.set(squat * litterPitch, litter.turn * litterYaw, squat * litterHeadRoll);
         body.position.set(0, squat * litterBodyDrop, 0);
@@ -514,17 +556,21 @@ export function AnimatedFigure({
         }
         return;
       }
-      root.position.set(0, recoiling ? 0.05 : 0, recoiling ? -0.22 : 0);
-      root.rotation.set(recoiling ? -0.06 : 0.02, 0, 0);
+      root.position.set(peek.x, peek.y + (recoiling ? 0.05 : 0), peek.z + (recoiling ? -0.22 : 0));
+      root.rotation.set(peek.pitch + (recoiling ? -0.06 : 0.02), peek.yaw, peek.roll);
       body.position.set(0, 0, 0);
       body.scale.set(1, 1, 1);
       head.position.set(0, 0, recoiling ? -0.08 : 0);
       head.rotation.set(
-        recoiling ? 0.16 : striking ? 0.08 : happyPurr ? 0.04 : -0.02,
-        0,
-        striking ? -0.04 : happyPurr ? 0.05 : 0,
+        peek.headPitch + (recoiling ? 0.16 : striking ? 0.08 : happyPurr ? 0.04 : -0.02),
+        peek.headYaw,
+        peek.headRoll + (striking ? -0.04 : happyPurr ? 0.05 : 0),
       );
-      mouth.scale.set(recoiling ? 1.85 : 1, recoiling ? 5.4 : striking ? 1.53 : 1, 1);
+      mouth.scale.set(
+        recoiling ? 1.85 : asleep || happyPurr ? 1.15 : 1,
+        recoiling ? 5.4 : striking ? 1.53 : asleep || happyPurr ? 0.72 : 1,
+        1,
+      );
       fangs.scale.setScalar(fangAmount);
       fangs.position.set(
         restPose.fangs.x,
@@ -567,11 +613,11 @@ export function AnimatedFigure({
           ? hissOpenness
           : striking
             ? biteOpenness
-            : happyPurr
+            : happyPurr || asleep
               ? squintOpenness
               : restOpenness,
-        recoiling ? hissWidth : striking ? biteWidth : happyPurr ? squintWidth : 1,
-        happyPurr ? 0 : 1,
+        recoiling ? hissWidth : striking ? biteWidth : happyPurr || asleep ? squintWidth : 1,
+        happyPurr || asleep ? 0 : 1,
         true,
       );
       for (const id of ["leftPupil", "rightPupil"] as const) {
@@ -618,7 +664,7 @@ export function AnimatedFigure({
     const shake = Math.sin(t * Math.PI * 2 * burst.hz) * rumble.current.amp;
     rumble.current.y = MathUtils.damp(
       rumble.current.y,
-      (asleep ? sleepDrop : squat * litterRootDrop) +
+      (peeking ? peek.y : asleep ? sleepDrop : squat * litterRootDrop) +
         Math.sin(t * (asleep ? 0.55 : inLitter ? 0.8 : 1.05)) *
           (asleep ? 0.01 : inLitter ? 0.008 : 0.02) +
         litter.wiggle * 0.008 +
@@ -627,10 +673,21 @@ export function AnimatedFigure({
       dt,
     );
 
-    const lookX = MathUtils.clamp(pointer.current.x, -1, 1);
-    const lookY = MathUtils.clamp(pointer.current.y, -1, 1);
-    const lookScale = asleep ? 0.06 : inLitter ? 0 : happyPurr ? 0.45 : recoiling ? 0.35 : 1;
-    const settle = asleep ? 3.2 : inLitter ? 14 : 5;
+    const lookX = MathUtils.clamp(pointer.current.x + peek.lookX, -1, 1);
+    const lookY = MathUtils.clamp(pointer.current.y + peek.lookY, -1, 1);
+    const face = perchFaceLook(perch, lookX, lookY);
+    const lookScale = asleep
+      ? 0.06
+      : inLitter
+        ? 0
+        : peeking
+          ? 0.5
+          : happyPurr
+            ? 0.45
+            : recoiling
+              ? 0.35
+              : 1;
+    const settle = asleep ? 3.2 : inLitter ? 14 : peeking ? 7 : 5;
     const snap = escalate ? 18 : settle;
 
     root.position.y =
@@ -642,6 +699,7 @@ export function AnimatedFigure({
       hiss.tremor * 0.008 +
       litter.shake * Math.sin(t * 28) * 0.018;
     root.position.x =
+      peek.x +
       shake * 0.35 +
       lookX * strike.lunge * 0.1 +
       strike.shake * 0.02 +
@@ -650,17 +708,18 @@ export function AnimatedFigure({
       litter.shake * Math.sin(t * 22) * 0.03;
     root.position.z = MathUtils.damp(
       root.position.z,
-      (striking
-        ? -0.05
-        : asleep
-          ? sleepPush
-          : inLitter
-            ? squat * litterPush
-            : happyPurr
-              ? 0.04
-              : listening
-                ? 0.12
-                : 0) +
+      peek.z +
+        (striking
+          ? -0.05
+          : asleep && !peeking
+            ? sleepPush
+            : inLitter
+              ? squat * litterPush
+              : happyPurr
+                ? 0.04
+                : listening
+                  ? 0.12
+                  : 0) +
         strike.lunge * 0.26 -
         hiss.recoil * 0.22,
       escalateDamp(escalateElapsed),
@@ -668,17 +727,18 @@ export function AnimatedFigure({
     );
     root.rotation.x = MathUtils.damp(
       root.rotation.x,
-      (striking
-        ? 0.08
-        : asleep
-          ? sleepPitch
-          : inLitter
-            ? squat * litterPitch
-            : happyPurr
-              ? 0.03
-              : listening
-                ? 0.07
-                : 0.015) +
+      peek.pitch +
+        (striking
+          ? 0.08
+          : asleep && !peeking
+            ? sleepPitch
+            : inLitter
+              ? squat * litterPitch
+              : happyPurr
+                ? 0.03
+                : listening
+                  ? 0.07
+                  : 0.015) +
         strike.lunge * 0.18 -
         hiss.recoil * 0.06,
       snap,
@@ -686,44 +746,45 @@ export function AnimatedFigure({
     );
     root.rotation.y = MathUtils.damp(
       root.rotation.y,
-      asleep ? sleepYaw : litter.turn * litterYaw,
+      peek.yaw + (asleep && !peeking ? sleepYaw : litter.turn * litterYaw),
       settle,
       dt,
     );
     root.rotation.z = MathUtils.damp(
       root.rotation.z,
-      asleep
-        ? sleepRoll
-        : squat * 0.03 + litter.wiggle * 0.012 + litter.shake * Math.sin(t * 22) * 0.04,
+      peek.roll +
+        (asleep && !peeking
+          ? sleepRoll
+          : squat * 0.03 + litter.wiggle * 0.012 + litter.shake * Math.sin(t * 22) * 0.04),
       settle,
       dt,
     );
 
     body.position.y = MathUtils.damp(
       body.position.y,
-      asleep ? sleepBodyDrop : squat * litterBodyDrop,
+      asleep && !peeking ? sleepBodyDrop : squat * litterBodyDrop,
       asleep || inLitter ? settle : 5,
       dt,
     );
     body.scale.y =
-      (asleep ? sleepBodyScaleY : 1 + (litterBodyScaleY - 1) * squat) +
+      (asleep && !peeking ? sleepBodyScaleY : 1 + (litterBodyScaleY - 1) * squat) +
       breath * (asleep || inLitter ? 0.012 : thinking && !happyPurr && !escalate ? 0.018 : 0.028);
     body.scale.x =
-      (asleep ? sleepBodyScaleX : 1 + (litterBodyScaleX - 1) * squat) -
+      (asleep && !peeking ? sleepBodyScaleX : 1 + (litterBodyScaleX - 1) * squat) -
       breath * (asleep || inLitter ? 0.006 : 0.012);
     body.scale.z =
-      (asleep ? sleepBodyScaleZ : 1 + (litterBodyScaleZ - 1) * squat) -
+      (asleep && !peeking ? sleepBodyScaleZ : 1 + (litterBodyScaleZ - 1) * squat) -
       breath * (asleep || inLitter ? 0.004 : 0.008);
 
     head.position.x = MathUtils.damp(
       head.position.x,
-      asleep ? sleepHeadX : lookX * strike.lunge * 0.08,
+      asleep && !peeking ? sleepHeadX : lookX * strike.lunge * 0.08,
       asleep || inLitter ? settle : 18,
       dt,
     );
     head.position.y = MathUtils.damp(
       head.position.y,
-      asleep
+      asleep && !peeking
         ? sleepHeadY
         : inLitter
           ? squat * litterHeadY
@@ -733,7 +794,7 @@ export function AnimatedFigure({
     );
     head.position.z = MathUtils.damp(
       head.position.z,
-      asleep
+      asleep && !peeking
         ? sleepHeadZ
         : inLitter
           ? squat * litterHeadZ
@@ -743,15 +804,16 @@ export function AnimatedFigure({
     );
     head.rotation.y = MathUtils.damp(
       head.rotation.y,
-      lookX * 0.34 * lookScale +
+      peek.headYaw +
+        face.x * 0.34 * lookScale +
         (happyPurr
           ? 0
-          : asleep
+          : asleep && !peeking
             ? sleepHeadYaw
             : inLitter
               ? 0
               : striking
-                ? lookX * 0.08
+                ? face.x * 0.08
                 : thinking
                   ? 0.16
                   : listening
@@ -763,12 +825,13 @@ export function AnimatedFigure({
     );
     head.rotation.x = MathUtils.damp(
       head.rotation.x,
-      -lookY * 0.2 * lookScale +
+      peek.headPitch +
+        -face.y * 0.2 * lookScale +
         (striking
           ? 0.1
           : recoiling
             ? 0.16
-            : asleep
+            : asleep && !peeking
               ? sleepHeadPitch
               : inLitter
                 ? squat * litterHeadPitch
@@ -786,27 +849,28 @@ export function AnimatedFigure({
     );
     head.rotation.z = MathUtils.damp(
       head.rotation.z,
-      (striking
-        ? -0.05
-        : asleep
-          ? sleepHeadRoll
-          : inLitter
-            ? squat * litterHeadRoll
-            : happyPurr
-              ? 0.06
-              : thinking
-                ? -0.08
-                : listening
-                  ? 0.035
-                  : 0) +
+      peek.headRoll +
+        (striking
+          ? -0.05
+          : asleep && !peeking
+            ? sleepHeadRoll
+            : inLitter
+              ? squat * litterHeadRoll
+              : happyPurr
+                ? 0.06
+                : thinking
+                  ? -0.08
+                  : listening
+                    ? 0.035
+                    : 0) +
         strike.shake * 0.16 +
         hiss.tremor * 0.04,
       escalate ? 18 : asleep || inLitter ? settle : 5.2,
       dt,
     );
 
-    const irisX = lookX * 0.018 * lookScale;
-    const irisY = lookY * 0.012 * lookScale;
+    const irisX = face.x * 0.018 * lookScale;
+    const irisY = face.y * 0.012 * lookScale;
     for (const id of ["leftIris", "rightIris"] as const) {
       const iris = refs[id].current;
       if (iris !== null) {
@@ -1153,7 +1217,9 @@ export function AnimatedFigure({
       onPointerUp={onPetUp}
       onPointerCancel={onPetUp}
     >
-      <Part node={bernise} materials={materials} refs={refs} />
+      <group ref={bodyHitRef}>
+        <Part node={bernise} materials={materials} refs={refs} />
+      </group>
       <LitterBox boxRef={boxRef} dropsRef={dropsRef} kicksRef={kicksRef} coversRef={coversRef} />
     </group>
   );

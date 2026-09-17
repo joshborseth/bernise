@@ -16,7 +16,6 @@
   --rose: #d0679d;
   --sky: #add7ff;
   --sky-deep: #91b4d5;
-  --halo: color-mix(in srgb, var(--sky) 18%, transparent);
   --mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
@@ -32,6 +31,7 @@ body,
   margin: 0;
   overflow: hidden;
   background: transparent;
+  pointer-events: none;
 }
 
 body {
@@ -47,16 +47,30 @@ body {
   align-items: center;
   justify-content: flex-end;
   padding: 0 0 1.5rem;
+  pointer-events: none;
 }
 
 .pet-disconnected {
   opacity: 0.72;
 }
 
+.pet-perch {
+  padding: 0;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.pet-perch .mascot {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 .pet-status {
   margin: 0.35rem 0 0;
   font-size: 0.78rem;
   color: var(--muted);
+  pointer-events: none;
 }
 
 .pet-fixture {
@@ -65,6 +79,7 @@ body {
   left: 0.75rem;
   z-index: 4;
   display: flex;
+  pointer-events: auto;
   max-width: 22rem;
   flex-wrap: wrap;
   gap: 0.35rem;
@@ -106,28 +121,44 @@ body {
   width: min(22rem, 90vmin);
   height: min(22rem, 90vmin);
   aspect-ratio: 1;
+  pointer-events: none;
 }
 
-.mascot-halo {
-  position: absolute;
-  inset: -4% -8% 2%;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 45%, var(--halo) 0%, transparent 74%),
-    radial-gradient(
-      circle at 50% 52%,
-      color-mix(in srgb, var(--sky) 12%, transparent),
-      transparent 78%
-    );
-  animation: halo-pulse 4.6s ease-in-out infinite;
+.mascot-menu {
+  position: fixed;
+  z-index: 8;
+  display: flex;
+  min-width: 10.5rem;
+  flex-direction: column;
+  gap: 0.08rem;
+  padding: 0.28rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  pointer-events: auto;
 }
 
-.mascot-listening .mascot-halo {
-  animation-duration: 2.6s;
+.mascot-menu button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.34rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
 }
 
-.mascot-purring .mascot-halo {
-  animation-duration: 1.35s;
+.mascot-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--peach) 18%, transparent);
+}
+
+.mascot-menu button:disabled {
+  color: var(--muted);
+  cursor: default;
 }
 
 .mascot-stage {
@@ -137,14 +168,11 @@ body {
   overflow: hidden;
   touch-action: none;
   user-select: none;
+  pointer-events: auto;
 }
 
 .mascot-stage canvas {
   display: block;
-}
-
-.mascot-sleeping .mascot-halo {
-  animation-duration: 6.4s;
 }
 
 .mascot-zzz {
@@ -191,31 +219,10 @@ body {
   animation-delay: 2.1s;
 }
 
-.mascot-biting .mascot-halo,
-.mascot-hissing .mascot-halo {
-  animation-duration: 0.5s;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .mascot-halo,
   .mascot-zzz span {
     animation: none;
-  }
-
-  .mascot-zzz span {
     opacity: 0.78;
-  }
-}
-
-@keyframes halo-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.78;
-    transform: scale(1.03);
   }
 }
 

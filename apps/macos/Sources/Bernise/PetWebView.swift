@@ -1,11 +1,6 @@
 import AppKit
 import WebKit
 
-final class OverlayPanel: NSPanel {
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { false }
-}
-
 final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNavigationDelegate {
     let webView: WKWebView
     var onReady: (() -> Void)?
@@ -30,12 +25,13 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         webView.load(URLRequest(url: BerniseConfig.petURL))
     }
 
-    func setHostState(connected: Bool, muted: Bool, mood: String, speakKey: String) {
+    func setHostState(connected: Bool, muted: Bool, mood: String, speakKey: String, perch: String) {
         let payload: [String: Any] = [
             "connected": connected,
             "muted": muted,
             "mood": mood,
             "speakKey": speakKey,
+            "perch": perch,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: payload),
               let json = String(data: data, encoding: .utf8)
@@ -60,8 +56,34 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         }
     }
 
+    func playAction(_ id: String) {
+        let escaped = id.replacingOccurrences(of: "\"", with: "")
+        webView.evaluateJavaScript("window.__bernise && window.__bernise.playAction(\"\(escaped)\")")
+    }
+
     func resetAttention() {
         webView.evaluateJavaScript("window.__bernise && window.__bernise.resetAttention()")
+    }
+
+    func hitTestBody(clientX: CGFloat, clientY: CGFloat, completion: @escaping (Bool) -> Void) {
+        let script = String(
+            format: "Boolean(window.__bernise && window.__bernise.hitTest(%.2f, %.2f))",
+            Double(clientX),
+            Double(clientY)
+        )
+        webView.evaluateJavaScript(script) { result, _ in
+            completion(Self.jsBool(result))
+        }
+    }
+
+    private static func jsBool(_ result: Any?) -> Bool {
+        if let value = result as? Bool {
+            return value
+        }
+        if let number = result as? NSNumber {
+            return number.boolValue
+        }
+        return false
     }
 
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {

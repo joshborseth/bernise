@@ -73,9 +73,19 @@ export function App() {
   );
 
   return (
-    <div className={host.connected ? "pet" : "pet pet-disconnected"}>
-      <BerniseMascot mood={mood} speakKey={host.speakKey} />
-      {host.connected ? null : <p className="pet-status">t3code is away</p>}
+    <div
+      className={[
+        "pet",
+        host.connected ? "" : "pet-disconnected",
+        host.perch === "none" ? "" : `pet-perch pet-perch-${host.perch}`,
+      ]
+        .filter((value) => value.length > 0)
+        .join(" ")}
+    >
+      <BerniseMascot mood={mood} speakKey={host.speakKey} perch={host.perch} />
+      {host.connected || host.perch !== "none" ? null : (
+        <p className="pet-status">t3code is away</p>
+      )}
       {native ? null : (
         <aside className="pet-fixture" aria-label="Pet fixtures">
           <p>Browser pet. Overlay uses the same cat.</p>
@@ -119,6 +129,21 @@ export function App() {
           </button>
           <button type="button" onClick={() => setHostState({ muted: !host.muted })}>
             {host.muted ? "Unmute mic" : "Mute mic"}
+          </button>
+          <button type="button" onClick={() => setHostState({ perch: "left" })}>
+            Peek left
+          </button>
+          <button type="button" onClick={() => setHostState({ perch: "right" })}>
+            Peek right
+          </button>
+          <button type="button" onClick={() => setHostState({ perch: "top" })}>
+            Peek top
+          </button>
+          <button type="button" onClick={() => setHostState({ perch: "bottom" })}>
+            Peek bottom
+          </button>
+          <button type="button" onClick={() => setHostState({ perch: "none" })}>
+            Unperch
           </button>
           {events.length > 0 ? <pre>{events}</pre> : null}
         </aside>
