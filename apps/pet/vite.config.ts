@@ -4,7 +4,7 @@ import { defineConfig, lazyPlugins } from "vite-plus";
 
 const port = Number(process.env.PORT ?? 5733);
 const explicitHost = process.env.HOST?.trim();
-const host = explicitHost || "localhost";
+const host = explicitHost || "127.0.0.1";
 
 export default defineConfig({
   plugins: lazyPlugins(() => [react(), tailwindcss()]),

@@ -94,6 +94,9 @@ export const summarizeThread = (detail: ThreadDetail): string => {
       break;
     }
   }
-  const body = lastAssistant === undefined ? "No assistant reply yet." : speakableBrief(lastAssistant);
-  return [detail.title, pending, body].filter((part) => part !== undefined && part.length > 0).join(" ");
+  const body =
+    lastAssistant === undefined ? "No assistant reply yet." : speakableBrief(lastAssistant);
+  return [detail.title, pending, body]
+    .filter((part) => part !== undefined && part.length > 0)
+    .join(" ");
 };

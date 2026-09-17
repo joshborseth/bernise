@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { classifyPrompt, parseThreadDetail, summarizeThread } from "./index.ts";
 
 describe("classifyPrompt", () => {
@@ -24,7 +24,7 @@ describe("summarizeThread", () => {
         { role: "user", text: "please fix login" },
         {
           role: "assistant",
-          text: "I patched **login**. See https://example.com/diff and `secret()`. Done.",
+          text: "I patched **login**. See https://example.com/diff.\n```ts\nsecret()\n```\nDone.",
         },
       ],
     });

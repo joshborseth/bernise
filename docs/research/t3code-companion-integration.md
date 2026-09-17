@@ -10,13 +10,13 @@ How a companion app (e.g. a voice butler) would talk to a running [t3code](https
 
 ### Port and URLs
 
-| Item | Value |
-| --- | --- |
-| Default port | `3773` (`DEFAULT_SERVER_PORT` in `apps/server/src/config.ts`) |
-| Desktop host default | `127.0.0.1` |
-| Web mode host default | all interfaces (`undefined`) |
-| WebSocket endpoint | `ws://<host>:3773/ws` (ticket as query param) |
-| HTTP origin | `http://<host>:3773` |
+| Item                  | Value                                                         |
+| --------------------- | ------------------------------------------------------------- |
+| Default port          | `3773` (`DEFAULT_SERVER_PORT` in `apps/server/src/config.ts`) |
+| Desktop host default  | `127.0.0.1`                                                   |
+| Web mode host default | all interfaces (`undefined`)                                  |
+| WebSocket endpoint    | `ws://<host>:3773/ws` (ticket as query param)                 |
+| HTTP origin           | `http://<host>:3773`                                          |
 
 Sources: [server-options](https://mintlify.wiki/pingdotgg/t3code/configuration/server-options), [config.ts](https://github.com/pingdotgg/t3code/blob/78f462c4/apps/server/src/config.ts), client tests using `/ws?wsTicket=…`.
 
@@ -42,15 +42,15 @@ Sources:
 
 From `ORCHESTRATION_WS_METHODS` in [`packages/contracts/src/orchestration.ts`](https://github.com/pingdotgg/t3code/blob/78f462c4/packages/contracts/src/orchestration.ts):
 
-| Method | Role |
-| --- | --- |
-| `orchestration.dispatchCommand` | Mutate (commands below) |
-| `orchestration.subscribeShell` | Stream: initial shell snapshot + incremental shell events |
-| `orchestration.subscribeThread` | Stream: thread detail snapshot + live domain events for one thread |
-| `orchestration.getArchivedShellSnapshot` | Archived shell read |
-| `orchestration.searchThreads` | Search |
-| `orchestration.getTurnDiff` / `getFullThreadDiff` | Diffs |
-| `orchestration.getWorkflowScript` | Workflow script |
+| Method                                            | Role                                                               |
+| ------------------------------------------------- | ------------------------------------------------------------------ |
+| `orchestration.dispatchCommand`                   | Mutate (commands below)                                            |
+| `orchestration.subscribeShell`                    | Stream: initial shell snapshot + incremental shell events          |
+| `orchestration.subscribeThread`                   | Stream: thread detail snapshot + live domain events for one thread |
+| `orchestration.getArchivedShellSnapshot`          | Archived shell read                                                |
+| `orchestration.searchThreads`                     | Search                                                             |
+| `orchestration.getTurnDiff` / `getFullThreadDiff` | Diffs                                                              |
+| `orchestration.getWorkflowScript`                 | Workflow script                                                    |
 
 **Removed from WS surface** (replaced by subscribe streams — [PR #1973](https://github.com/pingdotgg/t3code/pull/1973)):
 
@@ -141,12 +141,12 @@ There is no separate `messages.list` command.
 
 ### Settle / park (often needed by a butler UX)
 
-| Command | Type |
-| --- | --- |
-| Settle | `thread.settle` |
-| Unsettle | `thread.unsettle` (`reason: "user"` only) |
-| Snooze | `thread.snooze` (`snoozedUntil`) |
-| Unsnooze / wake | `thread.unsnooze` (`reason: "user"`) |
+| Command         | Type                                      |
+| --------------- | ----------------------------------------- |
+| Settle          | `thread.settle`                           |
+| Unsettle        | `thread.unsettle` (`reason: "user"` only) |
+| Snooze          | `thread.snooze` (`snoozedUntil`)          |
+| Unsnooze / wake | `thread.unsnooze` (`reason: "user"`)      |
 
 ---
 
@@ -174,15 +174,15 @@ User docs: [Working with threads](https://github.com/pingdotgg/t3code/blob/main/
 
 ### Attention-like signals on `OrchestrationThreadShell`
 
-| Field | Meaning |
-| --- | --- |
-| `hasPendingApprovals` | Blocked on approval |
-| `hasPendingUserInput` | Blocked on user input |
-| `session.status` | `idle` \| `starting` \| `running` \| `ready` \| `interrupted` \| `stopped` \| `error` |
-| `latestTurn.state` | turn progress (`running` / `completed` / `interrupted` / `error`) |
-| `backgroundLiveness` | `"working"` \| `"monitoring"` after turn settles |
-| `planProgress` | in-turn plan step UI |
-| snooze + raised hand | `threadRaisedHandWhileSnoozed`: pending approval/input, fresh session error, or turn completed after snooze |
+| Field                 | Meaning                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `hasPendingApprovals` | Blocked on approval                                                                                         |
+| `hasPendingUserInput` | Blocked on user input                                                                                       |
+| `session.status`      | `idle` \| `starting` \| `running` \| `ready` \| `interrupted` \| `stopped` \| `error`                       |
+| `latestTurn.state`    | turn progress (`running` / `completed` / `interrupted` / `error`)                                           |
+| `backgroundLiveness`  | `"working"` \| `"monitoring"` after turn settles                                                            |
+| `planProgress`        | in-turn plan step UI                                                                                        |
+| snooze + raised hand  | `threadRaisedHandWhileSnoozed`: pending approval/input, fresh session error, or turn completed after snooze |
 
 Live updates: shell stream `thread-upserted` (attention flags change without parsing every domain event); thread stream `kind: "event"` for `thread.session-set`, `thread.activity-appended`, `thread.settled`, etc.
 
@@ -194,12 +194,12 @@ Live updates: shell stream `thread-upserted` (attention flags change without par
 
 From [`EnvironmentOrchestrationHttpApi`](https://github.com/pingdotgg/t3code/blob/78f462c4/packages/contracts/src/environmentHttp.ts):
 
-| Method | Path | Success type |
-| --- | --- | --- |
-| GET | `/api/orchestration/snapshot` | `OrchestrationReadModel` (full threads w/ messages — heavy) |
-| GET | `/api/orchestration/shell` | `OrchestrationShellSnapshot` (list/inbox) |
-| GET | `/api/orchestration/threads/:threadId` | `OrchestrationThreadDetailSnapshot` |
-| POST | `/api/orchestration/dispatch` | `DispatchResult` |
+| Method | Path                                   | Success type                                                |
+| ------ | -------------------------------------- | ----------------------------------------------------------- |
+| GET    | `/api/orchestration/snapshot`          | `OrchestrationReadModel` (full threads w/ messages — heavy) |
+| GET    | `/api/orchestration/shell`             | `OrchestrationShellSnapshot` (list/inbox)                   |
+| GET    | `/api/orchestration/threads/:threadId` | `OrchestrationThreadDetailSnapshot`                         |
+| POST   | `/api/orchestration/dispatch`          | `DispatchResult`                                            |
 
 All require `EnvironmentAuthenticatedAuth` (bearer/session + scopes such as `orchestration:read` / operate).
 
@@ -220,12 +220,12 @@ Sources: [`McpHttpServer.ts`](https://github.com/pingdotgg/t3code/blob/78f462c4/
 
 ## 5. Default ports and config / state locations
 
-| Setting | Default |
-| --- | --- |
-| Port | `3773` |
-| Env | `T3CODE_PORT`, `T3CODE_HOST`, `T3CODE_MODE`, `T3CODE_STATE_DIR`, … |
-| Base dir | typically `~/.t3` |
-| State dir | `~/.t3/userdata` (or `~/.t3/dev` under `devUrl`) |
+| Setting   | Default                                                            |
+| --------- | ------------------------------------------------------------------ |
+| Port      | `3773`                                                             |
+| Env       | `T3CODE_PORT`, `T3CODE_HOST`, `T3CODE_MODE`, `T3CODE_STATE_DIR`, … |
+| Base dir  | typically `~/.t3`                                                  |
+| State dir | `~/.t3/userdata` (or `~/.t3/dev` under `devUrl`)                   |
 
 Under state dir ([`deriveServerPaths`](https://github.com/pingdotgg/t3code/blob/78f462c4/apps/server/src/config.ts)):
 
@@ -245,15 +245,15 @@ Per-project config (scripts/previews): `t3.json` schema mentioned in third-party
 
 ### First-party docs worth reading
 
-| Doc | URL |
-| --- | --- |
-| Docs index | https://github.com/pingdotgg/t3code/blob/main/docs/README.md |
-| Remote access (pairing, T3 Connect, mobile) | https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md |
-| Thread settle/snooze UX | https://github.com/pingdotgg/t3code/blob/main/docs/user/thread-sidebar.md |
-| Environment auth | https://github.com/pingdotgg/t3code/blob/main/docs/internals/environment-auth.md |
-| Remote architecture + `wsTicket` | https://github.com/pingdotgg/t3code/blob/main/docs/internals/remote.md |
-| Connection runtime (HTTP vs WS roles) | https://github.com/pingdotgg/t3code/blob/main/docs/internals/connection-runtime.md |
-| Mobile internals | https://github.com/pingdotgg/t3code/blob/main/docs/internals/mobile-navigation.md |
+| Doc                                         | URL                                                                                |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Docs index                                  | https://github.com/pingdotgg/t3code/blob/main/docs/README.md                       |
+| Remote access (pairing, T3 Connect, mobile) | https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md           |
+| Thread settle/snooze UX                     | https://github.com/pingdotgg/t3code/blob/main/docs/user/thread-sidebar.md          |
+| Environment auth                            | https://github.com/pingdotgg/t3code/blob/main/docs/internals/environment-auth.md   |
+| Remote architecture + `wsTicket`            | https://github.com/pingdotgg/t3code/blob/main/docs/internals/remote.md             |
+| Connection runtime (HTTP vs WS roles)       | https://github.com/pingdotgg/t3code/blob/main/docs/internals/connection-runtime.md |
+| Mobile internals                            | https://github.com/pingdotgg/t3code/blob/main/docs/internals/mobile-navigation.md  |
 
 ### Generated / third-party API sites (use cautiously)
 
