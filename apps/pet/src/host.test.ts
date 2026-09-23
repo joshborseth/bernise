@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { subscribeMascotAction } from "./mascot/actions.ts";
 import {
   pushShellJson,
+  pushShellStreamJson,
   requestAction,
   resetAttention,
   setPointer,
@@ -21,6 +22,45 @@ describe("pushShellJson", () => {
       ),
     ) as unknown;
     expect(events).toEqual([
+      { kind: "needsYou", threadId: "t1", title: "Fix auth", reason: "approval" },
+    ]);
+  });
+});
+
+describe("pushShellStreamJson", () => {
+  it("hydrates from the shell stream then speaks when a thread needs you", () => {
+    resetAttention();
+    const hydrated = JSON.parse(
+      pushShellStreamJson(
+        JSON.stringify([
+          {
+            kind: "snapshot",
+            snapshot: { snapshotSequence: 1, threads: [{ id: "t1", title: "Fix auth" }] },
+          },
+        ]),
+      ),
+    ) as {
+      events: unknown[];
+      snapshotSequence: number;
+      preferredThreadId: string;
+    };
+    expect(hydrated.events).toEqual([]);
+    expect(hydrated.snapshotSequence).toBe(1);
+    expect(hydrated.preferredThreadId).toBe("t1");
+
+    const pending = JSON.parse(
+      pushShellStreamJson(
+        JSON.stringify([
+          {
+            kind: "thread-upserted",
+            sequence: 2,
+            thread: { id: "t1", title: "Fix auth", hasPendingApprovals: true },
+          },
+        ]),
+      ),
+    ) as { events: unknown[]; snapshotSequence: number };
+    expect(pending.snapshotSequence).toBe(2);
+    expect(pending.events).toEqual([
       { kind: "needsYou", threadId: "t1", title: "Fix auth", reason: "approval" },
     ]);
   });

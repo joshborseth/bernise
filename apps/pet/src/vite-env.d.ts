@@ -21,6 +21,8 @@ interface Window {
     }) => void;
     readonly pushShellJson: (json: string) => string;
     readonly pushShellBase64: (base64: string) => string;
+    readonly pushShellStreamJson: (json: string) => string;
+    readonly pushShellStreamBase64: (base64: string) => string;
     readonly summarizeJson: (json: string) => string;
     readonly summarizeBase64: (base64: string) => string;
     readonly resetAttention: () => void;

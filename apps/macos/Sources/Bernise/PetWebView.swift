@@ -41,6 +41,22 @@ final class PetWebView: NSObject, WKScriptMessageHandler, WKUIDelegate, WKNaviga
         webView.evaluateJavaScript("window.__bernise && window.__bernise.setHostState(\(json))")
     }
 
+    func pushShellStream(_ items: [Any], completion: @escaping (ShellStreamPush) -> Void) {
+        let empty = ShellStreamPush(events: [], snapshotSequence: nil, preferredThreadId: nil)
+        guard JSONSerialization.isValidJSONObject(items),
+              let data = try? JSONSerialization.data(withJSONObject: items)
+        else {
+            completion(empty)
+            return
+        }
+        let b64 = data.base64EncodedString()
+        let fallback = #"{"events":[],"snapshotSequence":null,"preferredThreadId":null}"#
+        let script = "window.__bernise ? window.__bernise.pushShellStreamBase64(\"\(b64)\") : '\(fallback)'"
+        webView.evaluateJavaScript(script) { result, _ in
+            completion(ShellStreamPush.parse(from: result as? String))
+        }
+    }
+
     func pushShell(_ data: Data, completion: @escaping ([SpeakEvent]) -> Void) {
         let b64 = data.base64EncodedString()
         let script = "window.__bernise ? window.__bernise.pushShellBase64(\"\(b64)\") : '[]'"

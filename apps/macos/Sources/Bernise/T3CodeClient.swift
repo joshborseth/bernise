@@ -5,11 +5,6 @@ struct T3CodeSettings: Codable {
     var accessToken: String?
 }
 
-struct ThreadShell: Equatable {
-    var id: String
-    var title: String
-}
-
 struct SpeakEvent: Equatable {
     enum Kind: String {
         case needsYou
@@ -24,7 +19,7 @@ struct SpeakEvent: Equatable {
     var count: Int?
 }
 
-enum T3CodeClientError: Error {
+enum T3CodeClientError: Error, Equatable {
     case disconnected
     case unauthorized
     case badResponse
@@ -65,16 +60,44 @@ final class T3CodeClient {
         BerniseConfig.t3TokenOverride ?? settings.accessToken?.nilIfEmpty
     }
 
-    func getShell() async throws -> Data {
-        try await get(path: "/api/orchestration/shell")
-    }
-
     func getThread(id: String) async throws -> Data {
         let encoded = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        return try await get(path: "/api/orchestration/threads/\(encoded)")
+        return try await request(method: "GET", path: "/api/orchestration/threads/\(encoded)")
     }
 
-    private func get(path: String) async throws -> Data {
+    func webSocketTicket() async throws -> String {
+        let data = try await request(method: "POST", path: "/api/auth/websocket-ticket")
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ticket = json["ticket"] as? String,
+              !ticket.isEmpty
+        else {
+            throw T3CodeClientError.badResponse
+        }
+        return ticket
+    }
+
+    /// Matches `shellSocketURL` in `@bernise/t3link`.
+    func webSocketURL(ticket: String) throws -> URL {
+        let settings = loadSettings()
+        let origin = origin(settings: settings)
+        guard var components = URLComponents(url: origin, resolvingAgainstBaseURL: false) else {
+            throw T3CodeClientError.disconnected
+        }
+        switch components.scheme?.lowercased() {
+        case "https", "wss":
+            components.scheme = "wss"
+        default:
+            components.scheme = "ws"
+        }
+        components.path = "/ws"
+        components.queryItems = [URLQueryItem(name: "wsTicket", value: ticket)]
+        guard let url = components.url else {
+            throw T3CodeClientError.disconnected
+        }
+        return url
+    }
+
+    private func request(method: String, path: String) async throws -> Data {
         let settings = loadSettings()
         let origin = origin(settings: settings)
         guard var components = URLComponents(url: origin, resolvingAgainstBaseURL: false) else {
@@ -85,7 +108,11 @@ final class T3CodeClient {
             throw T3CodeClientError.disconnected
         }
         var request = URLRequest(url: url)
+        request.httpMethod = method
         request.timeoutInterval = 5
+        if method == "POST" {
+            request.httpBody = Data()
+        }
         if let token = token(settings: settings) {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -154,6 +181,38 @@ extension SpeakEvent {
                 count: object["count"] as? Int
             )
         }
+    }
+}
+
+struct ShellStreamPush {
+    var events: [SpeakEvent]
+    var snapshotSequence: Int?
+    var preferredThreadId: String?
+
+    static func parse(from json: String?) -> ShellStreamPush {
+        guard let json,
+              let data = json.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return ShellStreamPush(events: [], snapshotSequence: nil, preferredThreadId: nil)
+        }
+        let events: [SpeakEvent]
+        if let raw = object["events"],
+           JSONSerialization.isValidJSONObject(raw),
+           let encoded = try? JSONSerialization.data(withJSONObject: raw),
+           let text = String(data: encoded, encoding: .utf8)
+        {
+            events = SpeakEvent.parseList(from: text)
+        } else {
+            events = []
+        }
+        let sequence = object["snapshotSequence"] as? NSNumber
+        let preferred = object["preferredThreadId"] as? String
+        return ShellStreamPush(
+            events: events,
+            snapshotSequence: sequence?.intValue,
+            preferredThreadId: preferred
+        )
     }
 }
 

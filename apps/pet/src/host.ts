@@ -1,4 +1,5 @@
 import { diffShell, emptyAttention, parseShell, type SpeakEvent } from "@bernise/attention";
+import { applyShellStreamItems, type ShellCursor } from "@bernise/t3link";
 import { classifyPrompt, parseThreadDetail, summarizeThread } from "@bernise/summary";
 import { playMascotAction } from "./mascot/actions.ts";
 import { hitTestBody } from "./mascot/hitTest.ts";
@@ -25,6 +26,7 @@ const defaultState = (): HostState => ({
 
 let hostState: HostState = defaultState();
 let attention = emptyAttention();
+let shellCursor: ShellCursor | null = null;
 const listeners = new Set<(state: HostState) => void>();
 
 export const getHostState = (): HostState => hostState;
@@ -54,6 +56,41 @@ export const setHostState = (patch: HostStatePatch): void => {
 
 export const resetAttention = (): void => {
   attention = emptyAttention();
+  shellCursor = null;
+};
+
+const emptyShellPush = (): string =>
+  JSON.stringify({ events: [], snapshotSequence: null, preferredThreadId: null });
+
+const shellPush = (events: ReadonlyArray<SpeakEvent>, cursor: ShellCursor | null): string => {
+  const threads = cursor === null ? [] : parseShell({ threads: cursor.threads }).threads;
+  const blocked = threads.find(
+    (thread) => thread.hasPendingApprovals || thread.hasPendingUserInput,
+  );
+  return JSON.stringify({
+    events,
+    snapshotSequence: cursor?.snapshotSequence ?? null,
+    preferredThreadId: blocked?.id ?? threads[0]?.id ?? null,
+  });
+};
+
+export const pushShellStreamJson = (json: string): string => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json) as unknown;
+  } catch {
+    return shellPush([], shellCursor);
+  }
+  const items = Array.isArray(parsed) ? parsed : [parsed];
+  const applied = applyShellStreamItems(shellCursor, items);
+  shellCursor = applied.cursor;
+  if (!applied.threadsChanged || shellCursor === null) {
+    return shellPush([], shellCursor);
+  }
+  const snapshot = parseShell({ threads: shellCursor.threads });
+  const next = diffShell(attention, snapshot);
+  attention = next.state;
+  return shellPush(next.events, shellCursor);
 };
 
 export const pushShellJson = (json: string): string => {
@@ -83,6 +120,14 @@ export const pushShellBase64 = (base64: string): string => {
     return pushShellJson(decodeBase64(base64));
   } catch {
     return "[]";
+  }
+};
+
+export const pushShellStreamBase64 = (base64: string): string => {
+  try {
+    return pushShellStreamJson(decodeBase64(base64));
+  } catch {
+    return emptyShellPush();
   }
 };
 
@@ -205,6 +250,8 @@ export const installHost = (): void => {
     setPointer,
     pushShellJson,
     pushShellBase64,
+    pushShellStreamJson,
+    pushShellStreamBase64,
     summarizeJson,
     summarizeBase64,
     resetAttention,

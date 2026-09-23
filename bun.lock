@@ -26,6 +26,7 @@
         "@bernise/attention": "workspace:*",
         "@bernise/speakable": "workspace:*",
         "@bernise/summary": "workspace:*",
+        "@bernise/t3link": "workspace:*",
         "@huggingface/transformers": "^3.8.1",
         "@react-three/drei": "^10.7.8",
         "@react-three/fiber": "^9.7.0",
@@ -62,6 +63,10 @@
         "@bernise/speakable": "workspace:*",
       },
     },
+    "packages/t3link": {
+      "name": "@bernise/t3link",
+      "version": "0.0.0",
+    },
   },
   "overrides": {
     "vite": "catalog:",
@@ -88,6 +93,8 @@
     "@bernise/speakable": ["@bernise/speakable@workspace:packages/speakable"],
 
     "@bernise/summary": ["@bernise/summary@workspace:packages/summary"],
+
+    "@bernise/t3link": ["@bernise/t3link@workspace:packages/t3link"],
 
     "@blazediff/core": ["@blazediff/core@1.9.1", "", {}, "sha512-ehg3jIkYKulZh+8om/O25vkvSsXXwC+skXmyA87FFx6A/45eqOkZsBltMw/TVteb0mloiGT8oGRTcjRAz66zaA=="],
 

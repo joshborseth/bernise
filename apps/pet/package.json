@@ -12,6 +12,7 @@
     "@bernise/attention": "workspace:*",
     "@bernise/speakable": "workspace:*",
     "@bernise/summary": "workspace:*",
+    "@bernise/t3link": "workspace:*",
     "@huggingface/transformers": "^3.8.1",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
