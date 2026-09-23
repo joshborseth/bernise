@@ -10,13 +10,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let pet = PetWebView()
     private let status = StatusItemController()
-    private let poller = T3CodePoller()
+    private let shell = T3CodeShellSession()
     private let queue = SpeakQueue()
     private var connected = false
     private var muted = false
     private var mood = "idle"
     private var speakKey = ""
-    private var latestShell: Data?
 
     func applicationDidFinishLaunching(_: Notification) {
         overlay.level = .floating
@@ -41,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         status.onReconnect = { [weak self] in
             self?.pet.resetAttention()
-            self?.poller.start()
+            self?.shell.start()
         }
         status.onQuit = {
             NSApp.terminate(nil)
@@ -62,24 +61,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         pet.onReady = { [weak self] in
             self?.applyHost()
-            self?.poller.start()
+            self?.shell.start()
         }
         pet.onTranscript = { [weak self] text, intent in
             self?.handleTranscript(text: text, intent: intent)
         }
-        poller.onConnected = { [weak self] in
+        shell.onConnected = { [weak self] in
             self?.connected = true
             self?.status.setConnected(true)
             self?.applyHost()
         }
-        poller.onDisconnected = { [weak self] in
+        shell.onDisconnected = { [weak self] in
             self?.connected = false
             self?.status.setConnected(false)
             self?.applyHost(mood: "idle", speakKey: "")
         }
-        poller.onShell = { [weak self] data in
-            self?.latestShell = data
-            self?.handleShell(data)
+        shell.onItems = { [weak self] values, generation, done in
+            guard let self else {
+                done()
+                return
+            }
+            self.pet.pushShellStream(values) { push in
+                self.shell.notePush(push, generation: generation)
+                for event in push.events {
+                    self.speak(event: event)
+                }
+                done()
+            }
         }
 
         pet.loadPet()
@@ -101,16 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func handleShell(_ data: Data) {
-        pet.pushShell(data) { [weak self] events in
-            guard let self else { return }
-            for event in events {
-                self.speak(event: event, shell: data)
-            }
-        }
-    }
-
-    private func speak(event: SpeakEvent, shell: Data) {
+    private func speak(event: SpeakEvent) {
         switch event.kind {
         case .needsYou:
             let title = event.title ?? "A thread"
@@ -122,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let threadId = event.threadId
             Task { [weak self] in
                 guard let self else { return }
-                if let threadId, let detail = try? await self.poller.fetchThread(id: threadId) {
+                if let threadId, let detail = try? await self.shell.fetchThread(id: threadId) {
                     await self.enqueueSummary(detail, key: threadId, priority: .settled)
                     return
                 }
@@ -138,7 +137,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 SpeakJob(text: "\(word) threads settled.", priority: .settled, speakKey: "many-\(count)")
             )
         }
-        _ = shell
     }
 
     private func handleTranscript(text _: String, intent: String) {
@@ -152,15 +150,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             return
         }
-        guard let shell = latestShell else {
+        guard connected else {
             queue.enqueue(
                 SpeakJob(text: "t3code is away.", priority: .needsYou, speakKey: "away")
             )
             return
         }
+        guard let threadId = shell.preferredThreadId() else {
+            queue.enqueue(
+                SpeakJob(text: "I do not see a thread to summarize.", priority: .settled, speakKey: "empty")
+            )
+            return
+        }
         Task { [weak self] in
             guard let self else { return }
-            guard let detail = try? await self.poller.fetchPreferredThread(from: shell) else {
+            guard let detail = try? await self.shell.fetchThread(id: threadId) else {
                 self.queue.enqueue(
                     SpeakJob(text: "I do not see a thread to summarize.", priority: .settled, speakKey: "empty")
                 )

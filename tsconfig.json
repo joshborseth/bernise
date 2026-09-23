@@ -11,6 +11,7 @@
   "references": [
     { "path": "./packages/speakable" },
     { "path": "./packages/attention" },
-    { "path": "./packages/summary" }
+    { "path": "./packages/summary" },
+    { "path": "./packages/t3link" }
   ]
 }

@@ -4,9 +4,9 @@ Bernise is a macOS overlay pet that watches a local [t3code](https://github.com/
 
 v1 is listen-only: unsolicited speech when a thread needs you or settles, and an extractive summary on “hey Bernise.”
 
-The Three.js cat lives in `apps/pet`. The overlay, t3code HTTP, and Chatterbox playback live in `apps/macos`. Attention and summary are pure TypeScript in `packages/`.
+The Three.js cat lives in `apps/pet`. The overlay, t3code shell stream, and Chatterbox playback live in `apps/macos`. Attention and summary are pure TypeScript in `packages/`.
 
-Mintlify pages that still document `orchestration.getSnapshot`, `orchestration.domainEvent`, and `ws://host:3773?token=` are stale. The contract is HTTP orchestration plus pairing. Details: [docs/research/t3code-companion-integration.md](research/t3code-companion-integration.md).
+Mintlify pages that still document `orchestration.getSnapshot`, `orchestration.domainEvent`, and `ws://host:3773?token=` are stale. The contract is pairing, HTTP thread reads, and `orchestration.subscribeShell`. Details: [docs/research/t3code-companion-integration.md](research/t3code-companion-integration.md).
 
 ## Discover t3code
 
@@ -15,11 +15,11 @@ Mintlify pages that still document `orchestration.getSnapshot`, `orchestration.d
 
 Override with `BERNISE_T3CODE_ORIGIN`.
 
-Inbox: `GET {origin}/api/orchestration/shell` about once a second.
+Inbox: Effect RPC `orchestration.subscribeShell` on `ws://<host>/ws?wsTicket=<ticket>` (`wss` when the origin is https). The stream sends one shell snapshot, then incremental thread and project events. Bernise folds those into the shell the pet already diffs, and resumes with `afterSequence` after a drop.
 
 Summary source: `GET {origin}/api/orchestration/threads/{threadId}`.
 
-v1 does not call `POST /api/orchestration/dispatch` and does not open the Effect-RPC WebSocket.
+v1 does not call `POST /api/orchestration/dispatch`.
 
 ## Auth (pairing spike)
 
@@ -35,14 +35,14 @@ Loopback t3code is not an open API. Current environments issue their own session
 }
 ```
 
-3. Send `Authorization: Bearer <accessToken>` on every orchestration GET.
+3. Send `Authorization: Bearer <accessToken>` on orchestration GETs and on `POST /api/auth/websocket-ticket`.
 4. Optional: `BERNISE_T3CODE_TOKEN` wins over the file.
 
 Web-mode t3code can seed `T3CODE_DEV_AUTH_TOKEN`; desktop and non-dev servers ignore it. Do not rely on the old `--auth-token` / `?token=` query string.
 
-If the shell GET returns 401/403, or the origin is down, the pet stays idle and disconnected. It does not invent a token.
+If the ticket request returns 401/403, or the origin is down, the pet stays idle and disconnected. It does not invent a token.
 
-`POST /api/auth/websocket-ticket` is only needed for live WS. v1 polls HTTP, so a bearer is enough.
+Mint a websocket ticket on each connect (`POST /api/auth/websocket-ticket` → `{ ticket, expiresAt }`). The ticket lasts about five minutes and is only for the handshake. The long-lived bearer stays off the socket URL. A bearer alone is enough for thread reads.
 
 ## Speak
 
