@@ -237,7 +237,7 @@ export const pushSpeakable = (
 export const flushSpeakable = (state: SpeakableState, options: SpeakableOptions): SpeakableResult =>
   consume(state, "", options, true);
 
-/** Chatterbox rejects text over 20_000 chars; split on punctuation before that cap. */
+/** Split on punctuation so one speech request stays under 20_000 characters. */
 export const splitForTts = (text: string): ReadonlyArray<string> => {
   const trimmed = text.trim();
   if (trimmed.length === 0) {

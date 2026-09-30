@@ -7,7 +7,7 @@ Coding work must not call model APIs. Intelligence lives in t3code. Bernise is l
 ## Layout
 
 - `apps/pet` — Three.js cat, listen/VAD, host bridge (Vite, port 5733)
-- `apps/macos` — AppKit overlay, t3code HTTP, Chatterbox TTS (build on a Mac)
+- `apps/macos` — AppKit overlay, t3code HTTP, local Chatterbox Turbo (build on a Mac)
 - `packages/attention` — shell snapshot → `needsYou` / `settled` events
 - `packages/summary` — extractive spoken brief
 - `packages/speakable` — markdown strip for TTS

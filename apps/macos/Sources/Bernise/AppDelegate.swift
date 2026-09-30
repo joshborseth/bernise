@@ -90,7 +90,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        LocalTtsServer.shared.prepare()
         pet.loadPet()
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        LocalTtsServer.shared.stop()
     }
 
     private func applyHost(mood: String? = nil, speakKey: String? = nil) {

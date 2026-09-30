@@ -1,0 +1,2 @@
+# Apple Silicon only. MLX does not install on Linux or Intel Macs.
+mlx-audio>=0.2.8
