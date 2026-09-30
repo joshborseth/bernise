@@ -13,3 +13,6 @@ release
 *.log
 .build
 .swiftpm
+.venv/
+__pycache__/
+*.pyc

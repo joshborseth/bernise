@@ -56,6 +56,7 @@ final class SpeakQueue: NSObject, AVAudioPlayerDelegate {
                     self?.play(data: data, speakKey: job.speakKey)
                 }
             } catch {
+                print("Bernise speech failed: \(error)")
                 await MainActor.run {
                     self?.playing = false
                     self?.kick()

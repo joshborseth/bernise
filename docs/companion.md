@@ -4,7 +4,7 @@ Bernise is a macOS overlay pet that watches a local [t3code](https://github.com/
 
 v1 is listen-only: unsolicited speech when a thread needs you or settles, and an extractive summary on “hey Bernise.”
 
-The Three.js cat lives in `apps/pet`. The overlay, t3code shell stream, and Chatterbox playback live in `apps/macos`. Attention and summary are pure TypeScript in `packages/`.
+The Three.js cat lives in `apps/pet`. The overlay, t3code shell stream, and local speech live in `apps/macos`. Attention and summary are pure TypeScript in `packages/`.
 
 Mintlify pages that still document `orchestration.getSnapshot`, `orchestration.domainEvent`, and `ws://host:3773?token=` are stale. The contract is pairing, HTTP thread reads, and `orchestration.subscribeShell`. Details: [docs/research/t3code-companion-integration.md](research/t3code-companion-integration.md).
 
@@ -46,7 +46,17 @@ Mint a websocket ticket on each connect (`POST /api/auth/websocket-ticket` → `
 
 ## Speak
 
-Chatterbox is `POST {BERNISE_TTS_URL}/speak` with `X-API-Key` from `BERNISE_TTS_API_KEY` or `~/.bernise/tts.key`. Default origin `http://borseth.ddns.net:7040`, voice `benny2`. The WebView never sees the key. Clips do not overlap.
+Speech is local Chatterbox Turbo on the same Mac (`mlx-community/chatterbox-turbo-4bit` through MLX). The overlay starts `apps/macos/tts/server.py`, which loads the model once and serves `POST /speak` on `http://127.0.0.1:7041`. The body is `{ "text": "..." }` and the response is a WAV. Clips do not overlap. There is no API key.
+
+Create the interpreter once, on the Mac:
+
+```bash
+cd apps/macos
+python3 -m venv .venv
+.venv/bin/pip install -r tts/requirements.txt
+```
+
+The first launch downloads the model. Optional: `BERNISE_TTS_REF_AUDIO` is a wav of at least six seconds used as the voice. `BERNISE_TTS_URL` points at an already running server and the overlay does not start one. `BERNISE_TTS_MODEL` overrides the checkpoint.
 
 ## Commands
 
